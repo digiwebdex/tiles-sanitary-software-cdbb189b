@@ -180,6 +180,12 @@ const createPurchaseSchema = z.object({
   invoice_number: z.string().trim().max(50).optional().nullable(),
   purchase_date: z.string().min(1),
   notes: z.string().trim().max(2000).optional().nullable(),
+  /** Phase 3U-31: voucher-level discount applied after item totals. */
+  voucher_discount: z.coerce.number().min(0).optional().default(0),
+  /** Phase 3U-31: amount paid at the time of creating the purchase. */
+  paid_on_create: z.coerce.number().min(0).optional().default(0),
+  /** NULL = cash; otherwise a bank_accounts.id. */
+  paid_account_id: z.string().uuid().optional().nullable(),
   items: z.array(purchaseItemSchema).min(1),
 });
 
