@@ -67,12 +67,14 @@ interface PurchaseFormProps {
 }
 
 
-const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: PurchaseFormProps) => {
+const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDrafts }: PurchaseFormProps) => {
   const [productSearch, setProductSearch] = useState("");
   // Per-row UI: tile entry mode ("box" default, or "sft" to type SFT and auto-round to next full box).
   // Not persisted; backend still receives `quantity` (= box count) for tiles.
   const [entryModes, setEntryModes] = useState<Record<string, "box" | "sft">>({});
   const [sftInputs, setSftInputs] = useState<Record<string, string>>({});
+  // Phase 3U-31: track the loaded draft so re-saving updates instead of duplicating.
+  const [draftId, setDraftId] = useState<string | null>(null);
 
   const form = useForm<PurchaseFormValues>({
     resolver: zodResolver(purchaseSchema),
@@ -81,9 +83,13 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: Purchas
       invoice_number: "",
       purchase_date: new Date().toISOString().split("T")[0],
       notes: "",
+      voucher_discount: 0,
+      paid_on_create: 0,
+      paid_account_id: null,
       items: [],
     },
   });
+
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
