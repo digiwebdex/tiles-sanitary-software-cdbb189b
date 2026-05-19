@@ -416,9 +416,10 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
           </CardContent>
         </Card>
 
-        {/* Product search bar */}
+        {/* Product search + barcode scanner */}
         <Card>
-          <CardContent className="pt-5">
+          <CardContent className="pt-5 space-y-3">
+            <BarcodeScanInput onScan={handleBarcodeScan} disabled={!watchSupplierId} />
             <div className="relative">
               <div className="flex items-center gap-2 rounded-md border bg-background">
                 <Package className="ml-3 h-5 w-5 text-muted-foreground" />
