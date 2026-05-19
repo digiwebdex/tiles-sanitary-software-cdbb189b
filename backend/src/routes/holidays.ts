@@ -94,7 +94,7 @@ router.post('/', async (req, res) => {
       res.status(400).json({ error: 'holiday_date and name are required' });
       return;
     }
-    const payload: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.id ?? null };
+    const payload: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.userId ?? null };
     for (const k of Object.keys(parsed.data)) {
       if (WRITABLE.has(k)) payload[k] = (parsed.data as any)[k];
     }
@@ -159,7 +159,7 @@ router.post('/bulk', async (req, res) => {
     const payload = parsed.data.rows
       .filter(r => r.holiday_date && r.name)
       .map(r => {
-        const row: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.id ?? null };
+        const row: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.userId ?? null };
         for (const k of Object.keys(r)) {
           if (WRITABLE.has(k)) row[k] = (r as any)[k];
         }

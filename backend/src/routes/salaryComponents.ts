@@ -83,7 +83,7 @@ router.post('/', async (req, res) => {
       res.status(400).json({ error: 'code, name and kind are required' });
       return;
     }
-    const payload: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.id ?? null };
+    const payload: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.userId ?? null };
     for (const k of Object.keys(parsed.data)) {
       if (COMPONENT_WRITABLE.has(k)) payload[k] = (parsed.data as any)[k];
     }

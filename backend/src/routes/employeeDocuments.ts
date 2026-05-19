@@ -10,8 +10,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -74,7 +74,7 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
   const emp = await db('employees').where({ id: parsed.data.employee_id, dealer_id: dealerId }).first();
   if (!emp) return res.status(400).json({ error: 'Invalid employee' });
   const [row] = await db('employee_documents')
-    .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.id })
+    .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.userId })
     .returning('*');
   res.json(row);
 });

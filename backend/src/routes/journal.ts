@@ -143,7 +143,7 @@ router.post('/', async (req, res) => {
           voucher_no,
           entry_date,
           narration: narration ?? null,
-          created_by: req.user?.id ?? null,
+          created_by: req.user?.userId ?? null,
         })
         .returning(['id', 'voucher_no']);
 

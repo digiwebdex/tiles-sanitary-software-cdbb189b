@@ -171,7 +171,7 @@ router.post('/', async (req, res) => {
           installment_amount,
           start_date,
           narration: narration ?? null,
-          created_by: req.user?.id ?? null,
+          created_by: req.user?.userId ?? null,
         })
         .returning(['id', 'plan_no']);
 

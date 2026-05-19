@@ -15,8 +15,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -156,7 +156,7 @@ const createSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = createSchema.parse(req.body);
 
@@ -186,7 +186,7 @@ router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Reque
       bank_account_id: body.bank_account_id ?? null,
       reason: body.reason ?? null,
       notes: body.notes ?? null,
-      created_by: req.user!.id,
+      created_by: req.user!.userId,
     }).returning('*');
 
     // Schedule generation: rounded EMIs with final installment absorbing the remainder
@@ -213,7 +213,7 @@ router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Reque
 
 /* ─────────────────────── cancel ─────────────────────── */
 
-router.post('/:id/cancel', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/:id/cancel', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const result = await db.transaction(async (trx) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
@@ -238,7 +238,7 @@ router.post('/:id/cancel', requireRole(['dealer_admin', 'super_admin']), async (
 
 /* ─────────────────────── close (waive remaining) ─────────────────────── */
 
-router.post('/:id/close', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/:id/close', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const result = await db.transaction(async (trx) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
@@ -269,7 +269,7 @@ const paySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/emis/:emiId/pay', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/emis/:emiId/pay', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = paySchema.parse(req.body);
 
@@ -316,7 +316,7 @@ router.post('/emis/:emiId/pay', requireRole(['dealer_admin', 'super_admin']), as
 
 /* ─────────────────────── waive an EMI ─────────────────────── */
 
-router.post('/emis/:emiId/waive', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/emis/:emiId/waive', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const result = await db.transaction(async (trx) => {
     const emi = await trx('employee_loan_emis').where({ id: req.params.emiId, dealer_id: dealerId }).forUpdate().first();

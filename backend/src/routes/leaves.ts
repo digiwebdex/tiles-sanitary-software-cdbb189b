@@ -186,7 +186,7 @@ router.post('/requests', async (req, res) => {
     employee_id, leave_type_id, start_date, end_date, days,
     reason: reason ?? null,
     status: 'pending',
-    created_by: req.user?.id ?? null,
+    created_by: req.user?.userId ?? null,
   }).returning('*');
   res.status(201).json(row);
 });
@@ -229,7 +229,7 @@ router.post('/requests/:id/decide', async (req, res) => {
 
     const [updated] = await trx('leave_requests').where({ id: lr.id }).update({
       status: decision,
-      decided_by: req.user?.id ?? null,
+      decided_by: req.user?.userId ?? null,
       decided_at: trx.fn.now(),
       decision_note: note ?? null,
       updated_at: trx.fn.now(),

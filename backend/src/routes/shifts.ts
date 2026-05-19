@@ -11,8 +11,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -49,7 +49,7 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
   const parsed = shiftSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const [row] = await db('shifts')
-    .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.id })
+    .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.userId })
     .returning('*');
   res.json(row);
 });

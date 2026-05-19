@@ -222,7 +222,7 @@ router.post('/', async (req, res) => {
     if (!parsed.success) { res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() }); return; }
     if (!parsed.data.name) { res.status(400).json({ error: 'name is required' }); return; }
 
-    const payload: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.id ?? null };
+    const payload: Record<string, unknown> = { dealer_id: dealerId, created_by: req.user?.userId ?? null };
     for (const k of Object.keys(parsed.data)) {
       if (WRITABLE.has(k)) payload[k] = (parsed.data as any)[k];
     }
@@ -347,7 +347,7 @@ router.post('/:id/visits', async (req, res) => {
     const payload: Record<string, unknown> = {
       dealer_id: dealerId,
       lead_id: req.params.id,
-      visited_by: req.user?.id ?? null,
+      visited_by: req.user?.userId ?? null,
       ...parsed.data,
     };
     const [row] = await db('lead_visits').insert(payload).returning('*');

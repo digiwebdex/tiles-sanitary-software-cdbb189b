@@ -17,8 +17,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -241,7 +241,7 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
       exit_interview_notes: parsed.data.exit_interview_notes ?? null,
       payment_method: parsed.data.payment_method ?? null,
       bank_account_id: parsed.data.bank_account_id ?? null,
-      created_by: req.user!.id,
+      created_by: req.user!.userId,
       net_payable: 0,
     };
     insertData.net_payable = computeNet(insertData);
@@ -351,7 +351,7 @@ router.put('/clearances/:cid', requireRole('dealer_admin', 'manager'), async (re
 
   const update: any = { ...parsed.data };
   if (parsed.data.status && parsed.data.status !== 'pending') {
-    update.cleared_by = req.user!.id;
+    update.cleared_by = req.user!.userId;
     update.cleared_at = db.fn.now();
   } else if (parsed.data.status === 'pending') {
     update.cleared_by = null;
