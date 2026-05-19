@@ -795,33 +795,38 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
           </CardContent>
         </Card>
 
-        {/* Submit / Reset buttons */}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isLoading || fields.length === 0}>
-            {isLoading ? "Saving…" : "Submit"}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => form.reset()}
-            disabled={isLoading}
-          >
-            Reset
-          </Button>
         </div>
 
-        {/* Summary footer */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border bg-accent/30 px-4 py-3 text-sm">
-          <span className="text-muted-foreground">Items <strong className="text-foreground">{fields.length}</strong></span>
-          <span className="text-muted-foreground">Total <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, _, i) => s + calcBaseCost(i), 0))}</strong></span>
-          <span className="text-muted-foreground">Transport <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, item) => s + (item.transport_cost || 0), 0))}</strong></span>
-          <span className="text-muted-foreground">Labor <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, item) => s + (item.labor_cost || 0), 0))}</strong></span>
-          <span className="text-muted-foreground">Other <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, item) => s + (item.other_cost || 0), 0))}</strong></span>
-          <span className="ml-auto font-semibold text-foreground">Grand Total <strong>{formatCurrency(grandTotal)}</strong></span>
-        </div>
+        {/* Right column: sticky Purchase Summary */}
+        <aside className="lg:w-[340px]">
+          <PurchaseSummaryPanel
+            itemCount={fields.length}
+            subtotal={subtotalLanded}
+            transport={transportSum}
+            labor={laborSum}
+            other={otherSum}
+            voucherDiscount={watchVoucherDiscount}
+            paidOnCreate={watchPaidOnCreate}
+            paidAccountId={watchPaidAccountId}
+            bankAccounts={bankAccounts}
+            onVoucherDiscountChange={(v) => form.setValue("voucher_discount", v, { shouldDirty: true })}
+            onPaidOnCreateChange={(v) => form.setValue("paid_on_create", v, { shouldDirty: true })}
+            onPaidAccountChange={(v) => form.setValue("paid_account_id", v, { shouldDirty: true })}
+            onSubmit={() => form.handleSubmit(async (values) => {
+              const map = new Map(products.map((p) => [p.id, p]));
+              const enriched = enrichItemsWithSqft(values.items as any[], map as any, { defaultRateUnit: "per_sqft" });
+              await onSubmit({ ...values, items: enriched } as PurchaseFormValues);
+            })()}
+            onSaveDraft={enableDrafts ? handleSaveDraft : undefined}
+            isLoading={isLoading}
+            canSubmit={fields.length > 0 && !!watchSupplierId}
+            canSaveDraft={!!watchSupplierId}
+          />
+        </aside>
       </form>
     </Form>
   );
 };
 
 export default PurchaseForm;
+
