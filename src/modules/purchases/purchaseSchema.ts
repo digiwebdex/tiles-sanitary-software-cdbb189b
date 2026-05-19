@@ -25,6 +25,12 @@ export const purchaseSchema = z.object({
   invoice_number: z.string().trim().max(50).optional().or(z.literal("")),
   purchase_date: z.string().min(1, "Date is required"),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
+  /** Phase 3U-31: voucher-level discount (BDT, absolute). */
+  voucher_discount: z.coerce.number().min(0).default(0),
+  /** Phase 3U-31: amount paid at time of saving the purchase. */
+  paid_on_create: z.coerce.number().min(0).default(0),
+  /** Phase 3U-31: bank_accounts.id paying account, or null = cash. */
+  paid_account_id: z.string().uuid().optional().nullable(),
   items: z.array(purchaseItemSchema).min(1, "At least one item is required"),
 });
 

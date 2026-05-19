@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,6 +6,7 @@ import { purchaseSchema, type PurchaseFormValues } from "@/modules/purchases/pur
 import { useQuery } from "@tanstack/react-query";
 import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
 import { supplierService } from "@/services/supplierService";
+import { bankAccountService } from "@/services/bankAccountService";
 import {
   Form,
   FormControl,
@@ -42,6 +43,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { SupplierAdvisoryHint } from "@/components/SupplierAdvisoryHint";
+import PurchaseSummaryPanel from "@/modules/purchases/PurchaseSummaryPanel";
+import BarcodeScanInput from "@/modules/purchases/BarcodeScanInput";
+import PurchaseDraftMenu from "@/modules/purchases/PurchaseDraftMenu";
+import type { PurchaseDraft } from "@/services/purchaseService";
+import { purchaseService } from "@/services/purchaseService";
+import { toast } from "sonner";
 
 interface LastPurchaseInfo {
   purchase_rate: number;
@@ -55,14 +62,19 @@ interface PurchaseFormProps {
   showOfferPrice: boolean;
   onSubmit: (values: PurchaseFormValues) => Promise<void>;
   isLoading?: boolean;
+  /** Phase 3U-31: enable drafts (dealer_admin). */
+  enableDrafts?: boolean;
 }
 
-const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: PurchaseFormProps) => {
+
+const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDrafts }: PurchaseFormProps) => {
   const [productSearch, setProductSearch] = useState("");
   // Per-row UI: tile entry mode ("box" default, or "sft" to type SFT and auto-round to next full box).
   // Not persisted; backend still receives `quantity` (= box count) for tiles.
   const [entryModes, setEntryModes] = useState<Record<string, "box" | "sft">>({});
   const [sftInputs, setSftInputs] = useState<Record<string, string>>({});
+  // Phase 3U-31: track the loaded draft so re-saving updates instead of duplicating.
+  const [draftId, setDraftId] = useState<string | null>(null);
 
   const form = useForm<PurchaseFormValues>({
     resolver: zodResolver(purchaseSchema),
@@ -71,9 +83,13 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: Purchas
       invoice_number: "",
       purchase_date: new Date().toISOString().split("T")[0],
       notes: "",
+      voucher_discount: 0,
+      paid_on_create: 0,
+      paid_account_id: null,
       items: [],
     },
   });
+
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -156,8 +172,19 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: Purchas
     enabled: !!dealerId,
   });
 
+  // Phase 3U-31: Bank accounts for "Paid From" selector.
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts-active", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId && !!enableDrafts, // dealer_admin only — mirrors enableDrafts gate
+  });
+
   const watchItems = form.watch("items");
   const watchSupplierId = form.watch("supplier_id");
+  const watchVoucherDiscount = form.watch("voucher_discount") || 0;
+  const watchPaidOnCreate = form.watch("paid_on_create") || 0;
+  const watchPaidAccountId = form.watch("paid_account_id") ?? null;
+
 
   const getItemProduct = (productId: string) =>
     products.find((p) => p.id === productId);
@@ -227,7 +254,69 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: Purchas
     setProductSearch("");
   };
 
-  const grandTotal = watchItems.reduce((s, _, i) => s + calcLandedCost(i), 0);
+  // Phase 3U-31: barcode scan → resolve to product → addProduct.
+  const handleBarcodeScan = (code: string) => {
+    if (!watchSupplierId) {
+      toast.error("Select a supplier first");
+      return;
+    }
+    const lc = code.toLowerCase();
+    const match = products.find(
+      (p) => p.sku?.toLowerCase() === lc || p.name?.toLowerCase() === lc,
+    );
+    if (!match) {
+      toast.error(`No product matches "${code}"`);
+      return;
+    }
+    if (watchItems.some((i) => i.product_id === match.id)) {
+      toast.message(`${match.name} already in cart`);
+      return;
+    }
+    addProduct(match.id);
+    toast.success(`Added ${match.sku}`);
+  };
+
+  // Phase 3U-31: load a saved draft.
+  const handleLoadDraft = (draft: PurchaseDraft) => {
+    const p = (draft.payload || {}) as Partial<PurchaseFormValues>;
+    form.reset({
+      supplier_id: p.supplier_id || "",
+      invoice_number: p.invoice_number || "",
+      purchase_date: p.purchase_date || new Date().toISOString().split("T")[0],
+      notes: p.notes || "",
+      voucher_discount: Number(p.voucher_discount) || 0,
+      paid_on_create: Number(p.paid_on_create) || 0,
+      paid_account_id: p.paid_account_id ?? null,
+      items: Array.isArray(p.items) ? (p.items as any) : [],
+    });
+    setDraftId(draft.id);
+    toast.success("Draft loaded");
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      const values = form.getValues();
+      const label =
+        values.invoice_number?.trim() ||
+        `Draft ${new Date().toLocaleString()}`;
+      const saved = await purchaseService.saveDraft(dealerId, values, {
+        id: draftId ?? undefined,
+        label,
+      });
+      setDraftId(saved.id);
+      toast.success("Draft saved");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save draft");
+    }
+  };
+
+  // Aggregates for the summary panel.
+  const subtotalLanded = watchItems.reduce((s, _, i) => s + calcLandedCost(i), 0);
+  const transportSum = watchItems.reduce((s, it) => s + (Number(it.transport_cost) || 0), 0);
+  const laborSum = watchItems.reduce((s, it) => s + (Number(it.labor_cost) || 0), 0);
+  const otherSum = watchItems.reduce((s, it) => s + (Number(it.other_cost) || 0), 0);
+  const grandTotal = subtotalLanded;
+
 
   return (
     <Form {...form}>
@@ -238,8 +327,16 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: Purchas
           const enriched = enrichItemsWithSqft(values.items as any[], map as any, { defaultRateUnit: "per_sqft" });
           await onSubmit({ ...values, items: enriched } as PurchaseFormValues);
         })}
-        className="space-y-5"
+        className="grid gap-5 lg:grid-cols-[1fr_340px]"
       >
+        <div className="space-y-5 min-w-0">
+          {/* Drafts toolbar */}
+          {enableDrafts && (
+            <div className="flex items-center justify-end">
+              <PurchaseDraftMenu dealerId={dealerId} onLoad={handleLoadDraft} />
+            </div>
+          )}
+
         {/* Top section: Reference, Date */}
         <Card>
           <CardContent className="pt-5">
@@ -319,9 +416,10 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: Purchas
           </CardContent>
         </Card>
 
-        {/* Product search bar */}
+        {/* Product search + barcode scanner */}
         <Card>
-          <CardContent className="pt-5">
+          <CardContent className="pt-5 space-y-3">
+            <BarcodeScanInput onScan={handleBarcodeScan} disabled={!watchSupplierId} />
             <div className="relative">
               <div className="flex items-center gap-2 rounded-md border bg-background">
                 <Package className="ml-3 h-5 w-5 text-muted-foreground" />
@@ -698,33 +796,38 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: Purchas
           </CardContent>
         </Card>
 
-        {/* Submit / Reset buttons */}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isLoading || fields.length === 0}>
-            {isLoading ? "Saving…" : "Submit"}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => form.reset()}
-            disabled={isLoading}
-          >
-            Reset
-          </Button>
         </div>
 
-        {/* Summary footer */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border bg-accent/30 px-4 py-3 text-sm">
-          <span className="text-muted-foreground">Items <strong className="text-foreground">{fields.length}</strong></span>
-          <span className="text-muted-foreground">Total <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, _, i) => s + calcBaseCost(i), 0))}</strong></span>
-          <span className="text-muted-foreground">Transport <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, item) => s + (item.transport_cost || 0), 0))}</strong></span>
-          <span className="text-muted-foreground">Labor <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, item) => s + (item.labor_cost || 0), 0))}</strong></span>
-          <span className="text-muted-foreground">Other <strong className="text-foreground">{formatCurrency(watchItems.reduce((s, item) => s + (item.other_cost || 0), 0))}</strong></span>
-          <span className="ml-auto font-semibold text-foreground">Grand Total <strong>{formatCurrency(grandTotal)}</strong></span>
-        </div>
+        {/* Right column: sticky Purchase Summary */}
+        <aside className="lg:w-[340px]">
+          <PurchaseSummaryPanel
+            itemCount={fields.length}
+            subtotal={subtotalLanded}
+            transport={transportSum}
+            labor={laborSum}
+            other={otherSum}
+            voucherDiscount={watchVoucherDiscount}
+            paidOnCreate={watchPaidOnCreate}
+            paidAccountId={watchPaidAccountId}
+            bankAccounts={bankAccounts}
+            onVoucherDiscountChange={(v) => form.setValue("voucher_discount", v, { shouldDirty: true })}
+            onPaidOnCreateChange={(v) => form.setValue("paid_on_create", v, { shouldDirty: true })}
+            onPaidAccountChange={(v) => form.setValue("paid_account_id", v, { shouldDirty: true })}
+            onSubmit={() => form.handleSubmit(async (values) => {
+              const map = new Map(products.map((p) => [p.id, p]));
+              const enriched = enrichItemsWithSqft(values.items as any[], map as any, { defaultRateUnit: "per_sqft" });
+              await onSubmit({ ...values, items: enriched } as PurchaseFormValues);
+            })()}
+            onSaveDraft={enableDrafts ? handleSaveDraft : undefined}
+            isLoading={isLoading}
+            canSubmit={fields.length > 0 && !!watchSupplierId}
+            canSaveDraft={!!watchSupplierId}
+          />
+        </aside>
       </form>
     </Form>
   );
 };
 
 export default PurchaseForm;
+

@@ -114,6 +114,98 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// ───────────────────────── DRAFTS (Phase 3U-31) ─────────────────────────
+// Registered before `/:id` so the literal path wins the routing match.
+
+router.get('/drafts/list', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('dealer_admin') && !roles.includes('super_admin')) {
+    res.status(403).json({ error: 'Drafts are dealer_admin-only' });
+    return;
+  }
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  try {
+    const rows = await db('purchase_drafts')
+      .where({ dealer_id: dealerId })
+      .orderBy('updated_at', 'desc')
+      .limit(50)
+      .select('id', 'label', 'payload', 'created_at', 'updated_at', 'created_by');
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('[purchases.drafts.list] error', err);
+    res.status(500).json({ error: 'Failed to load drafts' });
+  }
+});
+
+const draftBodySchema = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().max(120).optional().nullable(),
+  payload: z.record(z.any()),
+});
+
+router.post('/drafts', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('dealer_admin') && !roles.includes('super_admin')) {
+    res.status(403).json({ error: 'Drafts are dealer_admin-only' });
+    return;
+  }
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = draftBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { id, label, payload } = parsed.data;
+  const userId = req.user?.userId ?? null;
+  try {
+    if (id) {
+      const updated = await db('purchase_drafts')
+        .where({ id, dealer_id: dealerId })
+        .update({ label: label ?? null, payload, updated_at: db.fn.now() })
+        .returning(['id', 'label', 'payload', 'updated_at']);
+      if (!updated.length) {
+        res.status(404).json({ error: 'Draft not found' });
+        return;
+      }
+      res.json(updated[0]);
+      return;
+    }
+    const [row] = await db('purchase_drafts')
+      .insert({ dealer_id: dealerId, created_by: userId, label: label ?? null, payload })
+      .returning(['id', 'label', 'payload', 'updated_at']);
+    res.status(201).json(row);
+  } catch (err) {
+    console.error('[purchases.drafts.save] error', err);
+    res.status(500).json({ error: 'Failed to save draft' });
+  }
+});
+
+router.delete('/drafts/:id', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('dealer_admin') && !roles.includes('super_admin')) {
+    res.status(403).json({ error: 'Drafts are dealer_admin-only' });
+    return;
+  }
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  try {
+    const n = await db('purchase_drafts')
+      .where({ id: req.params.id, dealer_id: dealerId })
+      .del();
+    if (!n) {
+      res.status(404).json({ error: 'Draft not found' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[purchases.drafts.delete] error', err);
+    res.status(500).json({ error: 'Failed to delete draft' });
+  }
+});
+
+
 router.get('/:id', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;
@@ -180,6 +272,12 @@ const createPurchaseSchema = z.object({
   invoice_number: z.string().trim().max(50).optional().nullable(),
   purchase_date: z.string().min(1),
   notes: z.string().trim().max(2000).optional().nullable(),
+  /** Phase 3U-31: voucher-level discount applied after item totals. */
+  voucher_discount: z.coerce.number().min(0).optional().default(0),
+  /** Phase 3U-31: amount paid at the time of creating the purchase. */
+  paid_on_create: z.coerce.number().min(0).optional().default(0),
+  /** NULL = cash; otherwise a bank_accounts.id. */
+  paid_account_id: z.string().uuid().optional().nullable(),
   items: z.array(purchaseItemSchema).min(1),
 });
 
@@ -277,6 +375,26 @@ router.post('/', async (req: Request, res: Response) => {
     });
     const totalAmount = itemsCalc.reduce((s, x) => s + x.landed, 0);
 
+    // Phase 3U-31: voucher discount + paid_on_create normalization
+    const voucherDiscount = Math.max(
+      0,
+      Math.min(input.voucher_discount ?? 0, totalAmount),
+    );
+    const netPayable = Math.max(0, totalAmount - voucherDiscount);
+    const paidOnCreate = Math.max(0, Math.min(input.paid_on_create ?? 0, netPayable));
+    const paidAccountId = input.paid_account_id ?? null;
+
+    // Validate paid_account_id belongs to dealer (if provided)
+    if (paidAccountId) {
+      const bank = await db("bank_accounts")
+        .where({ id: paidAccountId, dealer_id: dealerId })
+        .first("id");
+      if (!bank) {
+        res.status(400).json({ error: "paid_account_id not found for this dealer" });
+        return;
+      }
+    }
+
     // 3-9: Atomic transaction
     const purchaseId = await db.transaction(async (trx) => {
       // Insert purchase header
@@ -287,6 +405,9 @@ router.post('/', async (req: Request, res: Response) => {
           invoice_number: input.invoice_number?.trim() || null,
           purchase_date: input.purchase_date,
           total_amount: totalAmount,
+          voucher_discount: voucherDiscount,
+          paid_on_create: paidOnCreate,
+          paid_account_id: paidAccountId,
           notes: input.notes?.trim() || null,
           created_by: userId,
         })
@@ -550,27 +671,59 @@ router.post('/', async (req: Request, res: Response) => {
         }
       }
 
-      // ── Supplier ledger (negative = we owe supplier) ──
+      // ── Supplier ledger (Phase 3U-31 aware) ──
+      // We owe the supplier the net (after voucher discount).
+      const supplierDesc = voucherDiscount > 0
+        ? `Purchase ${input.invoice_number || purchaseRowId} (disc ${voucherDiscount})`
+        : `Purchase ${input.invoice_number || purchaseRowId}`;
       await trx('supplier_ledger').insert({
         dealer_id: dealerId,
         supplier_id: input.supplier_id,
         purchase_id: purchaseRowId,
         type: 'purchase',
-        amount: -totalAmount,
-        description: `Purchase ${input.invoice_number || purchaseRowId}`,
+        amount: -netPayable,
+        description: supplierDesc,
         entry_date: input.purchase_date,
       });
 
-      // ── Cash ledger ──
-      await trx('cash_ledger').insert({
-        dealer_id: dealerId,
-        type: 'purchase',
-        amount: -totalAmount,
-        description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
-        reference_type: 'purchases',
-        reference_id: purchaseRowId,
-        entry_date: input.purchase_date,
-      });
+      // If we paid something at create time, record offsetting payment +
+      // cash/bank debit. Otherwise, leave cash untouched (the bill is unpaid).
+      if (paidOnCreate > 0) {
+        // Supplier ledger payment entry (positive reduces what we owe)
+        await trx('supplier_ledger').insert({
+          dealer_id: dealerId,
+          supplier_id: input.supplier_id,
+          purchase_id: purchaseRowId,
+          type: 'payment',
+          amount: paidOnCreate,
+          description: `Payment on purchase ${input.invoice_number || purchaseRowId}`,
+          entry_date: input.purchase_date,
+        });
+
+        if (paidAccountId) {
+          await trx('bank_ledger').insert({
+            dealer_id: dealerId,
+            bank_account_id: paidAccountId,
+            type: 'payment',
+            amount: -paidOnCreate,
+            description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
+            reference_type: 'purchases',
+            reference_id: purchaseRowId,
+            entry_date: input.purchase_date,
+            created_by: userId,
+          });
+        } else {
+          await trx('cash_ledger').insert({
+            dealer_id: dealerId,
+            type: 'payment',
+            amount: -paidOnCreate,
+            description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
+            reference_type: 'purchases',
+            reference_id: purchaseRowId,
+            entry_date: input.purchase_date,
+          });
+        }
+      }
 
       // ── Audit log ──
       await trx('audit_logs').insert({

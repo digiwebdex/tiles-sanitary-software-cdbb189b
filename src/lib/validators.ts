@@ -46,6 +46,9 @@ export const createPurchaseServiceSchema = z.object({
   purchase_date: z.string().min(1, "Date is required"),
   notes: optionalSafeText(500),
   created_by: z.string().uuid().optional(),
+  voucher_discount: z.number().min(0).optional(),
+  paid_on_create: z.number().min(0).optional(),
+  paid_account_id: z.string().uuid().nullable().optional(),
   items: z.array(z.object({
     product_id: uuidSchema,
     quantity: z.number().positive("Quantity must be > 0"),

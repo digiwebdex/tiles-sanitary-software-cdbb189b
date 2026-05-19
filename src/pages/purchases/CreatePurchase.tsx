@@ -47,6 +47,7 @@ const CreatePurchasePage = () => {
       <PurchaseForm
         dealerId={dealerId}
         showOfferPrice={showOfferPrice}
+        enableDrafts={isDealerAdmin || isSuperAdmin}
         onSubmit={async (v) => { await mutation.mutateAsync(v); }}
         isLoading={mutation.isPending}
       />
