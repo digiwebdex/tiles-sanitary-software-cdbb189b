@@ -144,7 +144,7 @@ router.get('/', async (req: Request, res: Response) => {
   if (employee_id) query.where('x.employee_id', String(employee_id));
   if (q) {
     const s = `%${String(q).toLowerCase()}%`;
-    query.where((b) => {
+    query.where((b: any) => {
       b.whereRaw('LOWER(x.exit_code) LIKE ?', [s])
         .orWhereRaw('LOWER(e.name) LIKE ?', [s])
         .orWhereRaw('LOWER(e.employee_code) LIKE ?', [s]);
