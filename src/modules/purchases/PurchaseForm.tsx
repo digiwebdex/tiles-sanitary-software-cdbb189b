@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,6 +6,7 @@ import { purchaseSchema, type PurchaseFormValues } from "@/modules/purchases/pur
 import { useQuery } from "@tanstack/react-query";
 import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
 import { supplierService } from "@/services/supplierService";
+import { bankAccountService } from "@/services/bankAccountService";
 import {
   Form,
   FormControl,
@@ -42,6 +43,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { SupplierAdvisoryHint } from "@/components/SupplierAdvisoryHint";
+import PurchaseSummaryPanel from "@/modules/purchases/PurchaseSummaryPanel";
+import BarcodeScanInput from "@/modules/purchases/BarcodeScanInput";
+import PurchaseDraftMenu from "@/modules/purchases/PurchaseDraftMenu";
+import type { PurchaseDraft } from "@/services/purchaseService";
+import { purchaseService } from "@/services/purchaseService";
+import { toast } from "sonner";
 
 interface LastPurchaseInfo {
   purchase_rate: number;
@@ -55,7 +62,10 @@ interface PurchaseFormProps {
   showOfferPrice: boolean;
   onSubmit: (values: PurchaseFormValues) => Promise<void>;
   isLoading?: boolean;
+  /** Phase 3U-31: enable drafts (dealer_admin). */
+  enableDrafts?: boolean;
 }
+
 
 const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading }: PurchaseFormProps) => {
   const [productSearch, setProductSearch] = useState("");
