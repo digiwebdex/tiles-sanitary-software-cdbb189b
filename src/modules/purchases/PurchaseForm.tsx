@@ -172,8 +172,19 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
     enabled: !!dealerId,
   });
 
+  // Phase 3U-31: Bank accounts for "Paid From" selector.
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts-active", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId && !!enableDrafts, // dealer_admin only — mirrors enableDrafts gate
+  });
+
   const watchItems = form.watch("items");
   const watchSupplierId = form.watch("supplier_id");
+  const watchVoucherDiscount = form.watch("voucher_discount") || 0;
+  const watchPaidOnCreate = form.watch("paid_on_create") || 0;
+  const watchPaidAccountId = form.watch("paid_account_id") ?? null;
+
 
   const getItemProduct = (productId: string) =>
     products.find((p) => p.id === productId);
