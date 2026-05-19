@@ -579,27 +579,59 @@ router.post('/', async (req: Request, res: Response) => {
         }
       }
 
-      // ── Supplier ledger (negative = we owe supplier) ──
+      // ── Supplier ledger (Phase 3U-31 aware) ──
+      // We owe the supplier the net (after voucher discount).
+      const supplierDesc = voucherDiscount > 0
+        ? `Purchase ${input.invoice_number || purchaseRowId} (disc ${voucherDiscount})`
+        : `Purchase ${input.invoice_number || purchaseRowId}`;
       await trx('supplier_ledger').insert({
         dealer_id: dealerId,
         supplier_id: input.supplier_id,
         purchase_id: purchaseRowId,
         type: 'purchase',
-        amount: -totalAmount,
-        description: `Purchase ${input.invoice_number || purchaseRowId}`,
+        amount: -netPayable,
+        description: supplierDesc,
         entry_date: input.purchase_date,
       });
 
-      // ── Cash ledger ──
-      await trx('cash_ledger').insert({
-        dealer_id: dealerId,
-        type: 'purchase',
-        amount: -totalAmount,
-        description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
-        reference_type: 'purchases',
-        reference_id: purchaseRowId,
-        entry_date: input.purchase_date,
-      });
+      // If we paid something at create time, record offsetting payment +
+      // cash/bank debit. Otherwise, leave cash untouched (the bill is unpaid).
+      if (paidOnCreate > 0) {
+        // Supplier ledger payment entry (positive reduces what we owe)
+        await trx('supplier_ledger').insert({
+          dealer_id: dealerId,
+          supplier_id: input.supplier_id,
+          purchase_id: purchaseRowId,
+          type: 'payment',
+          amount: paidOnCreate,
+          description: `Payment on purchase ${input.invoice_number || purchaseRowId}`,
+          entry_date: input.purchase_date,
+        });
+
+        if (paidAccountId) {
+          await trx('bank_ledger').insert({
+            dealer_id: dealerId,
+            bank_account_id: paidAccountId,
+            type: 'payment',
+            amount: -paidOnCreate,
+            description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
+            reference_type: 'purchases',
+            reference_id: purchaseRowId,
+            entry_date: input.purchase_date,
+            created_by: userId,
+          });
+        } else {
+          await trx('cash_ledger').insert({
+            dealer_id: dealerId,
+            type: 'payment',
+            amount: -paidOnCreate,
+            description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
+            reference_type: 'purchases',
+            reference_id: purchaseRowId,
+            entry_date: input.purchase_date,
+          });
+        }
+      }
 
       // ── Audit log ──
       await trx('audit_logs').insert({
