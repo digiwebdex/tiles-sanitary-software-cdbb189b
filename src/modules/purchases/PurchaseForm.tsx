@@ -254,7 +254,69 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
     setProductSearch("");
   };
 
-  const grandTotal = watchItems.reduce((s, _, i) => s + calcLandedCost(i), 0);
+  // Phase 3U-31: barcode scan → resolve to product → addProduct.
+  const handleBarcodeScan = (code: string) => {
+    if (!watchSupplierId) {
+      toast.error("Select a supplier first");
+      return;
+    }
+    const lc = code.toLowerCase();
+    const match = products.find(
+      (p) => p.sku?.toLowerCase() === lc || p.name?.toLowerCase() === lc,
+    );
+    if (!match) {
+      toast.error(`No product matches "${code}"`);
+      return;
+    }
+    if (watchItems.some((i) => i.product_id === match.id)) {
+      toast.message(`${match.name} already in cart`);
+      return;
+    }
+    addProduct(match.id);
+    toast.success(`Added ${match.sku}`);
+  };
+
+  // Phase 3U-31: load a saved draft.
+  const handleLoadDraft = (draft: PurchaseDraft) => {
+    const p = (draft.payload || {}) as Partial<PurchaseFormValues>;
+    form.reset({
+      supplier_id: p.supplier_id || "",
+      invoice_number: p.invoice_number || "",
+      purchase_date: p.purchase_date || new Date().toISOString().split("T")[0],
+      notes: p.notes || "",
+      voucher_discount: Number(p.voucher_discount) || 0,
+      paid_on_create: Number(p.paid_on_create) || 0,
+      paid_account_id: p.paid_account_id ?? null,
+      items: Array.isArray(p.items) ? (p.items as any) : [],
+    });
+    setDraftId(draft.id);
+    toast.success("Draft loaded");
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      const values = form.getValues();
+      const label =
+        values.invoice_number?.trim() ||
+        `Draft ${new Date().toLocaleString()}`;
+      const saved = await purchaseService.saveDraft(dealerId, values, {
+        id: draftId ?? undefined,
+        label,
+      });
+      setDraftId(saved.id);
+      toast.success("Draft saved");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save draft");
+    }
+  };
+
+  // Aggregates for the summary panel.
+  const subtotalLanded = watchItems.reduce((s, _, i) => s + calcLandedCost(i), 0);
+  const transportSum = watchItems.reduce((s, it) => s + (Number(it.transport_cost) || 0), 0);
+  const laborSum = watchItems.reduce((s, it) => s + (Number(it.labor_cost) || 0), 0);
+  const otherSum = watchItems.reduce((s, it) => s + (Number(it.other_cost) || 0), 0);
+  const grandTotal = subtotalLanded;
+
 
   return (
     <Form {...form}>
