@@ -114,6 +114,98 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// ───────────────────────── DRAFTS (Phase 3U-31) ─────────────────────────
+// Registered before `/:id` so the literal path wins the routing match.
+
+router.get('/drafts/list', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('dealer_admin') && !roles.includes('super_admin')) {
+    res.status(403).json({ error: 'Drafts are dealer_admin-only' });
+    return;
+  }
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  try {
+    const rows = await db('purchase_drafts')
+      .where({ dealer_id: dealerId })
+      .orderBy('updated_at', 'desc')
+      .limit(50)
+      .select('id', 'label', 'payload', 'created_at', 'updated_at', 'created_by');
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('[purchases.drafts.list] error', err);
+    res.status(500).json({ error: 'Failed to load drafts' });
+  }
+});
+
+const draftBodySchema = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().max(120).optional().nullable(),
+  payload: z.record(z.any()),
+});
+
+router.post('/drafts', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('dealer_admin') && !roles.includes('super_admin')) {
+    res.status(403).json({ error: 'Drafts are dealer_admin-only' });
+    return;
+  }
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = draftBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { id, label, payload } = parsed.data;
+  const userId = req.user?.userId ?? null;
+  try {
+    if (id) {
+      const updated = await db('purchase_drafts')
+        .where({ id, dealer_id: dealerId })
+        .update({ label: label ?? null, payload, updated_at: db.fn.now() })
+        .returning(['id', 'label', 'payload', 'updated_at']);
+      if (!updated.length) {
+        res.status(404).json({ error: 'Draft not found' });
+        return;
+      }
+      res.json(updated[0]);
+      return;
+    }
+    const [row] = await db('purchase_drafts')
+      .insert({ dealer_id: dealerId, created_by: userId, label: label ?? null, payload })
+      .returning(['id', 'label', 'payload', 'updated_at']);
+    res.status(201).json(row);
+  } catch (err) {
+    console.error('[purchases.drafts.save] error', err);
+    res.status(500).json({ error: 'Failed to save draft' });
+  }
+});
+
+router.delete('/drafts/:id', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('dealer_admin') && !roles.includes('super_admin')) {
+    res.status(403).json({ error: 'Drafts are dealer_admin-only' });
+    return;
+  }
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  try {
+    const n = await db('purchase_drafts')
+      .where({ id: req.params.id, dealer_id: dealerId })
+      .del();
+    if (!n) {
+      res.status(404).json({ error: 'Draft not found' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[purchases.drafts.delete] error', err);
+    res.status(500).json({ error: 'Failed to delete draft' });
+  }
+});
+
+
 router.get('/:id', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;
