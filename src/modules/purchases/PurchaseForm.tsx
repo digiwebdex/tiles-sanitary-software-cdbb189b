@@ -327,8 +327,16 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
           const enriched = enrichItemsWithSqft(values.items as any[], map as any, { defaultRateUnit: "per_sqft" });
           await onSubmit({ ...values, items: enriched } as PurchaseFormValues);
         })}
-        className="space-y-5"
+        className="grid gap-5 lg:grid-cols-[1fr_340px]"
       >
+        <div className="space-y-5 min-w-0">
+          {/* Drafts toolbar */}
+          {enableDrafts && (
+            <div className="flex items-center justify-end">
+              <PurchaseDraftMenu dealerId={dealerId} onLoad={handleLoadDraft} />
+            </div>
+          )}
+
         {/* Top section: Reference, Date */}
         <Card>
           <CardContent className="pt-5">
