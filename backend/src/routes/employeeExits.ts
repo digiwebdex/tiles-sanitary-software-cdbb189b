@@ -17,8 +17,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -144,7 +144,7 @@ router.get('/', async (req: Request, res: Response) => {
   if (employee_id) query.where('x.employee_id', String(employee_id));
   if (q) {
     const s = `%${String(q).toLowerCase()}%`;
-    query.where((b) => {
+    query.where((b: any) => {
       b.whereRaw('LOWER(x.exit_code) LIKE ?', [s])
         .orWhereRaw('LOWER(e.name) LIKE ?', [s])
         .orWhereRaw('LOWER(e.employee_code) LIKE ?', [s]);
@@ -193,7 +193,7 @@ router.get('/:id/settlement-preview', async (req: Request, res: Response) => {
     .first();
   if (!ex) return res.status(404).json({ error: 'Exit record not found' });
 
-  const out = await computeOutstandings(dealerId, ex.employee_id);
+  const out = await computeOutstandings(dealerId as string, ex.employee_id);
   const merged = { ...ex, ...out };
   res.json({ ...out, suggested_net: computeNet(merged) });
 });
@@ -213,8 +213,8 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
     .first();
   if (dup) return res.status(409).json({ error: 'An active exit already exists for this employee' });
 
-  const out = await computeOutstandings(dealerId, parsed.data.employee_id);
-  const exitCode = await nextExitCode(dealerId);
+  const out = await computeOutstandings(dealerId as string, parsed.data.employee_id);
+  const exitCode = await nextExitCode(dealerId as string);
 
   const trx = await db.transaction();
   try {
@@ -241,7 +241,7 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
       exit_interview_notes: parsed.data.exit_interview_notes ?? null,
       payment_method: parsed.data.payment_method ?? null,
       bank_account_id: parsed.data.bank_account_id ?? null,
-      created_by: req.user!.id,
+      created_by: req.user!.userId,
       net_payable: 0,
     };
     insertData.net_payable = computeNet(insertData);
@@ -279,7 +279,7 @@ router.put('/:id', requireRole('dealer_admin', 'manager'), async (req: Request, 
 
   const merged = { ...existing, ...parsed.data };
   // recompute outstandings live
-  const out = await computeOutstandings(dealerId, merged.employee_id);
+  const out = await computeOutstandings(dealerId as string, merged.employee_id);
   merged.outstanding_loans = out.outstanding_loans;
   merged.outstanding_advances = out.outstanding_advances;
   merged.net_payable = computeNet(merged);
@@ -351,7 +351,7 @@ router.put('/clearances/:cid', requireRole('dealer_admin', 'manager'), async (re
 
   const update: any = { ...parsed.data };
   if (parsed.data.status && parsed.data.status !== 'pending') {
-    update.cleared_by = req.user!.id;
+    update.cleared_by = req.user!.userId;
     update.cleared_at = db.fn.now();
   } else if (parsed.data.status === 'pending') {
     update.cleared_by = null;

@@ -14,8 +14,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -74,7 +74,7 @@ router.get('/', async (req: Request, res: Response) => {
     .orderBy('a.tag');
   if (status) qb = qb.andWhere('a.status', status);
   if (employee_id) qb = qb.andWhere('a.assigned_to', employee_id);
-  if (q) qb = qb.andWhere((b) => b.whereILike('a.tag', `%${q}%`).orWhereILike('a.name', `%${q}%`).orWhereILike('a.serial_no', `%${q}%`));
+  if (q) qb = qb.andWhere((b: any) => b.whereILike('a.tag', `%${q}%`).orWhereILike('a.name', `%${q}%`).orWhereILike('a.serial_no', `%${q}%`));
   res.json(await qb);
 });
 
@@ -96,7 +96,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json({ ...asset, history });
 });
 
-router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const data = assetSchema.parse(req.body);
   try {
@@ -110,7 +110,7 @@ router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Reque
   }
 });
 
-router.put('/:id', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.put('/:id', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const data = assetSchema.partial().parse(req.body);
   const [row] = await db('assets')
@@ -121,7 +121,7 @@ router.put('/:id', requireRole(['dealer_admin', 'super_admin']), async (req: Req
   res.json(row);
 });
 
-router.delete('/:id', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.delete('/:id', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const asset = await db('assets').where({ id: req.params.id, dealer_id: dealerId }).first();
   if (!asset) return res.status(404).json({ error: 'Asset not found' });
@@ -139,11 +139,11 @@ const assignSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/:id/assign', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/:id/assign', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = assignSchema.parse(req.body);
 
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const asset = await trx('assets').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
     if (!asset) throw Object.assign(new Error('Asset not found'), { status: 404 });
     if (asset.status !== 'available') throw Object.assign(new Error(`Asset is ${asset.status} — cannot assign`), { status: 400 });
@@ -158,7 +158,7 @@ router.post('/:id/assign', requireRole(['dealer_admin', 'super_admin']), async (
       assigned_date: body.assigned_date,
       condition_at_assignment: body.condition_at_assignment ?? asset.condition,
       notes: body.notes ?? null,
-      created_by: req.user!.id,
+      created_by: req.user!.userId,
     }).returning('*');
 
     const [updated] = await trx('assets').where({ id: asset.id }).update({
@@ -180,11 +180,11 @@ const returnSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/:id/return', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/:id/return', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = returnSchema.parse(req.body);
 
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const asset = await trx('assets').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
     if (!asset) throw Object.assign(new Error('Asset not found'), { status: 404 });
     if (asset.status !== 'assigned') throw Object.assign(new Error('Asset is not currently assigned'), { status: 400 });

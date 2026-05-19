@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -33,7 +33,7 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
   }
   try {
     const [row] = await db('branches')
-      .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.id })
+      .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.userId })
       .returning('*');
     if (parsed.data.is_default) {
       await db('branches')

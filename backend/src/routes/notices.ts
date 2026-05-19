@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -32,8 +32,8 @@ router.get('/active', async (req: Request, res: Response) => {
   const today = new Date().toISOString().slice(0, 10);
   const rows = await db('notices')
     .where({ dealer_id: dealerId, is_active: true })
-    .andWhere((q) => q.whereNull('start_date').orWhere('start_date', '<=', today))
-    .andWhere((q) => q.whereNull('end_date').orWhere('end_date', '>=', today))
+    .andWhere((q: any) => q.whereNull('start_date').orWhere('start_date', '<=', today))
+    .andWhere((q: any) => q.whereNull('end_date').orWhere('end_date', '>=', today))
     .orderBy([{ column: 'pinned', order: 'desc' }, { column: 'created_at', order: 'desc' }]);
   const filtered = rows.filter((n: any) =>
     n.audience === 'all' || roles.includes(n.audience) || roles.includes('dealer_admin'),
@@ -46,7 +46,7 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
   const parsed = noticeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const [row] = await db('notices')
-    .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.id })
+    .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.userId })
     .returning('*');
   res.json(row);
 });

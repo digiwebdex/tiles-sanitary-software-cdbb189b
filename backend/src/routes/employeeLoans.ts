@@ -15,8 +15,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -156,11 +156,11 @@ const createSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = createSchema.parse(req.body);
 
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const emp = await trx('employees').where({ id: body.employee_id, dealer_id: dealerId }).first();
     if (!emp) throw Object.assign(new Error('Employee not found'), { status: 404 });
     if (emp.status !== 'active') throw Object.assign(new Error('Cannot issue loan to inactive employee'), { status: 400 });
@@ -171,7 +171,7 @@ router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Reque
 
     const emi = Number((body.principal / body.tenure_months).toFixed(2));
     const firstDue = body.first_emi_date ?? addMonths(body.issue_date, 1);
-    const loanCode = await nextLoanCode(trx, dealerId);
+    const loanCode = await nextLoanCode(trx, dealerId as string);
 
     const [loan] = await trx('employee_loans').insert({
       dealer_id: dealerId,
@@ -186,7 +186,7 @@ router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Reque
       bank_account_id: body.bank_account_id ?? null,
       reason: body.reason ?? null,
       notes: body.notes ?? null,
-      created_by: req.user!.id,
+      created_by: req.user!.userId,
     }).returning('*');
 
     // Schedule generation: rounded EMIs with final installment absorbing the remainder
@@ -213,9 +213,9 @@ router.post('/', requireRole(['dealer_admin', 'super_admin']), async (req: Reque
 
 /* ─────────────────────── cancel ─────────────────────── */
 
-router.post('/:id/cancel', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/:id/cancel', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
     if (!loan) throw Object.assign(new Error('Loan not found'), { status: 404 });
     if (loan.status !== 'active') throw Object.assign(new Error(`Loan already ${loan.status}`), { status: 400 });
@@ -238,9 +238,9 @@ router.post('/:id/cancel', requireRole(['dealer_admin', 'super_admin']), async (
 
 /* ─────────────────────── close (waive remaining) ─────────────────────── */
 
-router.post('/:id/close', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/:id/close', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
     if (!loan) throw Object.assign(new Error('Loan not found'), { status: 404 });
     if (loan.status !== 'active') throw Object.assign(new Error(`Loan already ${loan.status}`), { status: 400 });
@@ -269,11 +269,11 @@ const paySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/emis/:emiId/pay', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/emis/:emiId/pay', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = paySchema.parse(req.body);
 
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const emi = await trx('employee_loan_emis').where({ id: req.params.emiId, dealer_id: dealerId }).forUpdate().first();
     if (!emi) throw Object.assign(new Error('EMI not found'), { status: 404 });
     if (emi.status === 'paid' || emi.status === 'waived') {
@@ -316,9 +316,9 @@ router.post('/emis/:emiId/pay', requireRole(['dealer_admin', 'super_admin']), as
 
 /* ─────────────────────── waive an EMI ─────────────────────── */
 
-router.post('/emis/:emiId/waive', requireRole(['dealer_admin', 'super_admin']), async (req: Request, res: Response) => {
+router.post('/emis/:emiId/waive', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const emi = await trx('employee_loan_emis').where({ id: req.params.emiId, dealer_id: dealerId }).forUpdate().first();
     if (!emi) throw Object.assign(new Error('EMI not found'), { status: 404 });
     if (emi.status === 'paid' || emi.status === 'waived') {

@@ -13,8 +13,8 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import db from '../db/connection';
-import { requireAuth } from '../middleware/auth';
+import { db } from '../db/connection';
+import { authenticate as requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 
 const router = Router();
@@ -97,9 +97,9 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { kpis, ...header } = parsed.data;
   try {
-    const result = await db.transaction(async (trx) => {
+    const result = await db.transaction(async (trx: any) => {
       const [row] = await trx('performance_reviews')
-        .insert({ ...header, dealer_id: dealerId, created_by: req.user!.id })
+        .insert({ ...header, dealer_id: dealerId, created_by: req.user!.userId })
         .returning('*');
       if (kpis && kpis.length) {
         await trx('performance_kpis').insert(kpis.map((k) => ({ ...k, review_id: row.id })));
