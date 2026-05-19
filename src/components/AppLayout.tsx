@@ -54,6 +54,7 @@ const navItems = [
   { path: "/hrm/training", label: "Training & Skills", icon: GraduationCap, dealerAdminOnly: true },
   { path: "/hrm/assets", label: "Asset Management", icon: Laptop, dealerAdminOnly: true },
   { path: "/hrm/loans", label: "Employee Loans", icon: BadgeDollarSign, dealerAdminOnly: true },
+  { path: "/hrm/exits", label: "Exit / Offboarding", icon: LogOut, dealerAdminOnly: true },
   { path: "/holidays", label: "Holidays", icon: CalendarDays, dealerAdminOnly: true },
   { path: "/directors", label: "Directors", icon: Crown, dealerAdminOnly: true },
   { path: "/warehouses", label: "Warehouses", icon: Warehouse, dealerAdminOnly: true },
