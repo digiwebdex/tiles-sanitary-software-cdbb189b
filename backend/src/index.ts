@@ -83,6 +83,7 @@ import performanceRoutes from './routes/performance';
 import trainingRoutes from './routes/training';
 import assetsRoutes from './routes/assets';
 import employeeLoansRoutes from './routes/employeeLoans';
+import employeeExitsRoutes from './routes/employeeExits';
 import path from 'path';
 
 const app = express();
@@ -246,6 +247,7 @@ app.use('/api/performance', performanceRoutes);
 app.use('/api/training', trainingRoutes);
 app.use('/api/assets', assetsRoutes);
 app.use('/api/employee-loans', employeeLoansRoutes);
+app.use('/api/employee-exits', employeeExitsRoutes);
 
 // Static file serving for uploaded product images, etc.
 app.use(
