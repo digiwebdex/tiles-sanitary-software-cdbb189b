@@ -6,519 +6,304 @@
 <title>TilesERP — ডিলার ব্যবহার গাইড (A to Z)</title>
 <meta name="description" content="TilesERP সফটওয়্যার একজন ডিলার কীভাবে A থেকে Z পর্যন্ত ব্যবহার করবেন তার সম্পূর্ণ বাংলা গাইড।" />
 <style>
-  :root {
-    --bg: #0b0f1a;
-    --surface: #111827;
-    --surface-2: #1f2937;
-    --border: #1f2937;
-    --text: #f1f5f9;
-    --muted: #94a3b8;
-    --primary: #f97316;
-    --primary-soft: rgba(249,115,22,0.12);
-    --accent: #fbbf24;
-    --success: #10b981;
-    --danger: #ef4444;
-    --radius: 12px;
+  :root{
+    --bg:#0b0f1a; --surface:#111827; --surface-2:#1f2937; --border:#1f2937;
+    --text:#f1f5f9; --muted:#94a3b8; --primary:#f97316; --primary-soft:rgba(249,115,22,.12);
+    --accent:#fbbf24; --success:#10b981; --danger:#ef4444; --info:#38bdf8; --radius:12px;
   }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hind Siliguri", "Noto Sans Bengali", Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.7;
-    font-size: 16px;
-  }
-  .layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
-  aside.toc {
-    position: sticky; top: 0; height: 100vh;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    padding: 24px 16px;
-    overflow-y: auto;
-  }
-  aside.toc h2 {
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    margin: 0 0 12px 8px;
-  }
-  aside.toc a {
-    display: block;
-    padding: 8px 12px;
-    margin: 2px 0;
-    border-radius: 8px;
-    color: var(--muted);
-    text-decoration: none;
-    font-size: 14px;
-    transition: all 0.15s;
-  }
-  aside.toc a:hover { background: var(--surface-2); color: var(--text); }
-  aside.toc a.section-title { color: var(--primary); font-weight: 600; margin-top: 16px; pointer-events: none; }
-
-  main { padding: 48px 56px; max-width: 960px; }
-  .hero {
-    background: linear-gradient(135deg, var(--primary-soft), transparent);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 32px;
-    margin-bottom: 40px;
-  }
-  .hero .badge {
-    display: inline-block; background: var(--primary); color: #000;
-    padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
-    margin-bottom: 12px; letter-spacing: 0.05em;
-  }
-  .hero h1 { margin: 0 0 8px; font-size: 36px; line-height: 1.2; }
-  .hero p { color: var(--muted); margin: 0; font-size: 17px; }
-
-  h2 {
-    font-size: 26px; margin: 56px 0 16px; padding-bottom: 12px;
-    border-bottom: 2px solid var(--primary);
-    display: inline-block;
-  }
-  h3 { font-size: 19px; margin: 28px 0 10px; color: var(--accent); }
-  h4 { font-size: 16px; margin: 18px 0 8px; color: var(--text); }
-  p, li { color: #cbd5e1; }
-
-  .step-list { counter-reset: step; padding-left: 0; list-style: none; }
-  .step-list > li {
-    counter-increment: step;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px 20px 16px 60px;
-    margin-bottom: 10px;
-    position: relative;
-  }
-  .step-list > li::before {
-    content: counter(step);
-    position: absolute; left: 16px; top: 16px;
-    width: 32px; height: 32px;
-    background: var(--primary); color: #000;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 14px;
-  }
-
-  .callout {
-    border-left: 4px solid var(--primary);
-    background: var(--primary-soft);
-    padding: 14px 18px;
-    border-radius: 8px;
-    margin: 16px 0;
-  }
-  .callout.warn { border-color: var(--danger); background: rgba(239,68,68,0.1); }
-  .callout.success { border-color: var(--success); background: rgba(16,185,129,0.1); }
-  .callout strong { color: var(--text); }
-
-  table {
-    width: 100%; border-collapse: collapse; margin: 16px 0;
-    background: var(--surface); border-radius: var(--radius); overflow: hidden;
-  }
-  th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
-  th { background: var(--surface-2); color: var(--accent); font-weight: 600; }
-  tr:last-child td { border-bottom: none; }
-
-  code {
-    background: var(--surface-2); padding: 2px 8px; border-radius: 4px;
-    font-size: 13px; color: var(--accent); font-family: "JetBrains Mono", Consolas, monospace;
-  }
-
-  .menu-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px; margin: 16px 0;
-  }
-  .menu-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 8px; padding: 14px;
-  }
-  .menu-card .icon { font-size: 22px; margin-bottom: 6px; }
-  .menu-card h4 { margin: 4px 0; color: var(--primary); font-size: 15px; }
-  .menu-card p { margin: 0; font-size: 13px; color: var(--muted); }
-
-  .footer {
-    margin-top: 80px; padding: 32px 0; border-top: 1px solid var(--border);
-    text-align: center; color: var(--muted); font-size: 14px;
-  }
-  .footer strong { color: var(--primary); }
-
-  .toc-toggle { display: none; }
-
-  @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; }
-    aside.toc {
-      position: fixed; top: 0; left: -300px; width: 280px; z-index: 100;
-      transition: left 0.25s;
-    }
-    aside.toc.open { left: 0; }
-    main { padding: 24px 18px; }
-    .hero h1 { font-size: 26px; }
-    h2 { font-size: 22px; }
-    .toc-toggle {
-      display: inline-flex; align-items: center; gap: 8px;
-      position: fixed; top: 16px; right: 16px; z-index: 101;
-      background: var(--primary); color: #000; border: none;
-      padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer;
-    }
-  }
-  @media print {
-    aside.toc, .toc-toggle { display: none; }
-    .layout { grid-template-columns: 1fr; }
-    main { padding: 0; max-width: 100%; }
-    body { background: #fff; color: #000; }
-    .hero, table, .menu-card, .step-list > li, .callout {
-      background: #fff !important; color: #000 !important; border-color: #ddd !important;
-    }
-    h2, h3, h4 { color: #d97706 !important; }
-  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hind Siliguri","Noto Sans Bengali",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.8;font-size:16px}
+  .layout{display:grid;grid-template-columns:300px 1fr;min-height:100vh}
+  aside.toc{position:sticky;top:0;height:100vh;background:var(--surface);border-right:1px solid var(--border);padding:24px 16px;overflow-y:auto}
+  aside.toc h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px 8px}
+  aside.toc a{display:block;padding:7px 12px;color:var(--text);text-decoration:none;border-radius:8px;font-size:14px;margin-bottom:2px}
+  aside.toc a:hover{background:var(--primary-soft);color:var(--primary)}
+  main{padding:32px 40px;max-width:960px}
+  h1{font-size:30px;margin:0 0 8px;color:var(--primary)}
+  h2{font-size:24px;margin:48px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--primary-soft);color:var(--accent)}
+  h3{font-size:18px;margin:24px 0 8px;color:var(--text)}
+  p,li{color:var(--text)}
+  code,kbd{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:13px;color:var(--accent);font-family:monospace}
+  .lead{color:var(--muted);font-size:17px;margin:0 0 24px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin:16px 0}
+  .tip{border-left:4px solid var(--info);background:rgba(56,189,248,.08);padding:12px 16px;margin:12px 0;border-radius:6px}
+  .warn{border-left:4px solid var(--danger);background:rgba(239,68,68,.08);padding:12px 16px;margin:12px 0;border-radius:6px}
+  .ok{border-left:4px solid var(--success);background:rgba(16,185,129,.08);padding:12px 16px;margin:12px 0;border-radius:6px}
+  ol,ul{padding-left:22px}
+  ol li,ul li{margin:6px 0}
+  table{width:100%;border-collapse:collapse;margin:16px 0;background:var(--surface);border-radius:8px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);font-size:14px}
+  th{background:var(--surface-2);color:var(--accent);font-weight:600}
+  .step{display:flex;gap:14px;margin:14px 0}
+  .step .n{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .pill{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:600;margin-right:6px}
+  hr{border:0;border-top:1px solid var(--border);margin:32px 0}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}aside.toc{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--border)}main{padding:20px}}
 </style>
 </head>
 <body>
-<button class="toc-toggle" onclick="document.querySelector('aside.toc').classList.toggle('open')">☰ মেনু</button>
-
 <div class="layout">
   <aside class="toc">
     <h2>সূচিপত্র</h2>
-    <a href="#intro">১. পরিচিতি</a>
-    <a href="#getting-started" class="section-title">শুরু করুন</a>
-    <a href="#signup">২. অ্যাকাউন্ট খোলা</a>
-    <a href="#login">৩. লগইন করা</a>
-    <a href="#dashboard">৪. ড্যাশবোর্ড পরিচিতি</a>
-
-    <a href="#setup" class="section-title">প্রাথমিক সেটআপ</a>
-    <a href="#settings">৫. সেটিংস কনফিগার</a>
-    <a href="#suppliers">৬. সাপ্লায়ার যোগ</a>
-    <a href="#customers">৭. কাস্টমার যোগ</a>
-    <a href="#products">৮. প্রোডাক্ট যোগ</a>
-
-    <a href="#daily-ops" class="section-title">দৈনিক কার্যক্রম</a>
-    <a href="#purchases">৯. ক্রয় (Purchase)</a>
-    <a href="#sales">১০. বিক্রয় (Sale)</a>
-    <a href="#pos">১১. POS বিক্রয়</a>
-    <a href="#challan">১২. চালান ও ডেলিভারি</a>
-    <a href="#quotation">১৩. কোটেশন</a>
-    <a href="#returns">১৪. বিক্রয়/ক্রয় ফেরত</a>
-
-    <a href="#finance" class="section-title">আর্থিক ব্যবস্থাপনা</a>
-    <a href="#payments">১৫. পেমেন্ট কালেকশন</a>
-    <a href="#ledger">১৬. লেজার</a>
-    <a href="#credit">১৭. ক্রেডিট কন্ট্রোল</a>
-    <a href="#campaigns">১৮. ক্যাম্পেইন/গিফট</a>
-
-    <a href="#advanced" class="section-title">উন্নত ফিচার</a>
-    <a href="#projects">১৯. প্রজেক্ট ম্যানেজমেন্ট</a>
-    <a href="#display">২০. ডিসপ্লে স্যাম্পল</a>
-    <a href="#approvals">২১. অ্যাপ্রুভাল ওয়ার্কফ্লো</a>
-    <a href="#portal">২২. কাস্টমার পোর্টাল</a>
-    <a href="#reports">২৩. রিপোর্ট</a>
-    <a href="#barcode">২৪. বারকোড</a>
-
-    <a href="#admin" class="section-title">অ্যাডমিন</a>
-    <a href="#users">২৫. ইউজার ম্যানেজমেন্ট</a>
-    <a href="#subscription">২৬. সাবস্ক্রিপশন</a>
-    <a href="#faq">২৭. সাধারণ প্রশ্ন</a>
-    <a href="#support">২৮. সাপোর্ট</a>
+    <a href="#intro">১. শুরু করার আগে</a>
+    <a href="#login">২. লগইন ও ড্যাশবোর্ড</a>
+    <a href="#supplier">৩. সাপ্লায়ার যোগ করা</a>
+    <a href="#customer">৪. কাস্টমার যোগ করা</a>
+    <a href="#product">৫. প্রোডাক্ট যোগ করা</a>
+    <a href="#unit">৬. ইউনিট: SFT / Box / Piece</a>
+    <a href="#purchase">৭. পারচেজ (কেনা)</a>
+    <a href="#stock">৮. স্টক দেখা ও ম্যানেজ</a>
+    <a href="#sale">৯. সেল (বিক্রি)</a>
+    <a href="#invoice">১০. ইনভয়েস ও চালান</a>
+    <a href="#delivery">১১. ডেলিভারি</a>
+    <a href="#return">১২. রিটার্ন</a>
+    <a href="#collection">১৩. পেমেন্ট কালেকশন</a>
+    <a href="#ledger">১৪. লেজার ও রিপোর্ট</a>
+    <a href="#tips">১৫. দরকারি টিপস</a>
+    <a href="#support">১৬. সাপোর্ট</a>
   </aside>
 
   <main>
-    <div class="hero">
-      <span class="badge">ডিলার গাইড • A to Z</span>
-      <h1>TilesERP ব্যবহার নির্দেশিকা</h1>
-      <p>টাইলস ও স্যানিটারি ডিলারদের জন্য সম্পূর্ণ বাংলা ব্যবহার নির্দেশিকা — অ্যাকাউন্ট খোলা থেকে শুরু করে রিপোর্ট দেখা পর্যন্ত প্রতিটি ধাপ।</p>
+    <h1>TilesERP — সম্পূর্ণ ব্যবহার গাইড</h1>
+    <p class="lead">এই গাইডে আপনি একদম শূন্য থেকে শুরু করে — প্রোডাক্ট যোগ, সাপ্লায়ার যোগ, পারচেজ, স্টক, সেল ও ইনভয়েস পর্যন্ত প্রতিটি ধাপ বাংলায় শিখবেন। টাইলস ও স্যানিটারি — দুই ক্যাটাগরির জন্যই উপযোগী।</p>
+
+    <!-- 1 -->
+    <h2 id="intro">১. শুরু করার আগে</h2>
+    <div class="card">
+      <p>সফটওয়্যার ব্যবহারের সঠিক ক্রম এই রকম:</p>
+      <ol>
+        <li><strong>সাপ্লায়ার</strong> যোগ করুন (যাদের কাছ থেকে মাল কিনবেন)</li>
+        <li><strong>কাস্টমার</strong> যোগ করুন (যাদের কাছে বিক্রি করবেন) — চাইলে পরে কাস্টমার তৈরি করেও সেল করা যাবে</li>
+        <li><strong>প্রোডাক্ট</strong> তৈরি করুন (যা বিক্রি করবেন)</li>
+        <li><strong>পারচেজ</strong> করে স্টকে মাল ঢোকান</li>
+        <li><strong>সেল</strong> করুন ও ইনভয়েস তৈরি করুন</li>
+        <li><strong>পেমেন্ট</strong> কালেকশন করুন</li>
+      </ol>
+      <div class="tip">💡 সরাসরি প্রোডাক্ট তৈরি করে স্টক যোগ করা যায় না — স্টক বাড়াতে হলে অবশ্যই <strong>পারচেজ</strong> করতে হবে। এতে কস্ট, প্রফিট ও লেজার সব ঠিক থাকে।</div>
     </div>
 
-    <h2 id="intro">১. পরিচিতি</h2>
-    <p><strong>TilesERP</strong> হলো টাইলস ও স্যানিটারি দোকানদারদের জন্য একটি ক্লাউড-ভিত্তিক সম্পূর্ণ বিজনেস ম্যানেজমেন্ট সফটওয়্যার। এতে ইনভেন্টরি, ক্রয়-বিক্রয়, কাস্টমার, সাপ্লায়ার, লেজার, রিপোর্ট, চালান, কোটেশন, কাস্টমার পোর্টাল সহ ডিলারের সব দরকারি ফিচার এক জায়গায় পাবেন।</p>
-
-    <div class="callout">
-      <strong>মূল সুবিধা:</strong> মাল্টি-ইউজার সাপোর্ট, রিয়েল-টাইম স্টক আপডেট, FIFO কস্ট ট্র্যাকিং, অটো SMS/Email নোটিফিকেশন, ব্যাচ ট্র্যাকিং, ক্রেডিট কন্ট্রোল, এবং কাস্টমার পোর্টাল।
-    </div>
-
-    <h2 id="signup">২. অ্যাকাউন্ট খোলা (Sign Up)</h2>
-    <ol class="step-list">
-      <li>ওয়েবসাইটে যান: <code>sanitileserp.com</code></li>
-      <li>উপরের ডান কোণে <strong>"Get Started"</strong> বা <strong>"Start Free Trial"</strong> বাটনে ক্লিক করুন।</li>
-      <li>আপনার <strong>দোকানের নাম, মালিকের নাম, ইমেইল, ফোন নম্বর ও পাসওয়ার্ড</strong> দিন।</li>
-      <li>"Sign Up" বাটনে ক্লিক করার পর সিস্টেম স্বয়ংক্রিয়ভাবে আপনার অ্যাকাউন্ট তৈরি করবে।</li>
-      <li><strong>৩ দিনের ফ্রি ট্রায়াল</strong> পাবেন — সব ফিচার ব্যবহার করতে পারবেন।</li>
+    <!-- 2 -->
+    <h2 id="login">২. লগইন ও ড্যাশবোর্ড</h2>
+    <ol>
+      <li>ব্রাউজারে <code>app.sanitileserp.com</code> খুলুন</li>
+      <li>আপনার ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন</li>
+      <li>ড্যাশবোর্ডে আজকের সেল, ডিউ, স্টক অ্যালার্ট, টপ প্রোডাক্ট ইত্যাদি দেখতে পাবেন</li>
     </ol>
-    <div class="callout warn">
-      <strong>মনে রাখবেন:</strong> ট্রায়াল শেষ হওয়ার আগেই সাবস্ক্রিপশন রিনিউ করতে হবে, না হলে অ্যাকাউন্ট সাময়িকভাবে ব্লক হয়ে যাবে।
-    </div>
+    <div class="tip">কীবোর্ড শর্টকাট: <kbd>F2</kbd> নতুন সেল, <kbd>F5</kbd> রিফ্রেশ, <kbd>F12</kbd> POS, <kbd>Esc</kbd> ক্লোজ।</div>
 
-    <h2 id="login">৩. লগইন করা</h2>
-    <ol class="step-list">
-      <li>ব্রাউজারে যান: <code>app.sanitileserp.com</code></li>
-      <li>আপনার ইমেইল ও পাসওয়ার্ড দিন।</li>
-      <li><strong>"Login"</strong> বাটনে ক্লিক করুন।</li>
-      <li>সফল লগইনের পর ড্যাশবোর্ডে নিয়ে যাবে।</li>
+    <!-- 3 -->
+    <h2 id="supplier">৩. সাপ্লায়ার যোগ করা</h2>
+    <div class="step"><div class="n">1</div><div>সাইডবার থেকে <strong>Suppliers</strong> মেনুতে যান</div></div>
+    <div class="step"><div class="n">2</div><div>উপরে <strong>+ New Supplier</strong> বাটনে ক্লিক করুন</div></div>
+    <div class="step"><div class="n">3</div><div>সাপ্লায়ারের নাম, মোবাইল, ঠিকানা, কোম্পানি ইত্যাদি পূরণ করুন</div></div>
+    <div class="step"><div class="n">4</div><div><strong>Opening Balance</strong> বক্সে আগের বকেয়া থাকলে দিন — সিস্টেম অটো লেজারে এন্ট্রি করবে</div></div>
+    <div class="step"><div class="n">5</div><div><strong>Save</strong> করুন</div></div>
+    <div class="ok">✅ সেভ করলে সাপ্লায়ার লিস্টে চলে আসবে এবং পারচেজ করার সময় সাজেস্ট করবে।</div>
+
+    <!-- 4 -->
+    <h2 id="customer">৪. কাস্টমার যোগ করা</h2>
+    <ol>
+      <li><strong>Customers</strong> মেনুতে যান</li>
+      <li><strong>+ New Customer</strong> ক্লিক করুন</li>
+      <li>নাম, মোবাইল, ঠিকানা, ক্যাটাগরি (Retailer / Customer / Project) দিন</li>
+      <li>চাইলে <strong>Credit Limit</strong> ও <strong>Overdue Days</strong> সেট করুন — সিস্টেম সীমা ছাড়ালে অ্যালার্ট দেবে</li>
+      <li>Opening Balance থাকলে দিন → <strong>Save</strong></li>
     </ol>
-    <div class="callout warn">
-      <strong>সিকিউরিটি:</strong> ৫ বার ভুল পাসওয়ার্ড দিলে অ্যাকাউন্ট ১৫ মিনিটের জন্য লক হয়ে যাবে। পাসওয়ার্ড ভুলে গেলে "Forgot Password" ব্যবহার করুন।
-    </div>
 
-    <h2 id="dashboard">৪. ড্যাশবোর্ড পরিচিতি</h2>
-    <p>লগইনের পর আপনি ড্যাশবোর্ড দেখতে পাবেন যেখানে নিচের তথ্যগুলো রিয়েল-টাইমে দেখা যায়:</p>
-    <div class="menu-grid">
-      <div class="menu-card"><div class="icon">📊</div><h4>আজকের বিক্রয়</h4><p>আজকের মোট সেলস ও অর্ডার সংখ্যা</p></div>
-      <div class="menu-card"><div class="icon">💰</div><h4>মাসিক রেভিনিউ</h4><p>চলতি মাসের আয়</p></div>
-      <div class="menu-card"><div class="icon">📦</div><h4>স্টক স্ট্যাটাস</h4><p>মোট প্রোডাক্ট ও লো-স্টক অ্যালার্ট</p></div>
-      <div class="menu-card"><div class="icon">👥</div><h4>কাস্টমার ডিউ</h4><p>মোট বকেয়া পরিমাণ</p></div>
-      <div class="menu-card"><div class="icon">📈</div><h4>সেলস চার্ট</h4><p>সাপ্তাহিক/মাসিক ট্রেন্ড</p></div>
-      <div class="menu-card"><div class="icon">🏆</div><h4>টপ প্রোডাক্ট</h4><p>সবচেয়ে বেশি বিক্রিত আইটেম</p></div>
-    </div>
+    <!-- 5 -->
+    <h2 id="product">৫. প্রোডাক্ট যোগ করা</h2>
+    <div class="step"><div class="n">1</div><div><strong>Products → + New Product</strong></div></div>
+    <div class="step"><div class="n">2</div><div><strong>Category</strong> বাছুন: <span class="pill">Tiles</span> অথবা <span class="pill">Sanitary</span></div></div>
+    <div class="step"><div class="n">3</div><div>SKU / কোড, নাম, ব্র্যান্ড, সাইজ, কালার ইত্যাদি দিন</div></div>
+    <div class="step"><div class="n">4</div><div><strong>Unit Type</strong> বাছুন — এটি সবচেয়ে গুরুত্বপূর্ণ। নিচের সেকশন দেখুন</div></div>
+    <div class="step"><div class="n">5</div><div>MRP / ডিফল্ট সেল রেট ও Reorder Level দিন → <strong>Save</strong></div></div>
 
-    <h2 id="settings">৫. প্রাথমিক সেটিংস কনফিগার করুন</h2>
-    <p>প্রথমেই বাম মেনু থেকে <strong>"Settings"</strong> এ যান এবং নিচের সেটিংসগুলো ঠিক করুন:</p>
+    <div class="warn">⚠️ প্রোডাক্ট তৈরি করলেই স্টক হবে না। স্টক বাড়াতে এই প্রোডাক্টের জন্য একটি <strong>পারচেজ</strong> করতে হবে।</div>
+
+    <!-- 6 -->
+    <h2 id="unit">৬. ইউনিট কনসেপ্ট: SFT / Box / Piece</h2>
+    <p>টাইলস ও স্যানিটারিতে ইউনিট আলাদা হয়। সঠিক ইউনিট সেট না করলে স্টক ও হিসাব ভুল হবে।</p>
     <table>
-      <tr><th>সেটিং</th><th>বিবরণ</th></tr>
-      <tr><td>দোকানের তথ্য</td><td>নাম, ঠিকানা, ফোন, লোগো</td></tr>
-      <tr><td>চালান টেমপ্লেট</td><td>আধুনিক বা ক্লাসিক ডিজাইন বেছে নিন</td></tr>
-      <tr><td>ডিফল্ট ওয়েস্টেজ %</td><td>টাইলস কাটার সময় কত % নষ্ট হবে</td></tr>
-      <tr><td>রিজার্ভেশন চালু</td><td>প্রি-সেল স্টক হোল্ড করার অনুমতি</td></tr>
-      <tr><td>ব্যাকঅর্ডার অনুমতি</td><td>স্টকের চেয়ে বেশি বিক্রির অনুমতি</td></tr>
-      <tr><td>SMS/Email নোটিফিকেশন</td><td>মালিকের ফোন/ইমেইলে দৈনিক সারাংশ</td></tr>
-      <tr><td>প্রাইস টিয়ার</td><td>রিটেইলার, কাস্টমার, কন্ট্রাক্টরের জন্য আলাদা রেট</td></tr>
+      <thead><tr><th>প্রোডাক্ট টাইপ</th><th>Unit Type</th><th>কখন ব্যবহার করবেন</th></tr></thead>
+      <tbody>
+        <tr><td>টাইলস (স্কয়ার ফিট হিসাবে)</td><td><code>box_sft</code></td><td>যখন রেট ও সেল হয় স্কয়ার ফিটে; প্রতি বক্সে নির্দিষ্ট SFT আছে</td></tr>
+        <tr><td>টাইলস (পিচ হিসাবে)</td><td><code>piece</code></td><td>ছোট ডেকর / বর্ডার টাইল যেগুলো পিচে বিক্রি হয়</td></tr>
+        <tr><td>স্যানিটারি (বেসিন, কমোড)</td><td><code>piece</code></td><td>প্রতিটি আইটেম পিচ হিসাবে গণনা</td></tr>
+        <tr><td>ফিটিংস (সেট/বক্স)</td><td><code>box</code></td><td>যখন বক্স ধরে বিক্রি হয় কিন্তু SFT লাগে না</td></tr>
+      </tbody>
     </table>
 
-    <h2 id="suppliers">৬. সাপ্লায়ার যোগ করুন</h2>
-    <ol class="step-list">
-      <li>সাইডবার থেকে <strong>"Suppliers"</strong> এ ক্লিক করুন।</li>
-      <li>উপরে ডানে <strong>"+ Add Supplier"</strong> বাটনে ক্লিক করুন।</li>
-      <li>সাপ্লায়ারের নাম, ফোন, ঠিকানা ও <strong>ওপেনিং ব্যালেন্স</strong> (যদি আগে থেকে কিছু পাওনা থাকে) দিন।</li>
-      <li>"Save" ক্লিক করুন। সিস্টেম স্বয়ংক্রিয়ভাবে লেজারে এন্ট্রি দেবে।</li>
+    <h3>টাইলস (box_sft) সেট করার নিয়ম</h3>
+    <ul>
+      <li><strong>Tile Width / Height</strong> দিন (যেমন 24 × 48 ইঞ্চি)</li>
+      <li><strong>Pieces per Box</strong> দিন (এক বক্সে কত পিচ, যেমন 4)</li>
+      <li><strong>SFT per Box</strong> অটো হিসাব হবে: <code>(W × H × পিচ) / 144</code></li>
+      <li>সেল রেট দিন <strong>per SFT</strong> অথবা <strong>per Box</strong> — সফটওয়্যার নিজে কনভার্ট করে নেবে</li>
+    </ul>
+    <div class="tip">উদাহরণ: 24×48 টাইল, প্রতি বক্সে 4 পিচ → প্রতি বক্স = (24×48×4)/144 = <strong>32 SFT</strong>। আপনি যদি 1 বক্স বিক্রি করেন, স্টক থেকে 32 SFT কমবে।</div>
+
+    <h3>স্যানিটারি / পিচ প্রোডাক্ট</h3>
+    <ul>
+      <li>শুধু পিচ-প্রতি রেট দিন</li>
+      <li>পারচেজ ও সেল উভয়ই পিচ হিসাবে হবে</li>
+    </ul>
+
+    <!-- 7 -->
+    <h2 id="purchase">৭. পারচেজ (সাপ্লায়ার থেকে কেনা)</h2>
+    <div class="step"><div class="n">1</div><div><strong>Purchases → + New Purchase</strong></div></div>
+    <div class="step"><div class="n">2</div><div><strong>Supplier</strong> বাছুন (নতুন হলে আগে যোগ করে নিন)</div></div>
+    <div class="step"><div class="n">3</div><div><strong>Invoice Date</strong> ও সাপ্লায়ার চালান নম্বর দিন</div></div>
+    <div class="step"><div class="n">4</div><div>আইটেম রো-তে প্রোডাক্ট সিলেক্ট করুন। ইউনিট অটো দেখাবে:
+      <ul>
+        <li><strong>টাইলস (box_sft):</strong> বক্স সংখ্যা দিন → SFT অটো হিসাব হবে। রেট দিন per SFT বা per Box</li>
+        <li><strong>পিচ:</strong> পিচ সংখ্যা ও পিচ-প্রতি রেট দিন</li>
+        <li><strong>বক্স:</strong> বক্স সংখ্যা ও বক্স-প্রতি রেট দিন</li>
+      </ul>
+    </div></div>
+    <div class="step"><div class="n">5</div><div><strong>Landed Cost</strong> (পরিবহন, লোডিং, কাস্টমস) যোগ করুন — সিস্টেম প্রতি পিচ/SFT এ ভাগ করে কস্ট আপডেট করবে</div></div>
+    <div class="step"><div class="n">6</div><div>Discount ও Paid Amount দিন (নগদ বা বাকি)</div></div>
+    <div class="step"><div class="n">7</div><div><strong>Save Purchase</strong> ক্লিক করুন</div></div>
+    <div class="ok">✅ পারচেজ সেভ হলেই:
+      <ul>
+        <li>স্টক বাড়বে (batch হিসাবে)</li>
+        <li>সাপ্লায়ার লেজারে এন্ট্রি হবে</li>
+        <li>FIFO অনুযায়ী কস্ট ট্র্যাক হবে</li>
+        <li>চাইলে বারকোড প্রিন্ট করতে পারবেন</li>
+      </ul>
+    </div>
+
+    <!-- 8 -->
+    <h2 id="stock">৮. স্টক দেখা ও ম্যানেজ করা</h2>
+    <h3>স্টক কোথায় দেখবেন</h3>
+    <ul>
+      <li><strong>Products</strong> পেজে — প্রতিটি প্রোডাক্টের পাশে বর্তমান স্টক দেখা যায়</li>
+      <li><strong>Reports → Stock Report</strong> — বিস্তারিত valuation, aging, fast/slow moving</li>
+      <li><strong>Reports → Batch Report</strong> — কোন ব্যাচে কত মাল আছে ও তার কস্ট</li>
+      <li>ড্যাশবোর্ডে <strong>Low Stock Alert</strong> — reorder level এর কাছে এলে দেখাবে</li>
+    </ul>
+    <h3>স্টক ইউনিট</h3>
+    <ul>
+      <li>টাইলসের জন্য স্টক দেখা যায় <strong>বক্স ও SFT উভয়ই</strong></li>
+      <li>স্যানিটারির জন্য <strong>পিচ</strong></li>
+    </ul>
+    <div class="tip">স্টক ভুল হলে <strong>Stock Adjustment</strong> মেনু থেকে কারেকশন করুন — সব এন্ট্রি অডিট লগে থাকবে।</div>
+
+    <!-- 9 -->
+    <h2 id="sale">৯. সেল (বিক্রি) করা</h2>
+    <p>দুইভাবে সেল করা যায় — <strong>Direct Invoice</strong> (মাল ডেলিভারি সহ ইনভয়েস) ও <strong>Challan Mode</strong> (আগে মাল গেছে, পরে ইনভয়েস)।</p>
+
+    <h3>সাধারণ সেল</h3>
+    <div class="step"><div class="n">1</div><div><strong>Sales → + New Sale</strong> (বা <kbd>F2</kbd>)</div></div>
+    <div class="step"><div class="n">2</div><div>কাস্টমার বাছুন বা নতুন তৈরি করুন</div></div>
+    <div class="step"><div class="n">3</div><div>আইটেম যোগ করুন — প্রোডাক্ট সার্চ করে বাছুন</div></div>
+    <div class="step"><div class="n">4</div><div>ইউনিট অনুযায়ী পরিমাণ দিন:
+      <ul>
+        <li><strong>টাইলস:</strong> বক্স বা SFT — যেটায় বিক্রি করছেন। অন্যটা অটো ক্যালকুলেট হবে</li>
+        <li><strong>পিচ:</strong> পিচ সংখ্যা</li>
+      </ul>
+    </div></div>
+    <div class="step"><div class="n">5</div><div>রেট দিন — Default রেট অটো আসবে। Pricing Tier থাকলে সেটাও সাজেস্ট করবে। ইচ্ছামত পরিবর্তন করতে পারবেন (manual override)</div></div>
+    <div class="step"><div class="n">6</div><div>Discount, Paid Amount, Notes দিন</div></div>
+    <div class="step"><div class="n">7</div><div><strong>Save Sale</strong> ক্লিক করুন</div></div>
+
+    <div class="warn">⚠️ স্টকের চেয়ে বেশি বিক্রি করতে চাইলে <strong>Backorder</strong> অপশন এনাবল থাকলে সিস্টেম মঞ্জুর করবে, নাহলে এরর দেবে।</div>
+
+    <h3>POS সেল (দ্রুত বিক্রি)</h3>
+    <ol>
+      <li><kbd>F12</kbd> চাপুন অথবা <strong>POS</strong> মেনুতে যান</li>
+      <li>বারকোড স্ক্যান করুন বা প্রোডাক্ট সার্চ করুন</li>
+      <li>পরিমাণ ও রেট কনফার্ম করে <strong>Pay</strong> চাপুন</li>
+      <li>রিসিট অটো প্রিন্ট হবে</li>
     </ol>
 
-    <h2 id="customers">৭. কাস্টমার যোগ করুন</h2>
-    <ol class="step-list">
-      <li>সাইডবার থেকে <strong>"Customers"</strong> এ যান এবং <strong>"+ Add Customer"</strong> ক্লিক করুন।</li>
-      <li>নাম, ফোন, ঠিকানা, কাস্টমার টাইপ (Retailer/Customer/Contractor) সিলেক্ট করুন।</li>
-      <li><strong>ক্রেডিট লিমিট</strong> ও <strong>ম্যাক্স ওভারডিউ ডেইজ</strong> সেট করুন।</li>
-      <li>প্রাইস টিয়ার সিলেক্ট করুন (যদি বিশেষ রেট দেন)।</li>
-      <li>ওপেনিং ব্যালেন্স থাকলে দিন। "Save" ক্লিক করুন।</li>
-    </ol>
-    <div class="callout"><strong>বাল্ক ইম্পোর্ট:</strong> CSV ফাইলের মাধ্যমে একসাথে অনেক কাস্টমার যোগ করতে পারবেন "Bulk Import" বাটন থেকে।</div>
+    <!-- 10 -->
+    <h2 id="invoice">১০. ইনভয়েস ও চালান</h2>
+    <ul>
+      <li>সেল সেভ করার পর অটো ইনভয়েস তৈরি হয়</li>
+      <li>সেল লিস্ট থেকে <strong>Invoice</strong> বাটনে ক্লিক করে দেখুন/প্রিন্ট করুন</li>
+      <li>চাইলে <strong>Show Price</strong> অন/অফ করে শুধু চালান ফরম্যাটে প্রিন্ট করা যায়</li>
+      <li>WhatsApp / SMS এ ইনভয়েসের লিংক পাঠাতে পারেন</li>
+    </ul>
 
-    <h2 id="products">৮. প্রোডাক্ট যোগ করুন</h2>
-    <ol class="step-list">
-      <li><strong>"Products"</strong> মেনুতে যান এবং <strong>"+ Add Product"</strong> ক্লিক করুন।</li>
-      <li>প্রোডাক্ট ক্যাটাগরি বেছে নিন: <strong>Tiles</strong> অথবা <strong>Sanitary</strong>।</li>
-      <li>নাম, SKU, ব্র্যান্ড, সাইজ, কালার, ম্যাটেরিয়াল দিন।</li>
-      <li><strong>Unit Type</strong> সিলেক্ট করুন:
-        <ul>
-          <li><strong>Box/SFT</strong> — টাইলসের জন্য (Per Box SFT দিতে হবে)</li>
-          <li><strong>Piece</strong> — স্যানিটারির জন্য</li>
-        </ul>
-      </li>
-      <li>কস্ট প্রাইস ও সেল প্রাইস দিন। <strong>রি-অর্ডার লেভেল</strong> সেট করুন।</li>
-      <li>"Save" ক্লিক করুন। সিস্টেম স্বয়ংক্রিয়ভাবে বারকোড তৈরি করবে।</li>
+    <h3>চালান মোড (Delivery Order)</h3>
+    <p>যখন কাস্টমার একবারে সব মাল নেয় না, তখন:</p>
+    <ol>
+      <li>সেল তৈরির সময় <strong>Challan Mode</strong> বাছুন</li>
+      <li>প্রতি ডেলিভারির সময় <strong>Deliveries → + New Delivery</strong> থেকে চালান কাটুন</li>
+      <li>সব মাল ডেলিভারি শেষে ইনভয়েস ফাইনাল করুন</li>
     </ol>
 
-    <h2 id="purchases">৯. ক্রয় (Purchase) এন্ট্রি</h2>
-    <ol class="step-list">
-      <li><strong>"Purchases"</strong> মেনুতে যান এবং <strong>"+ New Purchase"</strong> ক্লিক করুন।</li>
-      <li>সাপ্লায়ার সিলেক্ট করুন।</li>
-      <li>প্রোডাক্ট সার্চ করে যোগ করুন, পরিমাণ ও রেট দিন।</li>
-      <li><strong>ব্যাচ নম্বর</strong> দিন (টাইলসের জন্য shade/caliber সহ)।</li>
-      <li>ট্রান্সপোর্ট, লেবার, অন্যান্য খরচ যোগ করুন — সিস্টেম স্বয়ংক্রিয়ভাবে <strong>landed cost</strong> হিসাব করবে।</li>
-      <li>পেমেন্ট মোড (নগদ/বাকি) সিলেক্ট করে "Save" ক্লিক করুন।</li>
-    </ol>
-    <div class="callout success">স্টক স্বয়ংক্রিয়ভাবে আপডেট হবে এবং সাপ্লায়ার লেজারে এন্ট্রি যাবে।</div>
+    <!-- 11 -->
+    <h2 id="delivery">১১. ডেলিভারি ম্যানেজমেন্ট</h2>
+    <ul>
+      <li><strong>Deliveries</strong> মেনুতে সব পেন্ডিং / আংশিক / সম্পূর্ণ ডেলিভারি দেখা যায়</li>
+      <li>Ordered vs Delivered পরিমাণ আলাদা ট্র্যাক হয়</li>
+      <li>আংশিক ডেলিভারি করলে স্টক ঠিক ততটুকুই কমবে</li>
+    </ul>
 
-    <h2 id="sales">১০. বিক্রয় (Sale) এন্ট্রি</h2>
-    <ol class="step-list">
-      <li><strong>"Sales"</strong> মেনুতে যান এবং <strong>"+ New Sale"</strong> ক্লিক করুন।</li>
-      <li>কাস্টমার সিলেক্ট করুন।</li>
-      <li><strong>Sale Mode</strong> বেছে নিন:
-        <ul>
-          <li><strong>Direct Invoice</strong> — সরাসরি ইনভয়েস</li>
-          <li><strong>Challan Mode</strong> — পরে চালান তৈরি করবেন</li>
-        </ul>
-      </li>
-      <li>প্রোডাক্ট যোগ করুন, পরিমাণ, রেট, ডিসকাউন্ট দিন।</li>
-      <li>পেমেন্ট পরিমাণ দিন (পার্শিয়াল পেমেন্ট সাপোর্টেড)।</li>
-      <li>"Save" ক্লিক করুন। ইনভয়েস তৈরি হবে — প্রিন্ট/ডাউনলোড/SMS করুন।</li>
-    </ol>
-    <div class="callout warn"><strong>ক্রেডিট লিমিট চেক:</strong> কাস্টমারের লিমিট অতিক্রম করলে সিস্টেম অ্যাপ্রুভাল চাইবে।</div>
-
-    <h2 id="pos">১১. POS দ্রুত বিক্রয়</h2>
-    <p>ওয়াক-ইন কাস্টমারদের জন্য দ্রুত বিক্রয় ইন্টারফেস। মোবাইল-ফ্রেন্ডলি।</p>
-    <ol class="step-list">
-      <li>সাইডবার থেকে <strong>"POS"</strong> এ যান অথবা <code>F2</code> চাপুন।</li>
-      <li>বারকোড স্ক্যান করুন বা প্রোডাক্ট সার্চ করুন।</li>
-      <li>পরিমাণ ঠিক করুন, পেমেন্ট নিন।</li>
-      <li><code>F5</code> চেপে দ্রুত সেভ করুন।</li>
-    </ol>
-
-    <h2 id="challan">১২. চালান ও ডেলিভারি</h2>
-    <ol class="step-list">
-      <li>সেল তৈরির পর <strong>"Challans"</strong> মেনু থেকে চালান তৈরি করুন।</li>
-      <li>ট্রান্সপোর্ট, ভেহিকেল নম্বর, ড্রাইভারের নাম দিন।</li>
-      <li><strong>"Show Price"</strong> অপশন চালু/বন্ধ করুন।</li>
-      <li>প্রিন্ট করে গাড়ির সাথে পাঠান।</li>
-      <li>মাল পৌঁছানোর পর <strong>"Deliveries"</strong> থেকে স্ট্যাটাস "Delivered" করুন।</li>
-    </ol>
-
-    <h2 id="quotation">১৩. কোটেশন তৈরি</h2>
-    <ol class="step-list">
-      <li><strong>"Quotations"</strong> মেনু থেকে নতুন কোটেশন তৈরি করুন।</li>
-      <li>কাস্টমার, প্রোডাক্ট, রেট দিন।</li>
-      <li>মেয়াদ (Validity) সেট করুন।</li>
-      <li>কাস্টমারকে PDF/SMS/WhatsApp এ পাঠান।</li>
-      <li>কাস্টমার রাজি হলে এক ক্লিকে <strong>"Convert to Sale"</strong> করুন।</li>
-    </ol>
-
-    <h2 id="returns">১৪. বিক্রয়/ক্রয় ফেরত</h2>
+    <!-- 12 -->
+    <h2 id="return">১২. রিটার্ন (Sales / Purchase)</h2>
     <h3>সেলস রিটার্ন</h3>
-    <ul>
-      <li><strong>"Sales Returns"</strong> থেকে নতুন রিটার্ন তৈরি করুন।</li>
-      <li>মূল ইনভয়েস সিলেক্ট করুন।</li>
-      <li>মোড বেছে নিন: <strong>Restocked</strong> (স্টকে ফিরবে) বা <strong>Broken</strong> (বাতিল)।</li>
-      <li>সিস্টেম স্বয়ংক্রিয়ভাবে কাস্টমার লেজার আপডেট করবে।</li>
-    </ul>
+    <ol>
+      <li><strong>Sales Returns → + New</strong></li>
+      <li>মূল ইনভয়েস বাছুন</li>
+      <li>কোন আইটেম কত ফেরত — <strong>Restocked</strong> (আবার স্টকে) বা <strong>Broken</strong> (নষ্ট)</li>
+      <li>Save → কাস্টমার লেজার অটো আপডেট</li>
+    </ol>
     <h3>পারচেজ রিটার্ন</h3>
-    <ul>
-      <li><strong>"Purchase Returns"</strong> থেকে সাপ্লায়ারকে ফেরত দিন।</li>
-      <li>স্টক কমে যাবে এবং সাপ্লায়ার লেজারে ক্রেডিট হবে।</li>
-    </ul>
-
-    <h2 id="payments">১৫. পেমেন্ট কালেকশন</h2>
-    <ol class="step-list">
-      <li><strong>"Collections"</strong> (Payments) মেনুতে যান।</li>
-      <li>কাস্টমারের নাম দিয়ে সার্চ করুন — মোট বকেয়া দেখাবে।</li>
-      <li>"Receive Payment" ক্লিক করে পরিমাণ ও পেমেন্ট মোড দিন।</li>
-      <li>সিস্টেম স্বয়ংক্রিয়ভাবে রিসিপ্ট তৈরি করবে।</li>
+    <ol>
+      <li><strong>Purchase Returns → + New</strong></li>
+      <li>সাপ্লায়ার ও মূল পারচেজ বাছুন</li>
+      <li>আইটেম ও পরিমাণ দিন → Save</li>
+      <li>স্টক কমবে ও সাপ্লায়ার লেজার আপডেট হবে</li>
     </ol>
 
-    <h2 id="ledger">১৬. লেজার (Ledger)</h2>
-    <p>সব আর্থিক লেনদেনের রেকর্ড একসাথে দেখুন:</p>
-    <ul>
-      <li><strong>Customer Ledger</strong> — প্রতিটি কাস্টমারের পাওনা/দেনা</li>
-      <li><strong>Supplier Ledger</strong> — সাপ্লায়ারদের পাওনা</li>
-      <li><strong>Cash Ledger</strong> — ক্যাশ ইন/আউট</li>
-      <li><strong>Expense Ledger</strong> — সব ব্যবসায়িক খরচ</li>
-    </ul>
-
-    <h2 id="credit">১৭. ক্রেডিট কন্ট্রোল</h2>
-    <p>বাকি বিক্রির জন্য নিরাপত্তা ব্যবস্থা:</p>
-    <ul>
-      <li>প্রতিটি কাস্টমারের জন্য <strong>ক্রেডিট লিমিট</strong> ও <strong>ম্যাক্স ওভারডিউ ডেইজ</strong> সেট করুন।</li>
-      <li>লিমিট অতিক্রম করলে সিস্টেম সেল ব্লক করবে।</li>
-      <li>অ্যাডমিন <strong>"Override"</strong> করতে পারবেন কারণ লিখে।</li>
-      <li><strong>Credit Report</strong> থেকে ঝুঁকিপূর্ণ কাস্টমারদের তালিকা দেখুন।</li>
-    </ul>
-
-    <h2 id="campaigns">১৮. ক্যাম্পেইন ও গিফট</h2>
-    <p>রিটেইলারদের জন্য পুরস্কার/গিফট ম্যানেজ করুন:</p>
-    <ol class="step-list">
-      <li><strong>"Campaigns"</strong> মেনুতে যান।</li>
-      <li>ক্যাম্পেইনের নাম, গিফটের মূল্য, কাস্টমার সিলেক্ট করুন।</li>
-      <li>পেমেন্ট স্ট্যাটাস ট্র্যাক করুন।</li>
+    <!-- 13 -->
+    <h2 id="collection">১৩. পেমেন্ট কালেকশন</h2>
+    <ol>
+      <li><strong>Collections</strong> মেনুতে যান</li>
+      <li>কাস্টমার বাছুন → বর্তমান ডিউ দেখাবে</li>
+      <li>Amount, Payment Method (Cash / Bank / bKash / Nagad), Reference দিন</li>
+      <li><strong>Save</strong> → রিসিট অটো জেনারেট হবে</li>
     </ol>
+    <div class="tip">Follow-up প্যানেলে কোন কাস্টমার কবে পরিশোধ করবে বলেছে — সব নোট রাখা যায়।</div>
 
-    <h2 id="projects">১৯. প্রজেক্ট ম্যানেজমেন্ট</h2>
-    <p>বড় প্রজেক্টের (কন্ট্রাক্টর/বিল্ডার) জন্য আলাদা ট্র্যাকিং:</p>
+    <!-- 14 -->
+    <h2 id="ledger">১৪. লেজার ও রিপোর্ট</h2>
     <ul>
-      <li>প্রজেক্ট তৈরি করুন এবং একাধিক <strong>সাইট</strong> যোগ করুন।</li>
-      <li>প্রতিটি সাইটের জন্য আলাদা ডেলিভারি ও বিল ট্র্যাক করুন।</li>
-      <li><strong>Project Site Shortage</strong> রিপোর্ট দেখুন।</li>
+      <li><strong>Ledger</strong> — কাস্টমার / সাপ্লায়ার / ক্যাশ / ব্যাংক / এক্সপেন্স আলাদা আলাদা</li>
+      <li><strong>Reports</strong> মেনুতে আছে:
+        <ul>
+          <li>Sales Report, Purchase Report</li>
+          <li>Stock Valuation, Stock Aging</li>
+          <li>Profit & Loss, Customer Due Aging</li>
+          <li>Pricing Tier, Project, Supplier Performance</li>
+          <li>Backorder, Reservation, Display Sample</li>
+        </ul>
+      </li>
+      <li>প্রতিটি রিপোর্ট Excel এ এক্সপোর্ট করা যায়</li>
     </ul>
 
-    <h2 id="display">২০. ডিসপ্লে স্যাম্পল স্টক</h2>
-    <p>শো-রুমে রাখা স্যাম্পল ট্র্যাক করুন — সেলেবল স্টক থেকে আলাদা।</p>
-    <ul>
-      <li>Move to Display</li>
-      <li>Issue Sample (কাস্টমারকে দিতে)</li>
-      <li>Return / Mark Lost / Move Back to Sellable</li>
-    </ul>
-
-    <h2 id="approvals">২১. অ্যাপ্রুভাল ওয়ার্কফ্লো</h2>
-    <p>ঝুঁকিপূর্ণ কাজে দ্বিতীয় অনুমোদন বাধ্যতামূলক করুন:</p>
-    <ul>
-      <li>বড় ডিসকাউন্ট</li>
-      <li>ক্রেডিট লিমিট ওভাররাইড</li>
-      <li>স্টক অ্যাডজাস্টমেন্ট</li>
-      <li>সেল ক্যানসেলেশন</li>
-      <li>মিক্স শেড/ক্যালিবার</li>
-    </ul>
-    <p><strong>"Approvals"</strong> পেজ থেকে পেন্ডিং রিকোয়েস্ট দেখুন ও সিদ্ধান্ত নিন।</p>
-
-    <h2 id="portal">২২. কাস্টমার পোর্টাল</h2>
-    <p>আপনার কাস্টমারদেরকে আলাদা লগইন দিন যেখানে তারা নিজেরাই দেখতে পারবে:</p>
-    <ul>
-      <li>নিজের কোটেশন, অর্ডার, ডেলিভারি</li>
-      <li>লেজার ও বকেয়া</li>
-      <li>প্রজেক্টের অগ্রগতি</li>
-      <li>নতুন রিকোয়েস্ট দিতে পারবে</li>
-    </ul>
-    <p><strong>"Portal Users"</strong> থেকে কাস্টমারকে ইনভাইট করুন।</p>
-
-    <h2 id="reports">২৩. রিপোর্ট</h2>
-    <p>নিচের সব রিপোর্ট <strong>"Reports"</strong> মেনু থেকে পাবেন (Excel এক্সপোর্ট সাপোর্টেড):</p>
-    <div class="menu-grid">
-      <div class="menu-card"><h4>Sales Report</h4><p>দৈনিক/মাসিক বিক্রয়</p></div>
-      <div class="menu-card"><h4>Purchase Report</h4><p>সাপ্লায়ার-ভিত্তিক ক্রয়</p></div>
-      <div class="menu-card"><h4>Stock Valuation</h4><p>FIFO ভ্যালু ও এজিং</p></div>
-      <div class="menu-card"><h4>Profit Report</h4><p>গ্রস ও নেট মুনাফা</p></div>
-      <div class="menu-card"><h4>Due Aging</h4><p>0-30, 31-60, 61-90+ দিন</p></div>
-      <div class="menu-card"><h4>Demand Planning</h4><p>কী কিনতে হবে</p></div>
-      <div class="menu-card"><h4>Supplier Performance</h4><p>সাপ্লায়ার রেটিং</p></div>
-      <div class="menu-card"><h4>Backorder Report</h4><p>স্টক বহির্ভূত অর্ডার</p></div>
+    <!-- 15 -->
+    <h2 id="tips">১৫. দরকারি টিপস</h2>
+    <div class="card">
+      <ul>
+        <li>প্রতিদিনের কাজ শেষে <strong>Cash Closing</strong> করুন</li>
+        <li>রেগুলার <strong>Backup</strong> চালু রাখুন (Settings → Data Backup)</li>
+        <li>সেলসম্যান অ্যাকাউন্ট আলাদা করুন — তারা শুধু বিক্রি করতে পারবে, প্রফিট দেখতে পারবে না</li>
+        <li>প্রতিটি প্রোডাক্টের <strong>Reorder Level</strong> ঠিকমত সেট করুন — স্টক শেষ হওয়ার আগেই অ্যালার্ট পাবেন</li>
+        <li>বড় কাস্টমারের জন্য <strong>Pricing Tier</strong> বানান — তাদের রেট অটো সাজেস্ট হবে</li>
+        <li>সব এন্ট্রি অডিট লগে থাকে — কে কখন কী করেছে যাচাই করা যায়</li>
+      </ul>
     </div>
 
-    <h2 id="barcode">২৪. বারকোড প্রিন্ট</h2>
-    <ol class="step-list">
-      <li>প্রোডাক্ট লিস্ট থেকে আইটেম সিলেক্ট করুন।</li>
-      <li><strong>"Print Barcode"</strong> বাটনে ক্লিক করুন।</li>
-      <li>লেবেল সাইজ ও পরিমাণ সেট করে প্রিন্ট দিন।</li>
-    </ol>
-
-    <h2 id="users">২৫. ইউজার ম্যানেজমেন্ট</h2>
-    <p>কর্মচারীদের জন্য আলাদা লগইন তৈরি করুন (Pro/Business প্ল্যানে):</p>
-    <table>
-      <tr><th>রোল</th><th>অ্যাক্সেস</th></tr>
-      <tr><td><strong>Dealer Admin</strong></td><td>সব কিছুতে পূর্ণ অ্যাক্সেস</td></tr>
-      <tr><td><strong>Salesman</strong></td><td>শুধু সেল ও কাস্টমার যোগ করতে পারবে; কস্ট/মুনাফা দেখতে পারবে না</td></tr>
-    </table>
-
-    <h2 id="subscription">২৬. সাবস্ক্রিপশন ম্যানেজমেন্ট</h2>
-    <ul>
-      <li><strong>Free Trial</strong> — ৩ দিন</li>
-      <li><strong>Starter / Pro / Business</strong> — মাসিক/বার্ষিক</li>
-      <li>পেমেন্ট: bKash, Nagad, Rocket, ব্যাংক ট্রান্সফার</li>
-      <li>পেমেন্টের প্রমাণ পাঠান <strong>01674533303</strong> নম্বরে।</li>
-    </ul>
-
-    <h2 id="faq">২৭. সাধারণ প্রশ্ন (FAQ)</h2>
-    <h4>প্রশ্ন: পাসওয়ার্ড ভুলে গেছি, কী করব?</h4>
-    <p>লগইন পেজে "Forgot Password" এ ক্লিক করুন। ইমেইলে রিসেট লিংক পাবেন।</p>
-
-    <h4>প্রশ্ন: একই প্রোডাক্ট আবার যোগ করতে চাইলে?</h4>
-    <p>SKU আলাদা হতে হবে। একই SKU এ ডুপ্লিকেট অ্যালাউ নয়।</p>
-
-    <h4>প্রশ্ন: ভুল সেল কীভাবে বাতিল করব?</h4>
-    <p>সেল লিস্ট থেকে আইটেম খুলে "Cancel" চাপুন। স্টক ও লেজার স্বয়ংক্রিয়ভাবে রিভার্স হবে। তবে পেমেন্ট/ডেলিভারি হয়ে গেলে আগে সেগুলো বাতিল করতে হবে।</p>
-
-    <h4>প্রশ্ন: ব্যাকআপ কোথায়?</h4>
-    <p>ক্লাউডে প্রতিদিন স্বয়ংক্রিয়ভাবে ব্যাকআপ হয়। চিন্তার কিছু নেই।</p>
-
-    <h4>প্রশ্ন: একাধিক ডিভাইসে কাজ করা যাবে?</h4>
-    <p>হ্যাঁ, যেকোনো ব্রাউজার থেকে যেকোনো জায়গা থেকে অ্যাক্সেস করুন।</p>
-
-    <h2 id="support">২৮. সাপোর্ট ও যোগাযোগ</h2>
-    <div class="callout success">
-      <strong>📞 ফোন:</strong> 01674533303<br/>
-      <strong>💬 WhatsApp:</strong> 01674533303<br/>
-      <strong>🌐 ওয়েবসাইট:</strong> sanitileserp.com<br/>
-      <strong>⏰ সময়:</strong> সকাল ৯টা — রাত ৯টা (৭ দিন)
-    </div>
-
-    <div class="footer">
-      <p><strong>TilesERP</strong> — টাইলস ও স্যানিটারি ডিলারদের জন্য তৈরি বিশ্বস্ত SaaS।</p>
-      <p>© 2025 SaniTilesERP. All rights reserved.</p>
+    <!-- 16 -->
+    <h2 id="support">১৬. সাপোর্ট</h2>
+    <div class="card">
+      <p>যেকোনো সমস্যায় যোগাযোগ করুন:</p>
+      <p>📞 <strong>01674533303</strong><br/>🌐 <strong>sanitileserp.com</strong></p>
+      <p class="lead" style="margin-top:16px">আপনার ব্যবসা সহজ ও স্বচ্ছ করতে TilesERP সবসময় পাশে আছে। ধন্যবাদ! 🙏</p>
     </div>
   </main>
 </div>
