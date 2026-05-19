@@ -32,8 +32,8 @@ router.get('/active', async (req: Request, res: Response) => {
   const today = new Date().toISOString().slice(0, 10);
   const rows = await db('notices')
     .where({ dealer_id: dealerId, is_active: true })
-    .andWhere((q) => q.whereNull('start_date').orWhere('start_date', '<=', today))
-    .andWhere((q) => q.whereNull('end_date').orWhere('end_date', '>=', today))
+    .andWhere((q: any) => q.whereNull('start_date').orWhere('start_date', '<=', today))
+    .andWhere((q: any) => q.whereNull('end_date').orWhere('end_date', '>=', today))
     .orderBy([{ column: 'pinned', order: 'desc' }, { column: 'created_at', order: 'desc' }]);
   const filtered = rows.filter((n: any) =>
     n.audience === 'all' || roles.includes(n.audience) || roles.includes('dealer_admin'),

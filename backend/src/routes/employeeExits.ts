@@ -193,7 +193,7 @@ router.get('/:id/settlement-preview', async (req: Request, res: Response) => {
     .first();
   if (!ex) return res.status(404).json({ error: 'Exit record not found' });
 
-  const out = await computeOutstandings(dealerId, ex.employee_id);
+  const out = await computeOutstandings(dealerId as string, ex.employee_id);
   const merged = { ...ex, ...out };
   res.json({ ...out, suggested_net: computeNet(merged) });
 });
@@ -213,8 +213,8 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
     .first();
   if (dup) return res.status(409).json({ error: 'An active exit already exists for this employee' });
 
-  const out = await computeOutstandings(dealerId, parsed.data.employee_id);
-  const exitCode = await nextExitCode(dealerId);
+  const out = await computeOutstandings(dealerId as string, parsed.data.employee_id);
+  const exitCode = await nextExitCode(dealerId as string);
 
   const trx = await db.transaction();
   try {
@@ -279,7 +279,7 @@ router.put('/:id', requireRole('dealer_admin', 'manager'), async (req: Request, 
 
   const merged = { ...existing, ...parsed.data };
   // recompute outstandings live
-  const out = await computeOutstandings(dealerId, merged.employee_id);
+  const out = await computeOutstandings(dealerId as string, merged.employee_id);
   merged.outstanding_loans = out.outstanding_loans;
   merged.outstanding_advances = out.outstanding_advances;
   merged.net_payable = computeNet(merged);

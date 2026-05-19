@@ -160,7 +160,7 @@ router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request
   const dealerId = req.user!.dealerId;
   const body = createSchema.parse(req.body);
 
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const emp = await trx('employees').where({ id: body.employee_id, dealer_id: dealerId }).first();
     if (!emp) throw Object.assign(new Error('Employee not found'), { status: 404 });
     if (emp.status !== 'active') throw Object.assign(new Error('Cannot issue loan to inactive employee'), { status: 400 });
@@ -171,7 +171,7 @@ router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request
 
     const emi = Number((body.principal / body.tenure_months).toFixed(2));
     const firstDue = body.first_emi_date ?? addMonths(body.issue_date, 1);
-    const loanCode = await nextLoanCode(trx, dealerId);
+    const loanCode = await nextLoanCode(trx, dealerId as string);
 
     const [loan] = await trx('employee_loans').insert({
       dealer_id: dealerId,
@@ -215,7 +215,7 @@ router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request
 
 router.post('/:id/cancel', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
     if (!loan) throw Object.assign(new Error('Loan not found'), { status: 404 });
     if (loan.status !== 'active') throw Object.assign(new Error(`Loan already ${loan.status}`), { status: 400 });
@@ -240,7 +240,7 @@ router.post('/:id/cancel', requireRole('dealer_admin', 'super_admin'), async (re
 
 router.post('/:id/close', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
     if (!loan) throw Object.assign(new Error('Loan not found'), { status: 404 });
     if (loan.status !== 'active') throw Object.assign(new Error(`Loan already ${loan.status}`), { status: 400 });
@@ -273,7 +273,7 @@ router.post('/emis/:emiId/pay', requireRole('dealer_admin', 'super_admin'), asyn
   const dealerId = req.user!.dealerId;
   const body = paySchema.parse(req.body);
 
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const emi = await trx('employee_loan_emis').where({ id: req.params.emiId, dealer_id: dealerId }).forUpdate().first();
     if (!emi) throw Object.assign(new Error('EMI not found'), { status: 404 });
     if (emi.status === 'paid' || emi.status === 'waived') {
@@ -318,7 +318,7 @@ router.post('/emis/:emiId/pay', requireRole('dealer_admin', 'super_admin'), asyn
 
 router.post('/emis/:emiId/waive', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
-  const result = await db.transaction(async (trx) => {
+  const result = await db.transaction(async (trx: any) => {
     const emi = await trx('employee_loan_emis').where({ id: req.params.emiId, dealer_id: dealerId }).forUpdate().first();
     if (!emi) throw Object.assign(new Error('EMI not found'), { status: 404 });
     if (emi.status === 'paid' || emi.status === 'waived') {
