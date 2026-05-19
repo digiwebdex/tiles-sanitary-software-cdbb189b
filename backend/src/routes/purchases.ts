@@ -283,6 +283,26 @@ router.post('/', async (req: Request, res: Response) => {
     });
     const totalAmount = itemsCalc.reduce((s, x) => s + x.landed, 0);
 
+    // Phase 3U-31: voucher discount + paid_on_create normalization
+    const voucherDiscount = Math.max(
+      0,
+      Math.min(input.voucher_discount ?? 0, totalAmount),
+    );
+    const netPayable = Math.max(0, totalAmount - voucherDiscount);
+    const paidOnCreate = Math.max(0, Math.min(input.paid_on_create ?? 0, netPayable));
+    const paidAccountId = input.paid_account_id ?? null;
+
+    // Validate paid_account_id belongs to dealer (if provided)
+    if (paidAccountId) {
+      const bank = await db("bank_accounts")
+        .where({ id: paidAccountId, dealer_id: dealerId })
+        .first("id");
+      if (!bank) {
+        res.status(400).json({ error: "paid_account_id not found for this dealer" });
+        return;
+      }
+    }
+
     // 3-9: Atomic transaction
     const purchaseId = await db.transaction(async (trx) => {
       // Insert purchase header
@@ -293,6 +313,9 @@ router.post('/', async (req: Request, res: Response) => {
           invoice_number: input.invoice_number?.trim() || null,
           purchase_date: input.purchase_date,
           total_amount: totalAmount,
+          voucher_discount: voucherDiscount,
+          paid_on_create: paidOnCreate,
+          paid_account_id: paidAccountId,
           notes: input.notes?.trim() || null,
           created_by: userId,
         })
