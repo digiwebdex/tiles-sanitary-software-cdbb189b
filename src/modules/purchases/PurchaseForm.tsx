@@ -68,6 +68,9 @@ interface PurchaseFormProps {
 
 
 const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDrafts }: PurchaseFormProps) => {
+  const [searchParams] = useSearchParams();
+  const prefillProductId = searchParams.get("product");
+  const prefilledRef = useRef(false);
   const [productSearch, setProductSearch] = useState("");
   // Per-row UI: tile entry mode ("box" default, or "sft" to type SFT and auto-round to next full box).
   // Not persisted; backend still receives `quantity` (= box count) for tiles.
