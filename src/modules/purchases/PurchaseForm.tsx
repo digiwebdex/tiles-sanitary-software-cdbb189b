@@ -257,6 +257,17 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
     setProductSearch("");
   };
 
+  // Prefill an item when navigated with ?product=ID (e.g. from product detail "Purchase" button).
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    if (!prefillProductId) return;
+    if (products.length === 0) return;
+    const match = products.find((p) => p.id === prefillProductId);
+    if (!match) return;
+    prefilledRef.current = true;
+    addProduct(match.id);
+  }, [prefillProductId, products]);
+
   // Phase 3U-31: barcode scan → resolve to product → addProduct.
   const handleBarcodeScan = (code: string) => {
     if (!watchSupplierId) {
