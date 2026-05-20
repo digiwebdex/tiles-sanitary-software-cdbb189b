@@ -1,4 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import { env } from "@/lib/env";
+import { saImpersonation } from "@/lib/saImpersonation";
+import { vpsTokenStore } from "@/lib/vpsAuthClient";
 
 /**
  * Resolves the authenticated user's dealer_id from their profile.
@@ -7,6 +10,22 @@ import { supabase } from "@/integrations/supabase/client";
  * at the application layer (in addition to RLS at the DB layer).
  */
 export async function getAuthenticatedDealerId(): Promise<string> {
+  if (env.AUTH_BACKEND === "vps") {
+    const user = vpsTokenStore.user;
+    if (!user) throw new Error("Not authenticated");
+
+    if (user.roles.includes("super_admin")) {
+      const viewAs = saImpersonation.get();
+      if (viewAs?.dealerId) return viewAs.dealerId;
+    }
+
+    if (!user.dealerId) {
+      throw new Error("Could not resolve dealer_id for authenticated user");
+    }
+
+    return user.dealerId;
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
