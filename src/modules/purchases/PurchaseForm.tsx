@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { purchaseSchema, type PurchaseFormValues } from "@/modules/purchases/purchaseSchema";
@@ -68,6 +68,9 @@ interface PurchaseFormProps {
 
 
 const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDrafts }: PurchaseFormProps) => {
+  const [searchParams] = useSearchParams();
+  const prefillProductId = searchParams.get("product");
+  const prefilledRef = useRef(false);
   const [productSearch, setProductSearch] = useState("");
   // Per-row UI: tile entry mode ("box" default, or "sft" to type SFT and auto-round to next full box).
   // Not persisted; backend still receives `quantity` (= box count) for tiles.
@@ -253,6 +256,17 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
     });
     setProductSearch("");
   };
+
+  // Prefill an item when navigated with ?product=ID (e.g. from product detail "Purchase" button).
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    if (!prefillProductId) return;
+    if (products.length === 0) return;
+    const match = products.find((p) => p.id === prefillProductId);
+    if (!match) return;
+    prefilledRef.current = true;
+    addProduct(match.id);
+  }, [prefillProductId, products]);
 
   // Phase 3U-31: barcode scan → resolve to product → addProduct.
   const handleBarcodeScan = (code: string) => {
