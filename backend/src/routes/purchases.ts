@@ -796,10 +796,17 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json(created);
   } catch (err: any) {
     console.error('[purchases.create] error', err);
+    if (err?.code === 'DUPLICATE_INVOICE' || err?.code === '23505') {
+      res.status(409).json({
+        error: 'Reference No already used. Leave blank to auto-generate, or enter a different one.',
+      });
+      return;
+    }
     res
       .status(500)
       .json({ error: err?.message || 'Failed to create purchase' });
   }
 });
+
 
 export default router;
