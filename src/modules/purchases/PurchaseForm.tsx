@@ -364,9 +364,11 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Reference No</FormLabel>
-                    <FormControl><Input placeholder="INV-001" {...field} /></FormControl>
+                    <FormControl><Input placeholder="Auto-generated if left blank" {...field} /></FormControl>
+                    <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-generate a unique number (PUR-YYYYMMDD-NNNN).</p>
                     <FormMessage />
                   </FormItem>
+
                 )}
               />
               <FormField
