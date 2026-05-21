@@ -397,12 +397,55 @@ router.post('/', async (req: Request, res: Response) => {
 
     // 3-9: Atomic transaction
     const purchaseId = await db.transaction(async (trx) => {
+      // Resolve invoice number — auto-generate if not provided, ensure unique per dealer.
+      let invoiceNumber: string | null = input.invoice_number?.trim() || null;
+      if (invoiceNumber) {
+        const dup = await trx('purchases')
+          .where({ dealer_id: dealerId, invoice_number: invoiceNumber })
+          .first('id');
+        if (dup) {
+          const err: any = new Error('DUPLICATE_INVOICE');
+          err.code = 'DUPLICATE_INVOICE';
+          throw err;
+        }
+      } else {
+        // Auto-generate: PUR-YYYYMMDD-NNNN (per-dealer daily sequence)
+        const datePart = (input.purchase_date || new Date().toISOString().slice(0, 10))
+          .replace(/-/g, '')
+          .slice(0, 8);
+        const prefix = `PUR-${datePart}-`;
+        // Find max existing seq for today
+        const rows = await trx('purchases')
+          .where({ dealer_id: dealerId })
+          .andWhere('invoice_number', 'like', `${prefix}%`)
+          .select('invoice_number');
+        let maxSeq = 0;
+        for (const r of rows) {
+          const m = /-(\d+)$/.exec(r.invoice_number || '');
+          if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+        }
+        // Retry up to 5 times in case of race
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const candidate = `${prefix}${String(maxSeq + 1 + attempt).padStart(4, '0')}`;
+          const exists = await trx('purchases')
+            .where({ dealer_id: dealerId, invoice_number: candidate })
+            .first('id');
+          if (!exists) {
+            invoiceNumber = candidate;
+            break;
+          }
+        }
+        if (!invoiceNumber) {
+          throw new Error('Failed to generate unique invoice number');
+        }
+      }
+
       // Insert purchase header
       const [purchase] = await trx('purchases')
         .insert({
           dealer_id: dealerId,
           supplier_id: input.supplier_id,
-          invoice_number: input.invoice_number?.trim() || null,
+          invoice_number: invoiceNumber,
           purchase_date: input.purchase_date,
           total_amount: totalAmount,
           voucher_discount: voucherDiscount,
@@ -413,6 +456,9 @@ router.post('/', async (req: Request, res: Response) => {
         })
         .returning('id');
       const purchaseRowId = purchase.id;
+      // Make resolved invoice number available to downstream code that reads input.invoice_number
+      (input as any).invoice_number = invoiceNumber;
+
 
       // Insert purchase_items
       const itemRows = itemsCalc.map((x) => ({
