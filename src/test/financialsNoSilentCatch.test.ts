@@ -108,4 +108,57 @@ describe("financials.ts — correct column references", () => {
     expect(src).not.toMatch(/qty\s*\*\s*COALESCE\s*\(\s*rate/);
     expect(src).not.toMatch(/sales_returns.*\brate\b/);
   });
+
+  it("C3 — legacy-cogs detector uses cogs_method, not the dead NULL check", () => {
+    // Phase 1A: the previous `WHERE cogs IS NULL` detector was effectively
+    // dead code because sales.cogs is NOT NULL DEFAULT 0. The real legacy
+    // signal is the new sales.cogs_method column.
+    const src = readFinancials();
+    expect(src).toMatch(/cogs_method/);
+    expect(src).toMatch(/legacy_pre_fix/);
+  });
+});
+
+// ─── Phase 1A — routes/sales.ts unit-conversion lint ──────────────────────
+//
+// Re-introducing `effectiveQty * avgCost` inside the tile branch would
+// silently bring back the bug. These tests are the structural defense.
+
+const SALES_PATH = resolve(
+  __dirname,
+  "..",
+  "..",
+  "backend",
+  "src",
+  "routes",
+  "sales.ts",
+);
+
+function readSales(): string {
+  return readFileSync(SALES_PATH, "utf8");
+}
+
+describe("routes/sales.ts — Phase 1A tile-COGS conversion lint", () => {
+  it("S1 — sales.ts imports and uses computeLineCogs", () => {
+    const src = readSales();
+    expect(src).toMatch(/from\s+['"]\.\.\/lib\/cogsLine['"]/);
+    expect(src).toMatch(/\bcomputeLineCogs\s*\(/);
+  });
+
+  it("S2 — the bare `effectiveQty * avgCost` pattern is gone", () => {
+    const src = readSales();
+    // Allow it inside comments by stripping single-line and block comments first.
+    const stripped = src
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    // Catches: effectiveQty * avgCost, effectiveQty*avgCost, with arbitrary whitespace.
+    expect(stripped).not.toMatch(/effectiveQty\s*\*\s*avgCost/);
+  });
+
+  it("S3 — both POST and PUT handlers stamp cogs_method='post_fix'", () => {
+    const src = readSales();
+    // Each of the two write paths must set cogs_method to 'post_fix'.
+    const occurrences = src.match(/cogs_method\s*:\s*['"]post_fix['"]/g) ?? [];
+    expect(occurrences.length).toBeGreaterThanOrEqual(2);
+  });
 });
