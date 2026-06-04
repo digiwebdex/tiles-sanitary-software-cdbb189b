@@ -6,10 +6,33 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDealerId } from "@/hooks/useDealerId";
 import { financialService } from "@/services/financialService";
 import { formatCurrency } from "@/lib/utils";
-import { Printer, TrendingUp, Scale, BookOpen } from "lucide-react";
+import { Printer, TrendingUp, Scale, BookOpen, AlertTriangle } from "lucide-react";
+
+/**
+ * Track 1 Phase 1 — surface backend-reported data-quality warnings.
+ * Backend `warnings[]` is OPTIONAL; older backends will simply render
+ * nothing and the page stays bit-for-bit identical to before.
+ */
+const DataQualityNotes = ({ warnings }: { warnings?: string[] }) => {
+  if (!warnings || warnings.length === 0) return null;
+  return (
+    <Alert>
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle>Data quality notes</AlertTitle>
+      <AlertDescription>
+        <ul className="list-disc pl-5 space-y-1">
+          {warnings.map((w, i) => (
+            <li key={i}>{w}</li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  );
+};
 
 const FinancialStatementsPage = () => {
   const dealerId = useDealerId();
@@ -60,6 +83,8 @@ const FinancialStatementsPage = () => {
           </Card>
 
           {plLoading ? <p>Loading…</p> : pAndL && (
+            <>
+            <DataQualityNotes warnings={pAndL.warnings} />
             <Card>
               <CardHeader><CardTitle>Profit &amp; Loss — {pl.from} to {pl.to}</CardTitle></CardHeader>
               <CardContent>
@@ -79,8 +104,14 @@ const FinancialStatementsPage = () => {
                     <TableRow className="bg-primary/10"><TableCell className="font-bold text-lg">Net Profit / (Loss)</TableCell><TableCell className={`text-right font-mono font-bold text-lg ${pAndL.net_profit >= 0 ? "text-emerald-500" : "text-red-500"}`}>{formatCurrency(pAndL.net_profit)}</TableCell></TableRow>
                   </TableBody>
                 </Table>
+                {pAndL.data_source && (
+                  <p className="text-[11px] text-muted-foreground mt-3">
+                    Data source: {pAndL.data_source}
+                  </p>
+                )}
               </CardContent>
             </Card>
+            </>
           )}
         </TabsContent>
 
@@ -93,6 +124,8 @@ const FinancialStatementsPage = () => {
           </Card>
 
           {bsLoading ? <p>Loading…</p> : balance && (
+            <>
+            <DataQualityNotes warnings={balance.warnings} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <Card>
                 <CardHeader><CardTitle className="text-emerald-500">Assets</CardTitle></CardHeader>
@@ -130,6 +163,7 @@ const FinancialStatementsPage = () => {
                 </CardContent>
               </Card>
             </div>
+            </>
           )}
         </TabsContent>
 
@@ -142,6 +176,8 @@ const FinancialStatementsPage = () => {
           </Card>
 
           {tbLoading ? <p>Loading…</p> : trial && (
+            <>
+            <DataQualityNotes warnings={trial.warnings} />
             <Card>
               <CardHeader><CardTitle>Trial Balance — as of {trial.as_of ?? "today"}</CardTitle></CardHeader>
               <CardContent>
@@ -182,6 +218,7 @@ const FinancialStatementsPage = () => {
                 </p>
               </CardContent>
             </Card>
+            </>
           )}
         </TabsContent>
       </Tabs>

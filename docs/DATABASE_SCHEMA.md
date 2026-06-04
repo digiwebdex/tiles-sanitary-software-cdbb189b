@@ -145,7 +145,7 @@ payment_status_type: paid | partial | pending
 | discount | numeric | No | 0 | |
 | paid_amount | numeric | No | 0 | |
 | due_amount | numeric | No | 0 | |
-| cogs | numeric | No | 0 | Cost of goods sold |
+| cogs | numeric | No | 0 | **Canonical COGS** — written atomically by routes/sales.ts at create/update time using stock.average_cost_per_unit. This is the source-of-truth for P&L COGS; do NOT recompute by joining sale_items. |
 | profit | numeric | No | 0 | Legacy profit |
 | gross_profit | numeric | No | 0 | Revenue - COGS |
 | net_profit | numeric | No | 0 | Gross - Discount |
@@ -171,6 +171,10 @@ payment_status_type: paid | partial | pending
 | sale_rate | numeric | No | — |
 | total | numeric | No | 0 |
 | total_sft | numeric | Yes | — |
+
+> NOTE: `sale_items` does **NOT** carry a `cost_price` column. For COGS,
+> read `sales.cogs` (the header column). Line-level cost snapshots are a
+> Track 1 Phase 2 schema addition.
 
 ### customers
 | Column | Type | Nullable | Default |
