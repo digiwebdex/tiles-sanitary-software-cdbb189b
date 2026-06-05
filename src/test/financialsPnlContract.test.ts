@@ -54,3 +54,25 @@ describe.skip("Balance Sheet endpoint — contract (requires Postgres test DB)",
   it("BS2 — Inventory valuation uses average cost", () => {});
   it("BS3 — AR = SUM(GREATEST(0, total_amount - paid_amount))", () => {});
 });
+
+describe.skip("Phase 1A — tile COGS contract (requires Postgres test DB)", () => {
+  it("T15 — Tile sale stores cogs = effectiveQty × per_box_sft × avg_cost_per_unit", () => {
+    // Seed: tile product per_box_sft=20, purchase 100 boxes at ৳200/sft.
+    // Sale: 5 boxes. Assert sales.cogs == 20000 and cogs_method='post_fix'.
+  });
+  it("T16 — PUT /api/sales/:id recomputes tile COGS correctly on edit", () => {
+    // After update from 5 to 7 boxes, cogs becomes 7 × 20 × 200 = 28000.
+  });
+  it("T17 — Mixed cart (tile + sanitary) sums per-line COGS by its own rule", () => {
+    // Tile line: 5 × 20 × 200 = 20000.
+    // Sanitary line: 3 × 1800 = 5400.
+    // sales.cogs == 25400.
+  });
+  it("T18 — Tile product with per_box_sft = 0 rejects the sale with 400", () => {
+    // Hard validation: must NOT silently produce zero revenue + zero cost.
+  });
+  it("TB5 — P&L warnings[] includes a legacy_pre_fix entry when period overlaps pre-fix rows", () => {
+    // Seed: one sale with cogs_method='legacy_pre_fix' in the queried range.
+    // Assert: warnings contains a string mentioning "legacy" and the count.
+  });
+});

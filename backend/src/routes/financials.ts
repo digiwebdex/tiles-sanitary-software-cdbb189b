@@ -122,27 +122,31 @@ router.get('/p-and-l', async (req, res) => {
     },
   );
 
-  // ── Legacy NULL-cogs detection ──
-  // Sales rows created before the `cogs` column was populated (or by a
-  // legacy importer) will be silently excluded from the SUM above. Surface
-  // a count to the dealer so they understand any gap between revenue and
-  // COGS that looks unusually large.
-  const nullCogsCount = await safeSum(
-    { route: 'financials.pnl.null_cogs_check', label: 'Null-COGS check', warnings, context: ctx },
+  // ── Phase 1A — legacy_pre_fix detection ──
+  // Sales rows created BEFORE the Phase 1A tile-COGS unit fix have
+  // `cogs_method = 'legacy_pre_fix'`. For tile products their stored
+  // `cogs` is understated by a factor of `per_box_sft`. Surface the
+  // count so the dealer is not silently shown inflated profit for the
+  // legacy portion of the period.
+  //
+  // (The earlier `WHERE cogs IS NULL` detector was effectively dead code
+  // because sales.cogs is NOT NULL DEFAULT 0 — the real legacy signal
+  // is the new cogs_method column.)
+  const legacyCogsCount = await safeSum(
+    { route: 'financials.pnl.legacy_pre_fix_check', label: 'Legacy-COGS check', warnings, context: ctx },
     async () => {
       const row = await db('sales')
-        .where({ dealer_id: dealerId })
+        .where({ dealer_id: dealerId, cogs_method: 'legacy_pre_fix' })
         .modify(qb => { if (from) qb.where('sale_date', '>=', from); if (to) qb.where('sale_date', '<=', to); })
-        .whereNull('cogs')
         .count<{ count: string }[]>('id as count')
         .first();
       return Number(row?.count ?? 0);
     },
   );
-  if (nullCogsCount > 0) {
-    const msg = `${nullCogsCount} sale(s) in this period have no recorded COGS and were excluded from the cost figure. Backfill is planned for Track 1 Phase 2.`;
+  if (legacyCogsCount > 0) {
+    const msg = `${legacyCogsCount} sale(s) in this period were recorded before the tile cost-of-goods correction (Phase 1A). Their stored cost is approximate (understated for tile products). Profit shown for these rows is conservative-high. Phase 1B will offer an opt-in recompute tool.`;
     warnings.push(msg);
-    logRouteWarn('financials.pnl.null_cogs', msg, { ...ctx, nullCogsCount });
+    logRouteWarn('financials.pnl.legacy_pre_fix', msg, { ...ctx, legacyCogsCount });
   }
 
   // ── Expenses ──
@@ -458,23 +462,22 @@ router.get('/trial-balance', async (req, res) => {
   );
   push('Cost of Goods Sold', cogsTotal);
 
-  // Legacy NULL-cogs detection (same as P&L)
-  const nullCogsCount = await safeSum(
-    { route: 'financials.tb.null_cogs_check', label: 'Null-COGS check', warnings, context: ctx },
+  // Phase 1A — legacy_pre_fix detection (same intent as P&L).
+  const legacyCogsCount = await safeSum(
+    { route: 'financials.tb.legacy_pre_fix_check', label: 'Legacy-COGS check', warnings, context: ctx },
     async () => {
       const row = await db('sales')
-        .where({ dealer_id: dealerId })
+        .where({ dealer_id: dealerId, cogs_method: 'legacy_pre_fix' })
         .modify(qb => { if (asOf) qb.where('sale_date', '<=', asOf); })
-        .whereNull('cogs')
         .count<{ count: string }[]>('id as count')
         .first();
       return Number(row?.count ?? 0);
     },
   );
-  if (nullCogsCount > 0) {
-    const msg = `${nullCogsCount} sale(s) have NULL cogs and were excluded from the COGS figure.`;
+  if (legacyCogsCount > 0) {
+    const msg = `${legacyCogsCount} sale(s) were recorded before the Phase 1A tile-COGS correction; their stored cost is approximate (understated for tile products).`;
     warnings.push(msg);
-    logRouteWarn('financials.tb.null_cogs', msg, { ...ctx, nullCogsCount });
+    logRouteWarn('financials.tb.legacy_pre_fix', msg, { ...ctx, legacyCogsCount });
   }
 
   const expRows = await safeQuery<{ category: string | null; total: unknown }[]>(
