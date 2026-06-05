@@ -4,6 +4,55 @@
 
 ---
 
+## [2026-06-04] — Track 1 Phase 1: P&L correctness hotfix
+
+### Fixed
+- **Cost of Goods Sold (COGS)** on `/api/financials/p-and-l` and
+  `/api/financials/trial-balance` was always reported as zero because the
+  underlying query referenced a column on `sale_items` that does not
+  exist in the schema. COGS is now sourced from the `sales.cogs` header
+  column, which is already populated atomically by `routes/sales.ts` at
+  sale create/update time.
+- **Sales Returns** on the same two endpoints were always reported as
+  zero for the same root cause (non-existent unit-price column on
+  `sales_returns`). Now sourced from `sales_returns.refund_amount`, the
+  canonical column populated by `routes/returns.ts`.
+- Removed every silent `.catch(() => null)` and `catch { /* ignore */ }`
+  block in `backend/src/routes/financials.ts`. All aggregations now flow
+  through a new `safeSum` / `safeQuery` helper that returns 0 on failure
+  **and** emits a structured stderr log line **and** appends a
+  human-readable warning to a per-request `warnings[]` array returned in
+  the response.
+
+### Added
+- `backend/src/lib/safeSum.ts` — small dependency-free helpers used by
+  every financial aggregation.
+- `backend/src/lib/logger.ts` — backend structured-logger with
+  `logRouteError` / `logRouteWarn`.
+- Lint-style Vitest tests under `src/test/financialsNoSilentCatch.test.ts`
+  that prevent the silent-catch pattern from being reintroduced.
+- Pure unit tests under `src/test/financialsSafeSum.test.ts`.
+- Integration contract under `src/test/financialsPnlContract.test.ts`
+  (skipped pending a Postgres test DB in CI; documents the end-to-end
+  behaviour the hotfix preserves).
+- `data_source` and `warnings[]` optional fields on the P&L, Balance
+  Sheet, and Trial Balance responses. The Financial Statements page now
+  surfaces these via a small "Data quality notes" alert and a footer
+  line indicating the source columns.
+- `docs/FINANCIAL_REPORTING.md` — column-by-column source map for every
+  number that appears on the financial endpoints.
+
+### Compatibility
+- Existing frontend builds reading the old response shape continue to
+  work unchanged — all new fields are optional and additive.
+- No schema changes. No infrastructure changes. No new endpoints.
+- The visible behavioural change: gross / net profit will drop
+  materially on the P&L page for any dealer who previously relied on the
+  buggy output. The numbers shown after this release reflect the COGS
+  and refund amounts that were always present in the underlying tables.
+
+---
+
 ## [2026-04-14] — Subscription Duration & Registration Notifications
 
 ### Added

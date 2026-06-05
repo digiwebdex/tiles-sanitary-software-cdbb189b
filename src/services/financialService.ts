@@ -10,6 +10,13 @@ export interface ProfitLoss {
   expenses_by_category: { category: string; amount: number }[];
   total_expenses: number;
   net_profit: number;
+  /**
+   * Track 1 Phase 1 transparency fields. Both are optional so older
+   * backend builds (pre-hotfix) continue to deserialize without losing
+   * any existing numeric fields.
+   */
+  data_source?: string;
+  warnings?: string[];
 }
 
 export interface BalanceSheet {
@@ -24,6 +31,7 @@ export interface BalanceSheet {
   };
   liabilities: { accounts_payable: number; total: number };
   equity: { director_capital?: number; retained_earnings?: number; owner_equity: number; total: number };
+  warnings?: string[];
 }
 
 export interface TrialBalance {
@@ -32,6 +40,7 @@ export interface TrialBalance {
   total_debit: number;
   total_credit: number;
   difference: number;
+  warnings?: string[];
 }
 
 export interface JournalLine {

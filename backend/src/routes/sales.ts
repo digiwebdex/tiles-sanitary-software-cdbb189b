@@ -16,6 +16,7 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
+import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -509,7 +510,16 @@ router.post('/', async (req: Request, res: Response) => {
         itemTotal = effectiveQty * item.sale_rate;
       }
 
-      totalCogs += effectiveQty * avgCost;
+      // Phase 1A — dimensionally correct COGS via computeLineCogs.
+      // Tile (box_sft):  effectiveQty (boxes) × perBoxSft (sft/box) × avgCost (৳/sft) = ৳
+      // Piece:           effectiveQty (pieces) × avgCost (৳/piece) = ৳
+      // Throws InvalidProductPerBoxSftError if a tile product is missing per_box_sft.
+      totalCogs += computeLineCogs({
+        unitType,
+        effectiveQty,
+        perBoxSft,
+        avgCost,
+      });
 
       return {
         ...item,
@@ -559,6 +569,10 @@ router.post('/', async (req: Request, res: Response) => {
           paid_amount: input.paid_amount,
           due_amount: dueAmount,
           cogs: totalCogs,
+          // Phase 1A: stamp the COGS provenance so reports can distinguish
+          // post-fix (dimensionally correct) rows from legacy_pre_fix rows
+          // that were written by the pre-Phase-1A code path.
+          cogs_method: 'post_fix',
           profit: grossProfit,
           gross_profit: grossProfit,
           net_profit: grossProfit,
@@ -831,6 +845,14 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json(created);
   } catch (err: any) {
     console.error('[sales.create] error', err);
+    // Phase 1A — surface tile-product master-data issues as a clean 400
+    // instead of an opaque 500. The InvalidProductPerBoxSftError is
+    // thrown by computeLineCogs when a 'box_sft' product has a missing or
+    // non-positive per_box_sft. Operators must fix the product master.
+    if (err instanceof InvalidProductPerBoxSftError) {
+      res.status(400).json({ error: err.message, code: err.code });
+      return;
+    }
     res
       .status(500)
       .json({ error: err?.message || 'Failed to create sale' });
@@ -972,7 +994,14 @@ router.put('/:id', async (req: Request, res: Response) => {
         totalPiece += effectiveQty;
         itemTotal = effectiveQty * item.sale_rate;
       }
-      totalCogs += effectiveQty * avgCost;
+      // Phase 1A — dimensionally correct COGS via computeLineCogs (same
+      // formula as the POST path; identical guard for missing per_box_sft).
+      totalCogs += computeLineCogs({
+        unitType,
+        effectiveQty,
+        perBoxSft,
+        avgCost,
+      });
       return {
         ...item,
         quantity: effectiveQty,
@@ -1099,6 +1128,10 @@ router.put('/:id', async (req: Request, res: Response) => {
           paid_amount: input.paid_amount,
           due_amount: dueAmount,
           cogs: totalCogs,
+          // Phase 1A — re-stamp provenance on every update. A row that was
+          // 'legacy_pre_fix' is promoted to 'post_fix' once it is edited
+          // because the new totals were computed by computeLineCogs.
+          cogs_method: 'post_fix',
           profit: grossProfit,
           gross_profit: grossProfit,
           net_profit: grossProfit,
@@ -1277,6 +1310,11 @@ router.put('/:id', async (req: Request, res: Response) => {
     res.json({ id: saleId });
   } catch (err: any) {
     console.error('[sales.update] error', err);
+    // Phase 1A — surface tile-product master-data issues as a clean 400.
+    if (err instanceof InvalidProductPerBoxSftError) {
+      res.status(400).json({ error: err.message, code: err.code });
+      return;
+    }
     res.status(500).json({ error: err?.message || 'Failed to update sale' });
   }
 });
