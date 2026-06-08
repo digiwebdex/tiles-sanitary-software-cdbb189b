@@ -36,6 +36,9 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
+import { attachPurchasePaymentSummaries, buildPurchasePaymentSummary, sumPurchaseLedgerPayments } from '../lib/purchasePaymentSummary';
+import { recordSupplierPayment } from '../lib/supplierPayment';
+import { requireRole } from '../middleware/roles';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -96,13 +99,15 @@ router.get('/', async (req: Request, res: Response) => {
       .limit(PAGE_SIZE)
       .offset(offset);
 
-    const supIds = Array.from(new Set(rows.map((r) => r.supplier_id).filter(Boolean)));
+    const enriched = await attachPurchasePaymentSummaries(dealerId, rows);
+
+    const supIds = Array.from(new Set(enriched.map((r) => r.supplier_id).filter(Boolean)));
     const suppliers = supIds.length
       ? await db('suppliers').whereIn('id', supIds).select('id', 'name')
       : [];
     const supMap = new Map(suppliers.map((s: any) => [s.id, s]));
 
-    const data = rows.map((r) => ({
+    const data = enriched.map((r) => ({
       ...r,
       suppliers: r.supplier_id ? supMap.get(r.supplier_id) ?? null : null,
     }));
@@ -206,6 +211,38 @@ router.delete('/drafts/:id', async (req: Request, res: Response) => {
 });
 
 
+// ── POST /api/purchases/:id/payment ───────────────────────────────────────
+const purchasePaymentSchema = z.object({
+  amount: z.coerce.number().positive(),
+  note: z.string().trim().max(500).optional(),
+  paid_account_id: z.string().uuid().optional().nullable(),
+});
+
+router.post('/:id/payment', requireRole('dealer_admin', 'manager', 'accountant'), async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = purchasePaymentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  try {
+    const result = await db.transaction(async (trx) =>
+      recordSupplierPayment(trx, {
+        dealerId,
+        purchaseId: req.params.id,
+        amount: parsed.data.amount,
+        note: parsed.data.note,
+        paid_account_id: parsed.data.paid_account_id,
+      }),
+    );
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[purchases.payment]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record payment' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;
@@ -238,7 +275,22 @@ router.get('/:id', async (req: Request, res: Response) => {
         ),
     ]);
 
-    res.json({ ...purchase, suppliers: supplier ?? null, purchase_items: items });
+    const paidMap = await sumPurchaseLedgerPayments(dealerId, [id]);
+    const paymentSummary = buildPurchasePaymentSummary(purchase, paidMap.get(id) || 0);
+
+    const paymentHistory = await db('supplier_ledger')
+      .where({ dealer_id: dealerId, purchase_id: id, type: 'payment' })
+      .orderBy('entry_date', 'desc')
+      .orderBy('created_at', 'desc')
+      .select('id', 'amount', 'description', 'entry_date', 'created_at');
+
+    res.json({
+      ...purchase,
+      ...paymentSummary,
+      suppliers: supplier ?? null,
+      purchase_items: items,
+      payment_history: paymentHistory,
+    });
   } catch (err) {
     console.error('[purchases.getById] error', err);
     res.status(500).json({ error: 'Failed to load purchase' });

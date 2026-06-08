@@ -24,6 +24,9 @@ const CreatePurchasePage = () => {
         invoice_number: values.invoice_number || "",
         purchase_date: values.purchase_date,
         notes: values.notes,
+        voucher_discount: values.voucher_discount ?? 0,
+        paid_on_create: values.paid_on_create ?? 0,
+        paid_account_id: values.paid_account_id ?? null,
         items: values.items as import("@/services/purchaseService").PurchaseItemInput[],
       });
     },

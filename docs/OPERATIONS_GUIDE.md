@@ -26,13 +26,23 @@ Customer → New Sale / POS → Stock decreases (FIFO) + Customer due recorded
 - Tile COGS calculated correctly: `boxes × sft/box × ৳/sft`.
 - Optional payment at sale time reduces invoice due.
 
-### 4. Collect payment (two equivalent paths)
-Both paths now use the **same backend logic** and update invoice `due_amount`:
+### 4. Collect payment from customer (two equivalent paths)
+Both paths use the **same backend logic** and update invoice `due_amount`:
 
 | Where | When to use |
 |-------|-------------|
 | **Invoice page → Payment** | Customer paying against a specific invoice |
 | **Collections → Record Payment** | Customer paying without specifying invoice; auto-applies to **oldest due invoices first** |
+
+### 4b. Pay supplier (purchase bills)
+
+| Where | When to use |
+|-------|-------------|
+| **New Purchase → Paid Now** | Pay (full or partial) when saving the purchase |
+| **Purchase Details → Record Payment** | Pay a specific bill after it is saved |
+| **Supplier Payables** | See all unpaid bills and pay from one screen |
+
+**Note:** Sidebar **Collections** = customer money in. **Supplier Payables** = money out to suppliers.
 
 ### 5. Sales return
 ```
@@ -85,5 +95,6 @@ Sales Return → Stock restored (aggregate) + Customer due reduced + Cash refund
 |--------|----------|
 | Pay specific invoice | `POST /api/sales/:id/payment` |
 | Pay customer (FIFO across invoices) | `POST /api/collections/payment` |
+| Pay specific purchase bill | `POST /api/purchases/:id/payment` |
 
 Both return `{ allocations[], totalApplied }` showing which invoices were updated.

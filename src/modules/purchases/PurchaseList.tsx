@@ -14,7 +14,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus, Search, Eye, Pencil, Download, RotateCcw, CreditCard, Barcode,
+  Plus, Search, Eye, Download, RotateCcw, CreditCard, Barcode,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -140,9 +140,10 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
               </TableHeader>
               <TableBody>
                 {purchases.map((p: any) => {
-                  const total = Number(p.total_amount) || 0;
-                  const paid = 0;
-                  const balance = total - paid;
+                  const total = Number(p.net_payable ?? p.total_amount) || 0;
+                  const paid = Number(p.paid_amount) || 0;
+                  const balance = Number(p.due_amount ?? total - paid);
+                  const status = p.payment_status ?? (balance <= 0.01 ? "paid" : paid > 0 ? "partial" : "pending");
 
                   return (
                     <TableRow key={p.id} className="cursor-pointer" onClick={() => navigate(`/purchases/${p.id}`)}>
@@ -164,8 +165,17 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
                       <TableCell className="text-right">{formatCurrency(paid)}</TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(balance)}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="bg-orange-100 text-orange-700 text-xs">
-                          Pending
+                        <Badge
+                          variant="secondary"
+                          className={
+                            status === "paid"
+                              ? "bg-green-100 text-green-700 text-xs"
+                              : status === "partial"
+                                ? "bg-blue-100 text-blue-700 text-xs"
+                                : "bg-orange-100 text-orange-700 text-xs"
+                          }
+                        >
+                          {status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Pending"}
                         </Badge>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
@@ -179,13 +189,11 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
                             <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}`)}>
                               <Eye className="mr-2 h-4 w-4" /> Purchase Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}/edit`)}>
-                              <Pencil className="mr-2 h-4 w-4" /> Edit Purchase
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}`)}>
-                              <CreditCard className="mr-2 h-4 w-4" /> Add Payment
-                            </DropdownMenuItem>
+                            {balance > 0.01 && (
+                              <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}?pay=1`)}>
+                                <CreditCard className="mr-2 h-4 w-4" /> Record Payment
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}`)}>
                               <Download className="mr-2 h-4 w-4" /> Download as PDF
                             </DropdownMenuItem>

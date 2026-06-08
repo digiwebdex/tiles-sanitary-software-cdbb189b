@@ -10,6 +10,7 @@
  * endpoint, but the frontend hides the financial widgets for them anyway.
  */
 import { Router, Request, Response } from 'express';
+import { computeSupplierBalance } from '../lib/ledgerBalance';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
@@ -101,13 +102,10 @@ router.get('/', async (req: Request, res: Response) => {
       .sum({ s: 'due_amount' })
       .first();
 
-    const supplierPay = await db('supplier_ledger')
+    const supplierLedgerRows = await db('supplier_ledger')
       .where({ dealer_id: dealerId })
-      .select(db.raw(`
-        COALESCE(SUM(CASE WHEN type IN ('purchase','adjustment') THEN amount ELSE 0 END), 0)
-        - COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) AS payable
-      `))
-      .first() as any;
+      .select('type', 'amount');
+    const supplierPayable = Math.max(0, computeSupplierBalance(supplierLedgerRows as any[]));
 
     // Total stock value: sum(box_qty or piece_qty * cost_price)
     const stockValRow = await db.raw(
@@ -258,7 +256,7 @@ router.get('/', async (req: Request, res: Response) => {
       monthlyProfit: round2(monthAgg?.profit),
       monthlyPurchase: round2(monthPurchase?.s),
       totalCustomerDue: round2(custDue?.s),
-      totalSupplierPayable: round2(supplierPay?.payable),
+      totalSupplierPayable: round2(supplierPayable),
       cashInHand: 0, // computed elsewhere; left at 0 until cash_ledger endpoint lands
       totalStockValue,
       lowStockItems,

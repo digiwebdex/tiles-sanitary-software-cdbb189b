@@ -109,6 +109,19 @@ export const purchaseService = {
     });
   },
 
+  async recordPayment(
+    purchaseId: string,
+    input: { amount: number; note?: string; paid_account_id?: string | null },
+  ) {
+    return await vpsRequest<{ ok: true; totalApplied: number; dueAfter: number }>(
+      `/api/purchases/${purchaseId}/payment`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  },
+
   async deleteDraft(dealerId: string, id: string): Promise<void> {
     await vpsRequest<{ ok: true }>(
       `/api/purchases/drafts/${id}?dealerId=${encodeURIComponent(dealerId)}`,

@@ -50,6 +50,7 @@ import DeliveriesPage from "./pages/deliveries/DeliveriesPage";
 import POSSalePage from "./pages/sales/POSSalePage";
 import CampaignsPage from "./pages/campaigns/CampaignsPage";
 import CollectionsPage from "./pages/collections/CollectionsPage";
+import SupplierPayablesPage from "./pages/payables/SupplierPayablesPage";
 import ApprovalsPage from "./pages/approvals/ApprovalsPage";
 import QuotationsPage from "./pages/quotations/QuotationsPage";
 import CreateQuotation from "./pages/quotations/CreateQuotation";
@@ -274,6 +275,7 @@ const App = () => (
             <Route path="/ledger" element={<ProtectedRoute><AppLayout><LedgerPage /></AppLayout></ProtectedRoute>} />
             <Route path="/campaigns" element={<ProtectedRoute><AppLayout><CampaignsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/collections" element={<ProtectedRoute><AppLayout><CollectionsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/payables" element={<ProtectedRoute><AppLayout><SupplierPayablesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/approvals" element={<ProtectedRoute><AppLayout><ApprovalsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/quotations" element={<ProtectedRoute><AppLayout><QuotationsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/quotations/new" element={<ProtectedRoute><AppLayout><CreateQuotation /></AppLayout></ProtectedRoute>} />
