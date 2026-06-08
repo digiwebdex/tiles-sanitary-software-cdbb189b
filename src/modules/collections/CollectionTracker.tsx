@@ -2,8 +2,6 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { customerLedgerService } from "@/services/ledgerService";
-import { cashLedgerService } from "@/services/ledgerService";
 import { collectionsService } from "@/services/collectionsService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -119,24 +117,20 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
 
   const recordPayment = useMutation({
     mutationFn: async ({ customerId, amount, note }: { customerId: string; amount: number; note: string }) => {
-      await customerLedgerService.addEntry({
-        dealer_id: dealerId, customer_id: customerId, type: "payment",
-        amount, description: note || "Payment collected",
-      });
-      await cashLedgerService.addEntry({
-        dealer_id: dealerId, type: "receipt", amount,
-        description: `Payment from ${payDialog.customer?.name}: ${note || "Collection"}`,
-        reference_type: "customer_payment",
+      return collectionsService.recordPayment(dealerId, {
+        customer_id: customerId,
+        amount,
+        note: note || undefined,
       });
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (result, variables) => {
       toast.success("Payment recorded successfully");
       const customer = payDialog.customer;
       if (customer) {
         setReceiptData({
           customerName: customer.name, customerPhone: customer.phone,
           amount: variables.amount, note: variables.note,
-          remainingDue: Math.max(0, customer.outstanding - variables.amount),
+          remainingDue: Math.max(0, customer.outstanding - (result?.totalApplied ?? variables.amount)),
           receiptNo: `RCP-${Date.now().toString(36).toUpperCase()}`,
           date: new Date().toISOString(),
         });
@@ -144,6 +138,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
       queryClient.invalidateQueries({ queryKey: ["collection-tracker"] });
       queryClient.invalidateQueries({ queryKey: ["recent-collections"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-top-overdue"] });
+      queryClient.invalidateQueries({ queryKey: ["sale"] });
       setPayDialog({ open: false }); setPayAmount(""); setPayNote("");
     },
     onError: (err: Error) => toast.error(err.message),

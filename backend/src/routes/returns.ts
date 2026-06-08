@@ -419,7 +419,7 @@ router.post('/sales', async (req: Request, res: Response) => {
     // Pre-tx validations (read-only)
     const sale = await db('sales')
       .where({ id: input.sale_id, dealer_id: dealerId })
-      .first('id', 'customer_id', 'total_amount', 'invoice_number');
+      .first('id', 'customer_id', 'total_amount', 'invoice_number', 'due_amount', 'paid_amount', 'discount');
     if (!sale) {
       res.status(404).json({ error: 'Sale not found' });
       return;
@@ -503,19 +503,32 @@ router.post('/sales', async (req: Request, res: Response) => {
         await trx('sales').where({ id: input.sale_id }).update({ has_backorder: hasBackorder });
       }
 
-      // Customer ledger — negative entry reduces customer's balance (refund)
+      // Customer ledger — positive refund amount reduces customer balance (type-based)
       await trx('customer_ledger').insert({
         dealer_id: dealerId,
         customer_id: sale.customer_id,
         sale_id: input.sale_id,
         sales_return_id: rid,
         type: 'refund',
-        amount: -Number(input.refund_amount),
+        amount: Number(input.refund_amount),
         description: `Return${input.is_broken ? ' (broken)' : ''}: ${
           input.reason || 'No reason'
         } [${sale.invoice_number}]`,
         entry_date: input.return_date,
       });
+
+      // Sync invoice due/paid when a refund reduces what the customer owes
+      if (Number(input.refund_amount) > 0) {
+        const refund = Number(input.refund_amount);
+        const due = Number(sale.due_amount) || 0;
+        const paid = Number(sale.paid_amount) || 0;
+        const dueReduction = Math.min(refund, due);
+        const paidReduction = Math.max(0, refund - dueReduction);
+        await trx('sales').where({ id: input.sale_id }).update({
+          due_amount: Math.max(0, due - dueReduction),
+          paid_amount: Math.max(0, paid - paidReduction),
+        });
+      }
 
       // Cash ledger — outflow if refund actually paid
       if (Number(input.refund_amount) > 0) {

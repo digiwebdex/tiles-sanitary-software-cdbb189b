@@ -25,6 +25,7 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
+import { computeSupplierBalance } from '../lib/ledgerBalance';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -569,27 +570,33 @@ router.get('/supplier-payable', async (req, res) => {
 
   try {
     const [ledger, suppliers] = await Promise.all([
-      db('supplier_ledger').where({ dealer_id: dealerId }).select('supplier_id', 'amount'),
+      db('supplier_ledger').where({ dealer_id: dealerId }).select('supplier_id', 'amount', 'type'),
       db('suppliers').where({ dealer_id: dealerId }).select('id', 'name'),
     ]);
     const sm = new Map(suppliers.map((s: any) => [s.id, s]));
-    const balances: Record<string, { debit: number; credit: number }> = {};
+    const bySupplier = new Map<string, Array<{ type: string; amount: number }>>();
     for (const e of ledger as any[]) {
       const sid = e.supplier_id;
-      if (!balances[sid]) balances[sid] = { debit: 0, credit: 0 };
-      const amt = Number(e.amount);
-      if (amt >= 0) balances[sid].debit += amt;
-      else balances[sid].credit += Math.abs(amt);
+      const rows = bySupplier.get(sid) ?? [];
+      rows.push({ type: e.type, amount: Number(e.amount) });
+      bySupplier.set(sid, rows);
     }
-    const all = Object.entries(balances)
-      .map(([sid, b]) => {
+    const all = Array.from(bySupplier.entries())
+      .map(([sid, rows]) => {
         const s: any = sm.get(sid);
+        const outstanding = computeSupplierBalance(rows);
+        const totalPurchase = rows
+          .filter((r) => r.type === 'purchase')
+          .reduce((sum, r) => sum + Math.abs(r.amount), 0);
+        const totalPaid = rows
+          .filter((r) => r.type === 'payment')
+          .reduce((sum, r) => sum + r.amount, 0);
         return {
           supplierId: sid,
           supplierName: s?.name ?? '—',
-          totalDebit: round2(b.debit),
-          totalCredit: round2(b.credit),
-          balance: round2(b.credit - b.debit),
+          totalDebit: round2(totalPurchase),
+          totalCredit: round2(totalPaid),
+          balance: round2(outstanding),
         };
       })
       .filter((r) => r.balance > 0)
@@ -973,26 +980,32 @@ router.get('/supplier-outstanding', async (req, res) => {
         .select('id', 'name', 'phone', 'status'),
     ]);
     const suppMap = new Map<string, any>((suppliers as any[]).map((s) => [s.id, s]));
-    const balances: Record<string, { debit: number; credit: number; paymentCount: number }> = {};
+    const bySupplier = new Map<string, Array<{ type: string; amount: number }>>();
     for (const e of ledger as any[]) {
       const sid = e.supplier_id;
-      if (!balances[sid]) balances[sid] = { debit: 0, credit: 0, paymentCount: 0 };
-      const amt = Number(e.amount);
-      if (amt >= 0) balances[sid].debit += amt;
-      else balances[sid].credit += Math.abs(amt);
-      if (e.type === 'payment') balances[sid].paymentCount += 1;
+      const rows = bySupplier.get(sid) ?? [];
+      rows.push({ type: e.type, amount: Number(e.amount) });
+      bySupplier.set(sid, rows);
     }
-    const rows = Object.entries(balances)
-      .map(([sid, b]) => {
+    const rows = Array.from(bySupplier.entries())
+      .map(([sid, entryRows]) => {
         const s = suppMap.get(sid);
+        const outstanding = computeSupplierBalance(entryRows);
+        const totalPurchase = entryRows
+          .filter((r) => r.type === 'purchase')
+          .reduce((sum, r) => sum + Math.abs(r.amount), 0);
+        const totalPaid = entryRows
+          .filter((r) => r.type === 'payment')
+          .reduce((sum, r) => sum + r.amount, 0);
+        const paymentCount = entryRows.filter((r) => r.type === 'payment').length;
         return {
           supplierId: sid,
           name: s?.name ?? '—',
           phone: s?.phone ?? '—',
-          totalPurchase: round2(b.debit),
-          totalPaid: round2(b.credit),
-          outstanding: round2(b.debit - b.credit),
-          payments: b.paymentCount,
+          totalPurchase: round2(totalPurchase),
+          totalPaid: round2(totalPaid),
+          outstanding: round2(outstanding),
+          payments: paymentCount,
         };
       })
       .filter((r) => r.outstanding > 0)

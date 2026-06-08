@@ -3,8 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { salesService } from "@/services/salesService";
 import { projectService } from "@/services/projectService";
-import { supabase } from "@/integrations/supabase/client";
-import { customerLedgerService, cashLedgerService } from "@/services/ledgerService";
+import { challanService } from "@/services/challanService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,31 +39,16 @@ const InvoicePage = () => {
 
   const { data: salesReturns = [] } = useQuery({
     queryKey: ["sale-returns-for-invoice", id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("sales_returns")
-        .select("id, qty, refund_amount, return_date, reason, is_broken, product_id, products(name)")
-        .eq("sale_id", id!);
-      return data ?? [];
-    },
+    queryFn: () => salesService.getReturns(id!),
     enabled: !!id,
   });
 
-  // Fetch linked challan for this sale
-  const { data: linkedChallan } = useQuery({
+  const { data: linkedChallans = [] } = useQuery({
     queryKey: ["sale-challan-link", id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("challans")
-        .select("id, challan_no, status")
-        .eq("sale_id", id!)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
+    queryFn: () => challanService.getBySaleId(id!),
     enabled: !!id,
   });
+  const linkedChallan = linkedChallans[0] ?? null;
 
   // Fetch optional project / site for header display
   const projectId = (sale as { project_id?: string | null } | undefined)?.project_id ?? null;
@@ -76,41 +60,13 @@ const InvoicePage = () => {
   });
   const paymentMutation = useMutation({
     mutationFn: async ({ amount, note }: { amount: number; note: string }) => {
-      const customerId = sale?.customer_id;
-      if (!customerId) throw new Error("Customer not found");
-
-      // Record in customer ledger
-      await customerLedgerService.addEntry({
-        dealer_id: dealerId,
-        customer_id: customerId,
-        sale_id: id,
-        type: "payment",
-        amount,
-        description: note || `Payment for Invoice #${sale?.invoice_number ?? id}`,
-      });
-
-      // Record in cash ledger
-      await cashLedgerService.addEntry({
-        dealer_id: dealerId,
-        type: "receipt",
-        amount,
-        description: `Payment from ${(sale as any)?.customers?.name ?? "Customer"}: ${note || "Collection"}`,
-        reference_type: "customer_payment",
-        reference_id: id,
-      });
-
-      // Update sale paid_amount and due_amount
-      const newPaid = Number(sale!.paid_amount) + amount;
-      const newDue = Math.max(0, Number(sale!.total_amount) - Number(sale!.discount) - newPaid);
-      await supabase
-        .from("sales")
-        .update({ paid_amount: newPaid, due_amount: newDue })
-        .eq("id", id!);
+      return salesService.recordPayment(id!, { amount, note: note || undefined });
     },
     onSuccess: () => {
       toast.success("Payment recorded successfully");
       queryClient.invalidateQueries({ queryKey: ["sale", id] });
       queryClient.invalidateQueries({ queryKey: ["collection-tracker"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-collections"] });
       setPayOpen(false);
       setPayAmount("");
       setPayNote("");

@@ -4,6 +4,26 @@
 
 ---
 
+## [2026-06-08] — Smooth operations restructure (fresh data)
+
+### Fixed
+- **Unified customer payment path** — Invoice page and Collections tracker both use atomic VPS payment APIs that update `sales.paid_amount` / `sales.due_amount`.
+- **Ledger sign convention** — Sale create/edit and sales return now store positive payment/refund amounts (type-based balance math).
+- **Collections FIFO allocation** — `POST /api/collections/payment` applies payments to oldest due invoices first.
+- **Supplier reports** — Supplier Payable and Supplier Outstanding use the same type-based balance formula.
+- **Sales return due sync** — Refunds now reduce invoice `due_amount` / `paid_amount`.
+
+### Added
+- `backend/src/lib/ledgerBalance.ts` — shared customer/supplier balance helpers.
+- `backend/src/lib/customerPayment.ts` — atomic payment recording with invoice allocation.
+- `docs/OPERATIONS_GUIDE.md` — fresh dealer go-live checklist.
+- `src/test/ledgerBalance.test.ts` — balance helper unit tests.
+
+### Removed
+- Supabase payment/update calls from `InvoicePage` (VPS-only).
+
+---
+
 ## [2026-06-04] — Track 1 Phase 1: P&L correctness hotfix
 
 ### Fixed

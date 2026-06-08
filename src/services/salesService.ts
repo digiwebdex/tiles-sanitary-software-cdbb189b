@@ -159,6 +159,11 @@ export const salesService = {
     return await vpsRequest<any>(`/api/sales/${id}`);
   },
 
+  /** Returns linked to a sale (for invoice display). */
+  async getReturns(saleId: string) {
+    return await vpsRequest<any[]>(`/api/sales/${saleId}/returns`);
+  },
+
   /**
    * Create a sale.
    * Phase 3L: VPS performs the atomic transaction (header + items + FIFO batch
@@ -298,6 +303,21 @@ export const salesService = {
     await vpsRequest<void>(
       `/api/sales/${saleId}?dealerId=${encodeURIComponent(dealerId)}`,
       { method: "DELETE" },
+    );
+  },
+
+  /** Atomic payment on a specific invoice — updates ledger + sale due. */
+  async recordPayment(
+    saleId: string,
+    input: { amount: number; note?: string; payment_mode?: string },
+  ) {
+    return await vpsRequest<{ ok: boolean; allocations: Array<{ saleId: string; invoiceNumber: string | null; amount: number }>; totalApplied: number }>(
+      `/api/sales/${saleId}/payment`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
     );
   },
 };

@@ -9,9 +9,12 @@
  *     → { rows: [...] }  recent customer payment entries.
  */
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { requireRole } from '../middleware/roles';
+import { recordCustomerPayment } from '../lib/customerPayment';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -140,6 +143,45 @@ router.get('/outstanding', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[collections/outstanding]', err.message);
     res.status(500).json({ error: 'Failed to load collections' });
+  }
+});
+
+// ─── POST /api/collections/payment ───────────────────────────────────────
+// Atomic customer payment: allocates across oldest due invoices (FIFO) and
+// updates sales.paid_amount / sales.due_amount for each allocation.
+const collectionPaymentSchema = z.object({
+  customer_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+  note: z.string().trim().max(500).optional(),
+  payment_mode: z.string().trim().max(50).optional(),
+});
+
+router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'salesman'), async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+
+  const parsed = collectionPaymentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+
+  const { customer_id, amount, note, payment_mode } = parsed.data;
+
+  try {
+    const result = await db.transaction(async (trx) =>
+      recordCustomerPayment(trx, {
+        dealerId,
+        customerId: customer_id,
+        amount,
+        note,
+        payment_mode,
+      }),
+    );
+    res.status(201).json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[collections/payment]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record payment' });
   }
 });
 

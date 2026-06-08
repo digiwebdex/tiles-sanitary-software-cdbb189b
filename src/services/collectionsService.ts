@@ -54,4 +54,20 @@ export const collectionsService = {
     );
     return body.rows ?? [];
   },
+
+  /** Record payment against oldest due invoices (FIFO) for a customer. */
+  async recordPayment(
+    dealerId: string,
+    input: { customer_id: string; amount: number; note?: string; payment_mode?: string },
+  ) {
+    return await vpsRequest<{
+      ok: boolean;
+      allocations: Array<{ saleId: string; invoiceNumber: string | null; amount: number }>;
+      totalApplied: number;
+    }>(`/api/collections/payment?dealerId=${encodeURIComponent(dealerId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
 };

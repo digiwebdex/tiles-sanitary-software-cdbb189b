@@ -17,6 +17,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
 import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
+import { recordCustomerPayment } from '../lib/customerPayment';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -190,50 +191,23 @@ router.post('/:id/payment', async (req: Request, res: Response) => {
   const { amount, note, payment_mode } = parsed.data;
 
   try {
-    await db.transaction(async (trx) => {
-      const sale = await trx('sales').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
+    const result = await db.transaction(async (trx) => {
+      const sale = await trx('sales')
+        .where({ id: req.params.id, dealer_id: dealerId })
+        .first('customer_id');
       if (!sale) throw new Error('Sale not found');
       if (!sale.customer_id) throw new Error('Sale has no customer linked');
 
-      const total = Number(sale.total_amount) || 0;
-      const discount = Number(sale.discount) || 0;
-      const currentPaid = Number(sale.paid_amount) || 0;
-      const newPaid = currentPaid + amount;
-      const maxPayable = Math.max(0, total - discount);
-      if (newPaid > maxPayable + 0.01) {
-        throw new Error(`Payment exceeds outstanding amount (max ${(maxPayable - currentPaid).toFixed(2)})`);
-      }
-      const newDue = Math.max(0, maxPayable - newPaid);
-
-      const customer = await trx('customers').where({ id: sale.customer_id }).first('name');
-      const description = note || `Payment for Invoice #${sale.invoice_number ?? req.params.id}`;
-
-      await trx('customer_ledger').insert({
-        dealer_id: dealerId,
-        customer_id: sale.customer_id,
-        sale_id: req.params.id,
-        type: 'payment',
+      return recordCustomerPayment(trx, {
+        dealerId,
+        customerId: sale.customer_id,
+        saleId: req.params.id,
         amount,
-        description,
-        entry_date: new Date().toISOString().slice(0, 10),
+        note,
+        payment_mode,
       });
-
-      await trx('cash_ledger').insert({
-        dealer_id: dealerId,
-        type: 'receipt',
-        amount,
-        description: `Payment from ${customer?.name ?? 'Customer'}: ${note || 'Collection'}`,
-        reference_type: 'customer_payment',
-        reference_id: req.params.id,
-        entry_date: new Date().toISOString().slice(0, 10),
-        ...(payment_mode ? { payment_mode } : {}),
-      });
-
-      await trx('sales')
-        .where({ id: req.params.id, dealer_id: dealerId })
-        .update({ paid_amount: newPaid, due_amount: newDue });
     });
-    res.json({ ok: true });
+    res.json({ ok: true, ...result });
   } catch (err: any) {
     console.error('[sales.payment]', err.message);
     res.status(400).json({ error: err.message || 'Failed to record payment' });
@@ -775,7 +749,7 @@ router.post('/', async (req: Request, res: Response) => {
             customer_id: customerId,
             sale_id: newSaleId,
             type: 'payment',
-            amount: -input.paid_amount,
+            amount: input.paid_amount,
             description: `Payment received for ${invoiceNumber}`,
             entry_date: input.sale_date,
           });
@@ -1270,7 +1244,7 @@ router.put('/:id', async (req: Request, res: Response) => {
           customer_id: customerId,
           sale_id: saleId,
           type: 'payment',
-          amount: -input.paid_amount,
+          amount: input.paid_amount,
           description: `Payment for ${oldSale.invoice_number} (edited)`,
           entry_date: input.sale_date,
         });
