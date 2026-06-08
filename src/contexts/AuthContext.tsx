@@ -413,11 +413,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const me = await vpsAuthApi.me();
           if (me) {
-            vpsTokenStore.set({
-              accessToken: vpsTokenStore.access!,
-              refreshToken: vpsTokenStore.refresh ?? "",
-              user: me,
-            });
             applyVpsUser(me);
           }
         } catch (err) {

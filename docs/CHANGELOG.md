@@ -25,6 +25,14 @@
 
 ---
 
+## [2026-06-08] — Fix purchase "Not authenticated" on submit
+
+### Fixed
+- **Purchase create auth** — `getAuthenticatedDealerId()` now re-fetches `/api/auth/me` when access token exists but `vps.user` is missing from localStorage.
+- **`vpsAuthApi.me()`** — persists user snapshot to localStorage so service-layer auth checks match AuthContext.
+
+---
+
 ## [2026-06-04] — Track 1 Phase 1: P&L correctness hotfix
 
 ### Fixed

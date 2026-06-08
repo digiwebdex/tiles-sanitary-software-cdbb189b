@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { env } from "@/lib/env";
 import { saImpersonation } from "@/lib/saImpersonation";
-import { vpsTokenStore } from "@/lib/vpsAuthClient";
+import { vpsAuthApi, vpsTokenStore } from "@/lib/vpsAuthClient";
 
 /**
  * Resolves the authenticated user's dealer_id from their profile.
@@ -11,7 +11,15 @@ import { vpsTokenStore } from "@/lib/vpsAuthClient";
  */
 export async function getAuthenticatedDealerId(): Promise<string> {
   if (env.AUTH_BACKEND === "vps") {
-    const user = vpsTokenStore.user;
+    let user = vpsTokenStore.user;
+
+    // AuthContext may have hydrated from /me while vps.user was missing
+    // from localStorage (stale tab, partial clear, older builds). Re-fetch
+    // once before failing mutations like purchase create.
+    if (!user && vpsTokenStore.access) {
+      user = await vpsAuthApi.me();
+    }
+
     if (!user) throw new Error("Not authenticated");
 
     if (user.roles.includes("super_admin")) {

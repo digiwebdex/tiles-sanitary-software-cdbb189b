@@ -95,6 +95,15 @@ export const vpsTokenStore = {
       /* ignore */
     }
   },
+  /** Persist user snapshot while keeping existing tokens. */
+  setUser(user: VpsUser) {
+    try {
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      notifyAuthChanged();
+    } catch {
+      /* ignore quota errors */
+    }
+  },
 };
 
 // ── Single-flight refresh ─────────────────────────────────────────────────
@@ -236,7 +245,13 @@ export const vpsAuthApi = {
     const res = await authedFetch("/api/auth/me");
     if (!res.ok) return null;
     const body = await res.json().catch(() => null);
-    return (body?.user as VpsUser) ?? null;
+    const user = (body?.user as VpsUser) ?? null;
+    // Keep localStorage user in sync — services read vpsTokenStore.user
+    // via getAuthenticatedDealerId() outside React context.
+    if (user) {
+      vpsTokenStore.setUser(user);
+    }
+    return user;
   },
 
   async requestPasswordReset(email: string): Promise<void> {
