@@ -2288,68 +2288,145 @@ router.get('/page/purchases', async (req, res) => {
 
 // ─── G. Payments Report (paged) ──────────────────────────────────────────
 // GET /api/reports/page/payments?dealerId=&page=&search=
+// Unified customer receipts + supplier payments (money in and out).
 router.get('/page/payments', async (req, res) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;
   if (!requireFinancialRole(req, res)) return;
 
   const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
-  const search = ((req.query.search as string) || '').trim();
+  const search = ((req.query.search as string) || '').trim().toLowerCase();
 
   try {
-    let q = db('customer_ledger').where({ dealer_id: dealerId });
-    if (search) q = q.andWhereILike('description', `%${search}%`);
+    const [customerRows, supplierRows] = await Promise.all([
+      db('customer_ledger as cl')
+        .leftJoin('customers as c', 'c.id', 'cl.customer_id')
+        .where({ 'cl.dealer_id': dealerId })
+        .whereIn('cl.type', ['payment', 'refund'])
+        .select(
+          'cl.id',
+          'cl.created_at',
+          'cl.entry_date',
+          'cl.type',
+          'cl.amount',
+          'cl.description',
+          'cl.sale_id',
+          'cl.sales_return_id',
+          'cl.customer_id',
+          'c.name as party_name',
+        ),
+      db('supplier_ledger as sl')
+        .leftJoin('suppliers as s', 's.id', 'sl.supplier_id')
+        .where({ 'sl.dealer_id': dealerId, 'sl.type': 'payment' })
+        .select(
+          'sl.id',
+          'sl.created_at',
+          'sl.entry_date',
+          'sl.type',
+          'sl.amount',
+          'sl.description',
+          'sl.purchase_id',
+          'sl.supplier_id',
+          's.name as party_name',
+        ),
+    ]);
 
-    const [{ count }] = await q
-      .clone()
-      .clearSelect()
-      .clearOrder()
-      .count<{ count: string }[]>('id as count');
+    const saleIds = (customerRows as any[]).map((r) => r.sale_id).filter(Boolean);
+    const purchaseIds = (supplierRows as any[]).map((r) => r.purchase_id).filter(Boolean);
 
-    const ledgerRows = await q
-      .clone()
-      .orderBy('created_at', 'desc')
-      .offset((page - 1) * PAGE_SIZE)
-      .limit(PAGE_SIZE)
-      .select(
-        'id', 'created_at', 'entry_date', 'type', 'amount',
-        'description', 'sale_id', 'sales_return_id', 'customer_id',
-      );
-
-    const saleIds = (ledgerRows as any[]).map((r) => r.sale_id).filter(Boolean);
-    const saleMap: Record<string, string> = {};
-    if (saleIds.length > 0) {
-      const sales = await db('sales')
+    const [sales, purchases, bankEntries] = await Promise.all([
+      saleIds.length
+        ? db('sales').where({ dealer_id: dealerId }).whereIn('id', saleIds).select('id', 'invoice_number')
+        : Promise.resolve([]),
+      purchaseIds.length
+        ? db('purchases').where({ dealer_id: dealerId }).whereIn('id', purchaseIds).select('id', 'invoice_number')
+        : Promise.resolve([]),
+      db('bank_ledger')
         .where({ dealer_id: dealerId })
-        .whereIn('id', saleIds)
-        .select('id', 'invoice_number');
-      for (const s of sales as any[]) {
-        saleMap[s.id] = s.invoice_number ?? '';
-      }
+        .whereIn('reference_type', ['customer_payment', 'purchases'])
+        .select('reference_type', 'reference_id', 'amount', 'bank_account_id'),
+    ]);
+
+    const saleMap: Record<string, string> = {};
+    for (const s of sales as any[]) saleMap[s.id] = s.invoice_number ?? '';
+
+    const purchaseMap: Record<string, string> = {};
+    for (const p of purchases as any[]) purchaseMap[p.id] = p.invoice_number ?? '';
+
+    const bankRefSet = new Set<string>();
+    for (const b of bankEntries as any[]) {
+      bankRefSet.add(`${b.reference_type}:${b.reference_id}`);
     }
 
-    const rows = (ledgerRows as any[]).map((r) => {
+    type UnifiedRow = {
+      id: string;
+      created_at: string;
+      paymentRef: string;
+      saleRef: string;
+      purchaseRef: string;
+      partyName: string;
+      paidVia: string;
+      amount: number;
+      type: string;
+      direction: 'in' | 'out';
+    };
+
+    const unified: UnifiedRow[] = [];
+
+    for (const r of customerRows as any[]) {
       const isReturn = r.type === 'refund' || r.sales_return_id;
       const saleRef = r.sale_id ? (saleMap[r.sale_id] || String(r.sale_id).substring(0, 12)) : '';
-      const payRef = r.description || r.type;
-      const entryType =
-        r.type === 'receipt' || r.type === 'payment' ? 'Received' :
-        r.type === 'refund' ? 'Return Paid' :
-        r.type === 'sale' ? 'Received' : r.type;
-
-      return {
-        id: r.id,
+      const refKey = r.sale_id ? `customer_payment:${r.sale_id}` : '';
+      unified.push({
+        id: `c-${r.id}`,
         created_at: r.created_at,
-        paymentRef: isReturn ? 'Return Paid' : (payRef ?? '—'),
+        paymentRef: isReturn ? 'Return Paid' : (r.description || 'Customer payment'),
         saleRef: saleRef ? `SALE${saleRef}` : '—',
-        purchaseRef: '',
-        paidBy: 'Cash',
+        purchaseRef: '—',
+        partyName: r.party_name ?? 'Customer',
+        paidVia: refKey && bankRefSet.has(refKey) ? 'Bank' : 'Cash',
         amount: toNum(r.amount),
-        type: entryType,
-      };
-    });
+        type: isReturn ? 'Return Paid' : 'Received from Customer',
+        direction: isReturn ? 'out' : 'in',
+      });
+    }
 
-    res.json({ rows, total: Number(count ?? 0) });
+    for (const r of supplierRows as any[]) {
+      const purchaseRef = r.purchase_id
+        ? (purchaseMap[r.purchase_id] || String(r.purchase_id).substring(0, 12))
+        : '';
+      const refKey = r.purchase_id ? `purchases:${r.purchase_id}` : '';
+      unified.push({
+        id: `s-${r.id}`,
+        created_at: r.created_at,
+        paymentRef: r.description || 'Supplier payment',
+        saleRef: '—',
+        purchaseRef: purchaseRef || '—',
+        partyName: r.party_name ?? 'Supplier',
+        paidVia: refKey && bankRefSet.has(refKey) ? 'Bank' : 'Cash',
+        amount: toNum(r.amount),
+        type: 'Paid to Supplier',
+        direction: 'out',
+      });
+    }
+
+    const filtered = search
+      ? unified.filter((row) =>
+          [row.paymentRef, row.saleRef, row.purchaseRef, row.partyName, row.type, row.paidVia]
+            .join(' ')
+            .toLowerCase()
+            .includes(search),
+        )
+      : unified;
+
+    filtered.sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
+    const total = filtered.length;
+    const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+    res.json({ rows, total });
   } catch (err: any) {
     console.error('[reports.page.payments]', err.message);
     res.status(500).json({ error: 'Failed to load payments report' });
