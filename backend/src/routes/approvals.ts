@@ -86,6 +86,12 @@ router.get('/pending', async (req: Request, res: Response) => {
       .orderBy('created_at', 'desc');
     res.json({ rows });
   } catch (err: any) {
+    // Fresh installs may not have run migration 021 yet — don't break the UI.
+    if (err.code === '42P01') {
+      console.warn('[approvals/pending] approval_requests table missing — run migrations');
+      res.json({ rows: [] });
+      return;
+    }
     console.error('[approvals/pending]', err.message);
     res.status(500).json({ error: 'Failed to list pending approvals' });
   }

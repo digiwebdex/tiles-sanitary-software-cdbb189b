@@ -272,8 +272,12 @@ export async function findValidApproval(
 }
 
 export async function listPendingApprovals(dealerId: string): Promise<ApprovalRequest[]> {
-  const json = await vpsJson(`/api/approvals/pending?dealerId=${encodeURIComponent(dealerId)}`);
-  return (json.rows ?? []) as ApprovalRequest[];
+  try {
+    const json = await vpsJson(`/api/approvals/pending?dealerId=${encodeURIComponent(dealerId)}`);
+    return (json.rows ?? []) as ApprovalRequest[];
+  } catch {
+    return [];
+  }
 }
 
 export async function listApprovals(

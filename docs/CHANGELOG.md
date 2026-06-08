@@ -30,6 +30,9 @@
 ### Fixed
 - **Purchase create auth** — `getAuthenticatedDealerId()` now re-fetches `/api/auth/me` when access token exists but `vps.user` is missing from localStorage.
 - **`vpsAuthApi.me()`** — persists user snapshot to localStorage so service-layer auth checks match AuthContext.
+- **JWT fallback** — decode access token client-side when user cache and `/me` are unavailable (fixes purchase submit on stale sessions).
+- **Approvals 500** — `/api/approvals/pending` returns empty list when `approval_requests` table not migrated yet.
+- **Console noise** — pending approvals fetch failures no longer spam unhandled rejections.
 
 ---
 

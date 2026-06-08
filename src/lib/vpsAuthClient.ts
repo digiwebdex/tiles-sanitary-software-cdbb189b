@@ -60,6 +60,35 @@ function notifyAuthChanged() {
   }
 }
 
+/** Decode JWT access token payload (client-side; backend still verifies signatures). */
+export function userFromAccessToken(): VpsUser | null {
+  const token = vpsTokenStore.access;
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const payload = JSON.parse(atob(b64 + pad)) as Record<string, unknown>;
+    if (!payload.userId) return null;
+    return {
+      userId: String(payload.userId),
+      email: String(payload.email ?? ""),
+      dealerId: (payload.dealerId as string | null) ?? null,
+      roles: Array.isArray(payload.roles) ? (payload.roles as string[]) : [],
+      isDemo: !!payload.isDemo,
+      subscription: (payload.subscription as VpsUser["subscription"]) ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort user snapshot: localStorage → JWT decode. */
+export function resolveVpsUser(): VpsUser | null {
+  return vpsTokenStore.user ?? userFromAccessToken();
+}
+
 export const vpsTokenStore = {
   get access(): string | null {
     try { return localStorage.getItem(ACCESS_KEY); } catch { return null; }

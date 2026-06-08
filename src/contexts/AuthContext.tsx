@@ -4,7 +4,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { parseLocalDate } from "@/lib/utils";
 import { subLog } from "@/lib/logger";
 import { env } from "@/lib/env";
-import { vpsAuthApi, vpsTokenStore, type VpsUser } from "@/lib/vpsAuthClient";
+import { vpsAuthApi, vpsTokenStore, type VpsUser, resolveVpsUser } from "@/lib/vpsAuthClient";
 import { saImpersonation } from "@/lib/saImpersonation";
 
 interface Profile {
@@ -390,16 +390,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
           const me = await vpsAuthApi.me();
-          applyVpsUser(me ?? vpsTokenStore.user);
+          const resolved = me ?? resolveVpsUser();
+          if (resolved && !vpsTokenStore.user) {
+            vpsTokenStore.setUser(resolved);
+          }
+          applyVpsUser(resolved);
         } catch (err) {
           subLog.error("VPS auth init error:", err);
-          applyVpsUser(null);
+          const fallback = resolveVpsUser();
+          if (fallback && !vpsTokenStore.user) {
+            vpsTokenStore.setUser(fallback);
+          }
+          applyVpsUser(fallback);
         } finally {
           if (isMounted) setLoading(false);
         }
       };
 
-      const onAuthChange = () => applyVpsUser(vpsTokenStore.user);
+      const onAuthChange = () => {
+        const resolved = resolveVpsUser();
+        applyVpsUser(resolved);
+      };
       const onStorage = (e: StorageEvent) => {
         if (e.key === "vps.accessToken" || e.key === "vps.refreshToken" || e.key === "vps.user") {
           applyVpsUser(vpsTokenStore.user);

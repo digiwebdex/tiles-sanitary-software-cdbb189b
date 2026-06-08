@@ -48,7 +48,13 @@ const CreatePurchasePage = () => {
         dealerId={dealerId}
         showOfferPrice={showOfferPrice}
         enableDrafts={isDealerAdmin || isSuperAdmin}
-        onSubmit={async (v) => { await mutation.mutateAsync(v); }}
+        onSubmit={async (v) => {
+          try {
+            await mutation.mutateAsync(v);
+          } catch {
+            // mutation.onError shows toast
+          }
+        }}
         isLoading={mutation.isPending}
       />
     </div>
