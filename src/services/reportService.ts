@@ -163,6 +163,7 @@ export interface CustomerDueRow {
   balance: number;
 }
 
+/** Customer due rows; `balance` = type-based ledger outstanding (matches Collections). */
 export async function fetchCustomerDueReport(
   dealerId: string,
   page: number

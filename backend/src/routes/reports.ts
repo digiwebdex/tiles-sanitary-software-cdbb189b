@@ -25,7 +25,7 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
-import { computeSupplierBalance } from '../lib/ledgerBalance';
+import { computeSupplierBalance, computeCustomerBalance } from '../lib/ledgerBalance';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -524,28 +524,36 @@ router.get('/customer-due', async (req, res) => {
 
   try {
     const [ledger, customers] = await Promise.all([
-      db('customer_ledger').where({ dealer_id: dealerId }).select('customer_id', 'amount'),
+      db('customer_ledger')
+        .where({ dealer_id: dealerId })
+        .select('customer_id', 'amount', 'type'),
       db('customers').where({ dealer_id: dealerId }).select('id', 'name', 'type'),
     ]);
     const cm = new Map(customers.map((c: any) => [c.id, c]));
-    const balances: Record<string, { debit: number; credit: number }> = {};
+    const byCustomer = new Map<string, Array<{ type: string; amount: number }>>();
     for (const e of ledger as any[]) {
       const cid = e.customer_id;
-      if (!balances[cid]) balances[cid] = { debit: 0, credit: 0 };
-      const amt = Number(e.amount);
-      if (amt >= 0) balances[cid].debit += amt;
-      else balances[cid].credit += Math.abs(amt);
+      const rows = byCustomer.get(cid) ?? [];
+      rows.push({ type: e.type, amount: Number(e.amount) });
+      byCustomer.set(cid, rows);
     }
-    const all = Object.entries(balances)
-      .map(([cid, b]) => {
+    const all = Array.from(byCustomer.entries())
+      .map(([cid, entryRows]) => {
         const c: any = cm.get(cid);
+        const balance = computeCustomerBalance(entryRows);
+        const totalDebit = entryRows
+          .filter((r) => r.type === 'sale' || r.type === 'adjustment')
+          .reduce((sum, r) => sum + r.amount, 0);
+        const totalCredit = entryRows
+          .filter((r) => r.type === 'payment' || r.type === 'refund')
+          .reduce((sum, r) => sum + r.amount, 0);
         return {
           customerId: cid,
           customerName: c?.name ?? '—',
           customerType: c?.type ?? 'customer',
-          totalDebit: round2(b.debit),
-          totalCredit: round2(b.credit),
-          balance: round2(b.debit - b.credit),
+          totalDebit: round2(totalDebit),
+          totalCredit: round2(totalCredit),
+          balance: round2(balance),
         };
       })
       .filter((r) => r.balance > 0)
