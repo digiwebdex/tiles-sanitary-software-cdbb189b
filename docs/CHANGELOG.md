@@ -17,6 +17,7 @@
 - `backend/src/lib/ledgerBalance.ts` — shared customer/supplier balance helpers.
 - `backend/src/lib/customerPayment.ts` — atomic payment recording with invoice allocation.
 - `docs/OPERATIONS_GUIDE.md` — fresh dealer go-live checklist.
+- `docs/STAFF_TRAINING_SHEET.md` — bilingual (Bangla/English) 1-page showroom staff guide.
 - `src/test/ledgerBalance.test.ts` — balance helper unit tests.
 
 ### Removed
