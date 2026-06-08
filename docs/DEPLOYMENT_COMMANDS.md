@@ -5,13 +5,21 @@
 
 ---
 
-## 🚀 Full Deployment (One-Liner — PRODUCTION TESTED)
+## 🚀 Full Deployment (recommended)
 
 ```bash
-cd /var/www/tilessaas && git pull && npm install && npm run build && cd backend && npm install && set -a && source /var/www/tilessaas/.env && set +a && npx knex migrate:latest --knexfile src/db/knexfile.ts && pm2 restart tilessaas-api && pm2 save && sleep 2 && curl -s http://127.0.0.1:3003/api/health
+cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 ```
 
-**Expected Output:** `{"status":"ok","database":"connected"}`
+This builds frontend + backend, runs migrations, and starts PM2 if missing.
+
+### One-liner (manual)
+
+```bash
+cd /var/www/tilessaas && git pull origin main && npm install && npm run build && cd backend && npm install && export NODE_ENV=production && set -a && source /var/www/tilessaas/.env && set +a && npx knex migrate:latest --knexfile src/db/knexfile.ts && npm run build && (pm2 describe tilessaas-api >/dev/null 2>&1 && pm2 restart tilessaas-api || pm2 start dist/index.js --name tilessaas-api) && pm2 save && sleep 2 && curl -s http://127.0.0.1:3003/api/health
+```
+
+**Expected Output:** `{"status":"healthy","services":{"database":"connected","api":"running"}}`
 
 ---
 
@@ -55,9 +63,19 @@ npx knex migrate:latest --knexfile src/db/knexfile.ts
 ```
 **Expected:** "Already up to date" or migration output
 
+### Step 6b: Build Backend (required before PM2 restart)
+```bash
+npm run build
+```
+If this fails with TypeScript errors in `src/routes/assets.ts` etc., run `git pull origin main` — those files were fixed on main.
+
 ### Step 7: Restart Backend
 ```bash
-pm2 restart tilessaas-api
+if pm2 describe tilessaas-api >/dev/null 2>&1; then
+  pm2 restart tilessaas-api --update-env
+else
+  pm2 start dist/index.js --name tilessaas-api --update-env
+fi
 pm2 save
 ```
 

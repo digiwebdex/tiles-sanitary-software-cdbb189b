@@ -157,8 +157,20 @@ This creates the DB user, writes `.env`, runs migrations, and restarts PM2.
 | `password authentication failed for user "postgres"` | Remove `DATABASE_URL` with postgres user; use `DB_PASSWORD` + `tileserp` user |
 | `password authentication failed for user "tileserp"` | Password mismatch — reset with `ALTER ROLE tileserp WITH PASSWORD '...'` |
 | `connection refused port 5440` | Postgres not running — `systemctl start postgresql` or start Docker db |
-| `Not authenticated` on submit | Logout/login after deploy; hard refresh browser |
+| Backend `npm run build` — 55 TS errors in `assets.ts`, `branches.ts`, etc. | Code is outdated. Run `git pull origin main` then `bash scripts/vps-deploy.sh` |
+| `pm2 restart tilessaas-api` — Process not found | First start: `cd backend && pm2 start dist/index.js --name tilessaas-api && pm2 save` |
+| `Not authenticated` on purchase submit | Deploy latest frontend (`bash scripts/vps-deploy.sh`), then **Logout → Login → Ctrl+Shift+R** |
 | `relation "approval_requests" does not exist` | Run `npx knex migrate:latest` |
+
+### If `git pull` says "Already up to date" but build still fails
+
+Your VPS remote may point at an old fork. Check:
+
+```bash
+cd /var/www/tilessaas && git remote -v && git log --oneline -3
+```
+
+You need commits that include HRM route fixes and VPS auth hardening (June 2026). If missing, update the remote URL to the current repo or cherry-pick from the latest `main`.
 
 ---
 
