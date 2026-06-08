@@ -30,6 +30,8 @@ const envSchema = z.object({
   // Falls back to JWT_SECRET so existing deployments keep working, but
   // a dedicated secret is strongly recommended.
   RESTORE_TOKEN_SECRET: z.string().min(16).optional(),
+  /** Phase 2: mirror legacy posts into posting_batches/lines (default off). */
+  USE_POSTING_ENGINE: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
