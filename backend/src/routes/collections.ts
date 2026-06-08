@@ -15,6 +15,10 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
 import { recordCustomerPayment } from '../lib/customerPayment';
+import {
+  getCustomerAggById,
+  getOldestUnpaidSaleDateByCustomer,
+} from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -52,14 +56,11 @@ router.get('/outstanding', async (req: Request, res: Response) => {
   if (!dealerId) return;
 
   try {
-    const [custs, ledger, sales, followups] = await Promise.all([
+    const [custs, sales, followups, aggMap, oldestMap] = await Promise.all([
       db('customers')
         .select('id', 'name', 'phone', 'type', 'max_overdue_days')
         .where({ dealer_id: dealerId, status: 'active' })
         .orderBy('name'),
-      db('customer_ledger')
-        .select('customer_id', 'amount', 'type', 'entry_date')
-        .where({ dealer_id: dealerId }),
       db('sales')
         .select('customer_id', 'invoice_number', 'sale_date', 'id', 'due_amount')
         .where({ dealer_id: dealerId })
@@ -69,6 +70,8 @@ router.get('/outstanding', async (req: Request, res: Response) => {
         .where({ dealer_id: dealerId })
         .orderBy('created_at', 'desc')
         .catch(() => [] as any[]),
+      getCustomerAggById(dealerId),
+      getOldestUnpaidSaleDateByCustomer(dealerId),
     ]);
 
     const followupMap = new Map<string, { date: string; status: string }>();
@@ -86,36 +89,15 @@ router.get('/outstanding', async (req: Request, res: Response) => {
       invoiceMap.set(s.customer_id, arr);
     }
 
-    // oldest unpaid sale per customer
-    const oldestMap = new Map<string, string>();
-    const salesAsc = [...sales].reverse();
-    for (const s of salesAsc) {
-      if (Number(s.due_amount) > 0 && !oldestMap.has(s.customer_id)) {
-        oldestMap.set(s.customer_id, String(s.sale_date));
-      }
-    }
-
-    const agg = new Map<string, {
-      outstanding: number; total_sales: number; total_paid: number; last_payment: string | null;
-    }>();
-    for (const e of ledger) {
-      const cur = agg.get(e.customer_id) ?? { outstanding: 0, total_sales: 0, total_paid: 0, last_payment: null };
-      const amt = Number(e.amount);
-      if (e.type === 'sale') { cur.outstanding += amt; cur.total_sales += amt; }
-      else if (e.type === 'payment' || e.type === 'refund') {
-        cur.outstanding -= amt; cur.total_paid += amt;
-        const d = String(e.entry_date);
-        if (!cur.last_payment || d > cur.last_payment) cur.last_payment = d;
-      } else if (e.type === 'adjustment') {
-        cur.outstanding += amt; cur.total_sales += amt;
-      }
-      agg.set(e.customer_id, cur);
-    }
+    // oldest unpaid sale per customer (shared with dashboard / due aging)
+    const oldestMapFromSales = oldestMap;
 
     const today = new Date();
     const result = custs.map((c: any) => {
-      const a = agg.get(c.id) ?? { outstanding: 0, total_sales: 0, total_paid: 0, last_payment: null };
-      const oldest = oldestMap.get(c.id) ?? null;
+      const a = aggMap.get(c.id) ?? {
+        outstanding: 0, total_sales: 0, total_paid: 0, last_payment: null,
+      };
+      const oldest = oldestMapFromSales.get(c.id) ?? null;
       const daysOverdue = oldest
         ? Math.max(0, Math.floor((today.getTime() - new Date(oldest).getTime()) / 86400000))
         : 0;
@@ -125,10 +107,10 @@ router.get('/outstanding', async (req: Request, res: Response) => {
         name: c.name,
         phone: c.phone,
         type: c.type,
-        outstanding: Math.round(a.outstanding * 100) / 100,
+        outstanding: a.outstanding,
         last_payment_date: a.last_payment,
-        total_sales: Math.round(a.total_sales * 100) / 100,
-        total_paid: Math.round(a.total_paid * 100) / 100,
+        total_sales: a.total_sales,
+        total_paid: a.total_paid,
         invoices: invoiceMap.get(c.id) ?? [],
         oldestSaleDate: oldest,
         daysOverdue,

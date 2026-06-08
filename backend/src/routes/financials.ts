@@ -42,10 +42,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { safeSum, safeQuery } from '../lib/safeSum';
 import { logRouteWarn } from '../lib/logger';
-import {
-  computeSupplierOutstanding,
-  type SupplierLedgerRow,
-} from '../lib/ledgerBalance';
+import { sumSupplierPayable } from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -72,29 +69,6 @@ function requireAdmin(req: Request, res: Response): boolean {
 }
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
-
-/** Total AP = Σ per-supplier outstanding (matches dashboard + supplier reports). */
-async function sumSupplierPayable(dealerId: string, asOf?: string | null): Promise<number> {
-  const rows = await db('supplier_ledger')
-    .where({ dealer_id: dealerId })
-    .modify((qb) => {
-      if (asOf) qb.where('entry_date', '<=', asOf);
-    })
-    .select('supplier_id', 'type', 'amount');
-
-  const bySupplier = new Map<string, SupplierLedgerRow[]>();
-  for (const row of rows as Array<{ supplier_id: string; type: string; amount: unknown }>) {
-    const list = bySupplier.get(row.supplier_id) ?? [];
-    list.push({ type: row.type, amount: Number(row.amount) || 0 });
-    bySupplier.set(row.supplier_id, list);
-  }
-
-  let total = 0;
-  for (const entryRows of bySupplier.values()) {
-    total += computeSupplierOutstanding(entryRows);
-  }
-  return Math.round(total * 100) / 100;
-}
 
 // ── Profit & Loss ──
 router.get('/p-and-l', async (req, res) => {

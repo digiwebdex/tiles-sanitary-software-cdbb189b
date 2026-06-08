@@ -25,7 +25,15 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
-import { computeSupplierBalance, computeCustomerBalance } from '../lib/ledgerBalance';
+import {
+  buildCustomerDueReportRows,
+  buildSupplierPayableReportRows,
+  fetchCustomerLedgerEntries,
+  fetchSupplierLedgerEntries,
+  groupCustomerLedger,
+  groupSupplierLedger,
+} from '../services/reportQueryService';
+import { computeSupplierBalance } from '../lib/ledgerBalance';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -524,40 +532,17 @@ router.get('/customer-due', async (req, res) => {
 
   try {
     const [ledger, customers] = await Promise.all([
-      db('customer_ledger')
-        .where({ dealer_id: dealerId })
-        .select('customer_id', 'amount', 'type'),
+      fetchCustomerLedgerEntries(dealerId),
       db('customers').where({ dealer_id: dealerId }).select('id', 'name', 'type'),
     ]);
-    const cm = new Map(customers.map((c: any) => [c.id, c]));
-    const byCustomer = new Map<string, Array<{ type: string; amount: number }>>();
-    for (const e of ledger as any[]) {
-      const cid = e.customer_id;
-      const rows = byCustomer.get(cid) ?? [];
-      rows.push({ type: e.type, amount: Number(e.amount) });
-      byCustomer.set(cid, rows);
-    }
-    const all = Array.from(byCustomer.entries())
-      .map(([cid, entryRows]) => {
-        const c: any = cm.get(cid);
-        const balance = computeCustomerBalance(entryRows);
-        const totalDebit = entryRows
-          .filter((r) => r.type === 'sale' || r.type === 'adjustment')
-          .reduce((sum, r) => sum + r.amount, 0);
-        const totalCredit = entryRows
-          .filter((r) => r.type === 'payment' || r.type === 'refund')
-          .reduce((sum, r) => sum + r.amount, 0);
-        return {
-          customerId: cid,
-          customerName: c?.name ?? '—',
-          customerType: c?.type ?? 'customer',
-          totalDebit: round2(totalDebit),
-          totalCredit: round2(totalCredit),
-          balance: round2(balance),
-        };
-      })
-      .filter((r) => r.balance > 0)
-      .sort((a, b) => b.balance - a.balance);
+    const cm = new Map(
+      (customers as Array<{ id: string; name: string; type: string }>).map((c) => [
+        c.id,
+        { name: c.name, type: c.type },
+      ]),
+    );
+    const grouped = groupCustomerLedger(ledger);
+    const all = buildCustomerDueReportRows(grouped, cm);
 
     res.json({
       rows: all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -578,37 +563,14 @@ router.get('/supplier-payable', async (req, res) => {
 
   try {
     const [ledger, suppliers] = await Promise.all([
-      db('supplier_ledger').where({ dealer_id: dealerId }).select('supplier_id', 'amount', 'type'),
+      fetchSupplierLedgerEntries(dealerId),
       db('suppliers').where({ dealer_id: dealerId }).select('id', 'name'),
     ]);
-    const sm = new Map(suppliers.map((s: any) => [s.id, s]));
-    const bySupplier = new Map<string, Array<{ type: string; amount: number }>>();
-    for (const e of ledger as any[]) {
-      const sid = e.supplier_id;
-      const rows = bySupplier.get(sid) ?? [];
-      rows.push({ type: e.type, amount: Number(e.amount) });
-      bySupplier.set(sid, rows);
-    }
-    const all = Array.from(bySupplier.entries())
-      .map(([sid, rows]) => {
-        const s: any = sm.get(sid);
-        const outstanding = computeSupplierBalance(rows);
-        const totalPurchase = rows
-          .filter((r) => r.type === 'purchase')
-          .reduce((sum, r) => sum + Math.abs(r.amount), 0);
-        const totalPaid = rows
-          .filter((r) => r.type === 'payment')
-          .reduce((sum, r) => sum + r.amount, 0);
-        return {
-          supplierId: sid,
-          supplierName: s?.name ?? '—',
-          totalDebit: round2(totalPurchase),
-          totalCredit: round2(totalPaid),
-          balance: round2(outstanding),
-        };
-      })
-      .filter((r) => r.balance > 0)
-      .sort((a, b) => b.balance - a.balance);
+    const sm = new Map(
+      (suppliers as Array<{ id: string; name: string }>).map((s) => [s.id, { name: s.name }]),
+    );
+    const grouped = groupSupplierLedger(ledger);
+    const all = buildSupplierPayableReportRows(grouped, sm);
 
     res.json({
       rows: all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -980,31 +942,23 @@ router.get('/supplier-outstanding', async (req, res) => {
   if (!requireFinancialRole(req, res)) return;
   try {
     const [ledger, suppliers] = await Promise.all([
-      db('supplier_ledger')
-        .where({ dealer_id: dealerId })
-        .select('supplier_id', 'amount', 'type'),
+      fetchSupplierLedgerEntries(dealerId),
       db('suppliers')
         .where({ dealer_id: dealerId })
         .select('id', 'name', 'phone', 'status'),
     ]);
     const suppMap = new Map<string, any>((suppliers as any[]).map((s) => [s.id, s]));
-    const bySupplier = new Map<string, Array<{ type: string; amount: number }>>();
-    for (const e of ledger as any[]) {
-      const sid = e.supplier_id;
-      const rows = bySupplier.get(sid) ?? [];
-      rows.push({ type: e.type, amount: Number(e.amount) });
-      bySupplier.set(sid, rows);
-    }
+    const bySupplier = groupSupplierLedger(ledger);
     const rows = Array.from(bySupplier.entries())
       .map(([sid, entryRows]) => {
         const s = suppMap.get(sid);
         const outstanding = computeSupplierBalance(entryRows);
         const totalPurchase = entryRows
           .filter((r) => r.type === 'purchase')
-          .reduce((sum, r) => sum + Math.abs(r.amount), 0);
+          .reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0);
         const totalPaid = entryRows
           .filter((r) => r.type === 'payment')
-          .reduce((sum, r) => sum + r.amount, 0);
+          .reduce((sum, r) => sum + Number(r.amount), 0);
         const paymentCount = entryRows.filter((r) => r.type === 'payment').length;
         return {
           supplierId: sid,
