@@ -18,6 +18,16 @@ import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
 import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
 import { recordCustomerPayment } from '../lib/customerPayment';
+import {
+  isPostingEngineEnabled,
+  mirrorToPostingTables,
+} from '../services/posting/PostingOrchestrator';
+import { buildSaleLedgerLines } from '../services/posting/LedgerPostingEngine';
+import {
+  buildSaleStockLines,
+  type SaleBatchAllocation,
+  type SaleStockPostedItem,
+} from '../services/posting/StockPostingEngine';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -490,12 +500,13 @@ router.post('/', async (req: Request, res: Response) => {
       // Tile (box_sft):  effectiveQty (boxes) × perBoxSft (sft/box) × avgCost (৳/sft) = ৳
       // Piece:           effectiveQty (pieces) × avgCost (৳/piece) = ৳
       // Throws InvalidProductPerBoxSftError if a tile product is missing per_box_sft.
-      totalCogs += computeLineCogs({
+      const lineCogs = computeLineCogs({
         unitType,
         effectiveQty,
         perBoxSft,
         avgCost,
       });
+      totalCogs += lineCogs;
 
       return {
         ...item,
@@ -508,6 +519,7 @@ router.post('/', async (req: Request, res: Response) => {
         perBoxSft,
         total: itemTotal,
         total_sft: itemSft,
+        lineCogs,
         available_qty_at_sale: availableQty,
         backorder_qty: shortage,
         fulfillment_status: shortage > 0 ? 'pending' : 'in_stock',
@@ -596,12 +608,16 @@ router.post('/', async (req: Request, res: Response) => {
       const saleItemIdsByIndex: string[] = insertedItems.map((r: any) => r.id);
 
       if (!isChallanMode) {
+        const postingStockItems: SaleStockPostedItem[] = [];
+
         // ── Per-item: batch allocation + stock deduction ──
         for (let idx = 0; idx < itemsCalc.length; idx++) {
           const item = itemsCalc[idx];
           const saleItemId = saleItemIdsByIndex[idx];
           const deductQty = Math.min(item.quantity, item.available_qty_at_sale);
           if (deductQty <= 0) continue;
+
+          let batchAllocationsForPost: SaleBatchAllocation[] | undefined;
 
           // Capture stock_before for stock_ledger audit (locks row).
           const stockBeforeRow = await trx('stock')
@@ -633,6 +649,7 @@ router.post('/', async (req: Request, res: Response) => {
               'SELECT public.deduct_stock_unbatched(?, ?, ?, ?, ?)',
               [item.product_id, dealerId, item.unitType, item.perBoxSft ?? 0, deductQty],
             );
+            batchAllocationsForPost = undefined;
           } else {
             // Customer's own reservations on each batch (treat as available to them)
             const customerRes = await trx('stock_reservations')
@@ -697,6 +714,14 @@ router.post('/', async (req: Request, res: Response) => {
                 [item.product_id, dealerId, item.unitType, item.perBoxSft ?? 0, stillNeeded],
               );
             }
+
+            batchAllocationsForPost =
+              allocations.length > 0
+                ? allocations.map((a) => ({
+                    productBatchId: a.batch_id,
+                    allocatedQty: a.allocated_qty,
+                  }))
+                : undefined;
           }
 
           // Consume explicitly selected reservations
@@ -732,16 +757,37 @@ router.post('/', async (req: Request, res: Response) => {
             stock_after_display: formatBoxPiece(stockAfterPieces, item.pieces_per_box),
             created_by: userId,
           });
+
+          const deductedPieces =
+            item.quantity > 0
+              ? Math.round(item.total_pieces * (deductQty / item.quantity))
+              : 0;
+          const itemCogs =
+            item.quantity > 0
+              ? Math.round(item.lineCogs * (deductQty / item.quantity) * 100) / 100
+              : 0;
+
+          postingStockItems.push({
+            saleItemId,
+            productId: item.product_id,
+            quantity: deductQty,
+            unitType: item.unitType,
+            totalPieces: -deductedPieces,
+            cogsAmount: itemCogs,
+            batchAllocations: batchAllocationsForPost,
+          });
         }
 
         // ── Ledger entries ──
+        const saleDesc = `Sale ${invoiceNumber}${hasBackorder ? ' (Backorder)' : ''}`;
+        const paymentDesc = `Payment received for ${invoiceNumber}`;
         await trx('customer_ledger').insert({
           dealer_id: dealerId,
           customer_id: customerId,
           sale_id: newSaleId,
           type: 'sale',
           amount: totalAmount,
-          description: `Sale ${invoiceNumber}${hasBackorder ? ' (Backorder)' : ''}`,
+          description: saleDesc,
           entry_date: input.sale_date,
         });
 
@@ -752,7 +798,7 @@ router.post('/', async (req: Request, res: Response) => {
             sale_id: newSaleId,
             type: 'payment',
             amount: input.paid_amount,
-            description: `Payment received for ${invoiceNumber}`,
+            description: paymentDesc,
             entry_date: input.sale_date,
           });
 
@@ -765,6 +811,38 @@ router.post('/', async (req: Request, res: Response) => {
             reference_id: newSaleId,
             entry_date: input.sale_date,
           });
+        }
+
+        // Phase 2 (P2-06): mirror stock + ledger effects into posting tables when enabled.
+        if (isPostingEngineEnabled()) {
+          await mirrorToPostingTables(
+            {
+              trx,
+              dealerId,
+              documentType: 'sale',
+              documentId: newSaleId,
+              eventType: 'posted',
+              entryDate: input.sale_date,
+              postedBy: userId,
+              idempotencyKey: `sale:post:${newSaleId}`,
+            },
+            [
+              ...buildSaleStockLines({
+                saleId: newSaleId,
+                entryDate: input.sale_date,
+                items: postingStockItems,
+              }),
+              ...buildSaleLedgerLines({
+                saleId: newSaleId,
+                customerId,
+                entryDate: input.sale_date,
+                totalAmount,
+                paidAmount: input.paid_amount,
+                description: saleDesc,
+                paymentDescription: paymentDesc,
+              }),
+            ],
+          );
         }
       }
 
