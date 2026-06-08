@@ -10,10 +10,15 @@
  * endpoint, but the frontend hides the financial widgets for them anyway.
  */
 import { Router, Request, Response } from 'express';
-import { computeSupplierBalance } from '../lib/ledgerBalance';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import {
+  getCustomerAggById,
+  getOldestUnpaidSaleDateByCustomer,
+  sumCustomerOutstandingFromSales,
+  sumSupplierPayable,
+} from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -96,16 +101,11 @@ router.get('/', async (req: Request, res: Response) => {
       .sum({ s: 'total_amount' })
       .first();
 
-    // Customer due (sum of due_amount across sales) and supplier payable
-    const custDue = await db('sales')
-      .where({ dealer_id: dealerId })
-      .sum({ s: 'due_amount' })
-      .first();
-
-    const supplierLedgerRows = await db('supplier_ledger')
-      .where({ dealer_id: dealerId })
-      .select('type', 'amount');
-    const supplierPayable = Math.max(0, computeSupplierBalance(supplierLedgerRows as any[]));
+    // Customer due (invoice headers) and supplier payable (ledger)
+    const [totalCustomerDue, supplierPayable] = await Promise.all([
+      sumCustomerOutstandingFromSales(dealerId),
+      sumSupplierPayable(dealerId),
+    ]);
 
     // Total stock value: sum(box_qty or piece_qty * cost_price)
     const stockValRow = await db.raw(
@@ -255,7 +255,7 @@ router.get('/', async (req: Request, res: Response) => {
       monthlyCollection: round2(monthColl?.s),
       monthlyProfit: round2(monthAgg?.profit),
       monthlyPurchase: round2(monthPurchase?.s),
-      totalCustomerDue: round2(custDue?.s),
+      totalCustomerDue,
       totalSupplierPayable: round2(supplierPayable),
       cashInHand: 0, // computed elsewhere; left at 0 until cash_ledger endpoint lands
       totalStockValue,
@@ -391,38 +391,22 @@ router.get('/top-overdue', async (req: Request, res: Response) => {
   if (!dealerId) return;
 
   try {
-    const [custs, ledger] = await Promise.all([
+    const [custs, aggMap, oldestMap] = await Promise.all([
       db('customers')
         .where({ dealer_id: dealerId, status: 'active' })
         .select('id', 'name', 'phone', 'max_overdue_days'),
-      db('customer_ledger')
-        .where({ dealer_id: dealerId })
-        .select('customer_id', 'amount', 'type', 'entry_date'),
+      getCustomerAggById(dealerId),
+      getOldestUnpaidSaleDateByCustomer(dealerId),
     ]);
-
-    const dueMap = new Map<string, { outstanding: number; oldestSaleDate: string | null }>();
-    for (const e of ledger as any[]) {
-      const cur = dueMap.get(e.customer_id) ?? { outstanding: 0, oldestSaleDate: null };
-      const amt = Number(e.amount) || 0;
-      const dateStr = e.entry_date ? String(e.entry_date).slice(0, 10) : null;
-      if (e.type === 'sale') {
-        cur.outstanding += amt;
-        if (dateStr && (!cur.oldestSaleDate || dateStr < cur.oldestSaleDate)) cur.oldestSaleDate = dateStr;
-      } else if (e.type === 'payment' || e.type === 'refund') {
-        cur.outstanding -= amt;
-      } else if (e.type === 'adjustment') {
-        cur.outstanding += amt;
-      }
-      dueMap.set(e.customer_id, cur);
-    }
 
     const today = new Date();
     const out = (custs as any[])
       .map((c) => {
-        const info = dueMap.get(c.id);
-        const outstanding = round2(info?.outstanding ?? 0);
-        const daysOverdue = info?.oldestSaleDate
-          ? Math.floor((today.getTime() - new Date(info.oldestSaleDate).getTime()) / 86400000)
+        const a = aggMap.get(c.id);
+        const outstanding = round2(a?.outstanding ?? 0);
+        const oldestSaleDate = oldestMap.get(c.id) ?? null;
+        const daysOverdue = oldestSaleDate
+          ? Math.floor((today.getTime() - new Date(oldestSaleDate).getTime()) / 86400000)
           : 0;
         return { id: c.id, name: c.name, phone: c.phone, outstanding, daysOverdue };
       })
@@ -468,40 +452,25 @@ router.get('/customer-due-balances', async (req: Request, res: Response) => {
       return;
     }
 
-    const [ledger, sales] = await Promise.all([
-      db('customer_ledger')
-        .where({ dealer_id: dealerId })
-        .whereIn('customer_id', ids)
-        .select('customer_id', 'amount', 'type'),
-      db('sales')
-        .where({ dealer_id: dealerId })
-        .whereIn('customer_id', ids)
-        .where('due_amount', '>', 0)
-        .orderBy('sale_date', 'asc')
-        .select('customer_id', 'sale_date', 'due_amount'),
+    const [aggMap, oldestMap] = await Promise.all([
+      getCustomerAggById(dealerId, ids),
+      getOldestUnpaidSaleDateByCustomer(dealerId, ids),
     ]);
-
     const sums: Record<string, { due: number; daysOverdue: number }> = {};
-    for (const r of ledger as any[]) {
-      const amt = Number(r.amount) || 0;
-      if (!sums[r.customer_id]) sums[r.customer_id] = { due: 0, daysOverdue: 0 };
-      if (r.type === 'sale') sums[r.customer_id].due += amt;
-      else if (r.type === 'payment' || r.type === 'refund') sums[r.customer_id].due -= amt;
-      else if (r.type === 'adjustment') sums[r.customer_id].due += amt;
+    for (const id of ids) {
+      const a = aggMap.get(id);
+      sums[id] = { due: round2(a?.outstanding ?? 0), daysOverdue: 0 };
     }
 
     const today = new Date();
-    const oldest = new Map<string, string>();
-    for (const s of sales as any[]) {
-      if (!oldest.has(s.customer_id)) oldest.set(s.customer_id, String(s.sale_date).slice(0, 10));
-    }
-    for (const [cid, date] of oldest) {
+    for (const [cid, date] of oldestMap) {
       if (sums[cid]) {
-        sums[cid].daysOverdue = Math.max(0, Math.floor((today.getTime() - new Date(date).getTime()) / 86400000));
+        sums[cid].daysOverdue = Math.max(
+          0,
+          Math.floor((today.getTime() - new Date(date).getTime()) / 86400000),
+        );
       }
     }
-    // round dues
-    for (const k of Object.keys(sums)) sums[k].due = round2(sums[k].due);
 
     res.json({ rows: sums });
   } catch (err: any) {

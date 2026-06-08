@@ -58,7 +58,13 @@ export const collectionsService = {
   /** Record payment against oldest due invoices (FIFO) for a customer. */
   async recordPayment(
     dealerId: string,
-    input: { customer_id: string; amount: number; note?: string; payment_mode?: string },
+    input: {
+      customer_id: string;
+      amount: number;
+      note?: string;
+      payment_mode?: string;
+      paid_account_id?: string | null;
+    },
   ) {
     return await vpsRequest<{
       ok: boolean;

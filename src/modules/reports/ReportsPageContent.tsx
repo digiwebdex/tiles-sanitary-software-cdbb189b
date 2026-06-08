@@ -1766,9 +1766,11 @@ function PaymentsReport({ dealerId }: { dealerId: string }) {
           paymentRef: string;
           saleRef: string;
           purchaseRef: string;
-          paidBy: string;
+          partyName: string;
+          paidVia: string;
           amount: number;
           type: string;
+          direction: "in" | "out";
         }>,
         total: body.total ?? 0,
       };
@@ -1781,7 +1783,12 @@ function PaymentsReport({ dealerId }: { dealerId: string }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
-        <CardTitle className="text-base">Payments Report</CardTitle>
+        <div>
+          <CardTitle className="text-base">Payments Report</CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Customer receipts and supplier payments
+          </p>
+        </div>
         <Input
           placeholder="Search…"
           className="max-w-xs"
@@ -1800,7 +1807,8 @@ function PaymentsReport({ dealerId }: { dealerId: string }) {
                     <TableHead>Payment Reference</TableHead>
                     <TableHead>Sale Reference</TableHead>
                     <TableHead>Purchase Reference</TableHead>
-                    <TableHead>Paid by</TableHead>
+                    <TableHead>Party</TableHead>
+                    <TableHead>Account</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Type</TableHead>
                   </TableRow>
@@ -1817,10 +1825,23 @@ function PaymentsReport({ dealerId }: { dealerId: string }) {
                       <TableCell className="font-mono text-sm">{r.paymentRef}</TableCell>
                       <TableCell className="font-mono text-sm">{r.saleRef}</TableCell>
                       <TableCell className="font-mono text-sm">{r.purchaseRef || "—"}</TableCell>
-                      <TableCell>{r.paidBy}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(r.amount)}</TableCell>
+                      <TableCell>{r.partyName}</TableCell>
+                      <TableCell>{r.paidVia}</TableCell>
+                      <TableCell className={`text-right font-medium ${r.direction === "out" ? "text-destructive" : "text-emerald-700"}`}>
+                        {r.direction === "out" ? "−" : "+"}{formatCurrency(r.amount)}
+                      </TableCell>
                       <TableCell>
-                        <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs">{r.type}</Badge>
+                        <Badge
+                          className={
+                            r.direction === "out"
+                              ? "bg-orange-600 text-white hover:bg-orange-700 text-xs"
+                              : r.type === "Return Paid"
+                                ? "bg-amber-600 text-white hover:bg-amber-700 text-xs"
+                                : "bg-green-600 text-white hover:bg-green-700 text-xs"
+                          }
+                        >
+                          {r.type}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}

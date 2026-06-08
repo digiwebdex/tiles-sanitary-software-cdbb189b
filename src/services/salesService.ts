@@ -309,7 +309,12 @@ export const salesService = {
   /** Atomic payment on a specific invoice — updates ledger + sale due. */
   async recordPayment(
     saleId: string,
-    input: { amount: number; note?: string; payment_mode?: string },
+    input: {
+      amount: number;
+      note?: string;
+      payment_mode?: string;
+      paid_account_id?: string | null;
+    },
   ) {
     return await vpsRequest<{ ok: boolean; allocations: Array<{ saleId: string; invoiceNumber: string | null; amount: number }>; totalApplied: number }>(
       `/api/sales/${saleId}/payment`,

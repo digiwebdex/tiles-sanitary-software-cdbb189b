@@ -42,6 +42,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { safeSum, safeQuery } from '../lib/safeSum';
 import { logRouteWarn } from '../lib/logger';
+import { sumSupplierPayable } from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -257,20 +258,10 @@ router.get('/balance-sheet', async (req, res) => {
     },
   );
 
-  // ── Accounts payable: outstanding supplier ledger (positive only) ──
-  const payable = Math.max(
-    0,
-    await safeSum(
-      { route: 'financials.bs.ap', label: 'Accounts Payable', warnings, context: ctx },
-      async () => {
-        const row = await db('supplier_ledger')
-          .where({ dealer_id: dealerId })
-          .modify(qb => { if (asOf) qb.where('entry_date', '<=', asOf); })
-          .sum({ total: 'amount' })
-          .first();
-        return num(row?.total);
-      },
-    ),
+  // ── Accounts payable: per-supplier balance via computeSupplierOutstanding ──
+  const payable = await safeSum(
+    { route: 'financials.bs.ap', label: 'Accounts Payable', warnings, context: ctx },
+    () => sumSupplierPayable(dealerId, asOf),
   );
 
   // ── Director capital = deposits − withdrawals − dividends ──
@@ -399,12 +390,7 @@ router.get('/trial-balance', async (req, res) => {
   // ─ Liability accounts (Credit → negative debit) ─
   const apTotal = await safeSum(
     { route: 'financials.tb.ap', label: 'Accounts Payable', warnings, context: ctx },
-    async () => {
-      const row = await db('supplier_ledger').where({ dealer_id: dealerId })
-        .modify(qb => { if (asOf) qb.where('entry_date', '<=', asOf); })
-        .sum({ total: 'amount' }).first();
-      return Math.max(0, num(row?.total));
-    },
+    () => sumSupplierPayable(dealerId, asOf),
   );
   if (apTotal > 0) push('Accounts Payable', -apTotal);
 

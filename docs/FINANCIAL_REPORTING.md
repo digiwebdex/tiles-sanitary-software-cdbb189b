@@ -46,7 +46,7 @@ tracking on `sales_returns`.
 | `assets.bank_total` and `assets.bank_accounts[*].balance` | `SUM(bank_ledger.amount) GROUP BY bank_account_id` up to `as_of`. |
 | `assets.inventory` | `Σ stock_row × cost_price`, branched by `unit_type`. Uses the product master `cost_price` (not weighted-average) for now — refinement is a Phase 2 item. |
 | `assets.accounts_receivable` | `SUM(GREATEST(0, sales.total_amount − sales.paid_amount))` clamped per-sale up to `as_of`. |
-| `liabilities.accounts_payable` | `MAX(0, SUM(supplier_ledger.amount))` up to `as_of`. |
+| `liabilities.accounts_payable` | `sumSupplierPayable()` from `backend/src/services/reportQueryService.ts` — Σ per-supplier `computeSupplierOutstanding()` (matches Dashboard and Supplier Payables). **Do not use raw `SUM(supplier_ledger.amount)`.** |
 | `equity.director_capital` | `Σ deposits − Σ withdrawals − Σ dividends` from `director_transactions`. |
 | `equity.retained_earnings` | `(assets − liabilities) − director_capital`. |
 | `warnings[]` | dynamic; populated by `safeSum/safeQuery` on any computation failure. |
@@ -68,13 +68,35 @@ Important per-account sources:
 | `Bank — <name> (<acct no>)` | `bank_ledger.amount` sum per account |
 | `Inventory` | `stock × cost_price` per `unit_type` |
 | `Accounts Receivable` | clamped unpaid-sale sum |
-| `Accounts Payable` | positive supplier ledger sum |
+| `Accounts Payable` | `sumSupplierPayable()` — per-supplier outstanding (Phase 1 fix) |
 | `Director Capital` | director transactions net |
 | `Sales Revenue` | `SUM(sales.total_amount)` |
 | `Sales Returns` | `SUM(sales_returns.refund_amount)` — fixed in Phase 1 |
 | `Cost of Goods Sold` | `SUM(sales.cogs)` — fixed in Phase 1 |
 | `Expense — <category>` | `SUM(expenses.amount) GROUP BY category` |
 | `Journal — <account>` | `SUM(jel.debit) − SUM(jel.credit)` per `jel.account` |
+
+---
+
+## Canonical balance sources (Phase 1 — ReportQueryService)
+
+All customer/supplier **due** and **payable** figures must flow through
+`backend/src/services/reportQueryService.ts` and
+`backend/src/lib/ledgerBalance.ts`. Do not add new inline balance SQL in
+route handlers.
+
+| Concept | Canonical function | Used by |
+|---------|-------------------|---------|
+| Customer due (per customer) | `computeCustomerBalance()` / `aggregateCustomerLedger()` | Collections, Customer Due report, dashboard widgets |
+| Customer due (grand total, invoices) | `sumCustomerOutstandingFromSales()` | Dashboard total, Due Aging |
+| Customer due (grand total, ledger) | `sumCustomerOutstandingFromLedger()` | Parity checks vs Collections |
+| Supplier payable (per supplier) | `computeSupplierOutstanding()` | Supplier Payable / Outstanding reports |
+| Supplier payable (grand total) | `sumSupplierPayable()` | Dashboard, Balance Sheet AP, Trial Balance AP |
+
+**Parity expectation (fresh data):** After every payment through
+`recordCustomerPayment()` or `recordSales` payment paths, ledger balance
+and `sales.due_amount` headers stay in sync within ৳0.01. Automated
+fixtures live in `src/test/reportParity.test.ts`.
 
 ---
 

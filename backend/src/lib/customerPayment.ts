@@ -6,6 +6,8 @@ export interface RecordCustomerPaymentInput {
   amount: number;
   note?: string;
   payment_mode?: string;
+  /** bank_accounts.id — null/undefined = cash */
+  paid_account_id?: string | null;
   /** When set, entire payment applies to this sale only. */
   saleId?: string;
   entry_date?: string;
@@ -36,7 +38,7 @@ type SaleRow = {
  *   - Applies to a specific sale (saleId) OR oldest due invoices first (FIFO).
  *   - Inserts customer_ledger payment rows (positive amounts).
  *   - Updates sales.paid_amount / sales.due_amount per allocation.
- *   - Inserts one cash_ledger receipt for the total applied.
+ *   - Inserts one cash_ledger or bank_ledger receipt for the total applied.
  */
 export async function recordCustomerPayment(
   trx: Knex.Transaction,
@@ -52,6 +54,14 @@ export async function recordCustomerPayment(
     .where({ id: input.customerId, dealer_id: input.dealerId })
     .first('name');
   if (!customer) throw new Error('Customer not found');
+
+  const paidAccountId = input.paid_account_id ?? null;
+  if (paidAccountId) {
+    const acct = await trx('bank_accounts')
+      .where({ id: paidAccountId, dealer_id: input.dealerId })
+      .first('id');
+    if (!acct) throw new Error('paid_account_id not found for this dealer');
+  }
 
   let salesToPay: SaleRow[];
 
@@ -139,17 +149,33 @@ export async function recordCustomerPayment(
   }
 
   const totalApplied = round2(input.amount - remaining);
+  const receiptDescription = `Payment from ${customer.name}: ${input.note?.trim() || 'Collection'}`;
+  const referenceId = allocations[0]?.saleId ?? null;
 
-  await trx('cash_ledger').insert({
-    dealer_id: input.dealerId,
-    type: 'receipt',
-    amount: totalApplied,
-    description: `Payment from ${customer.name}: ${input.note?.trim() || 'Collection'}`,
-    reference_type: 'customer_payment',
-    reference_id: allocations[0]?.saleId ?? null,
-    entry_date: entryDate,
-    ...(input.payment_mode ? { payment_mode: input.payment_mode } : {}),
-  });
+  if (paidAccountId) {
+    await trx('bank_ledger').insert({
+      dealer_id: input.dealerId,
+      bank_account_id: paidAccountId,
+      type: 'receipt',
+      amount: totalApplied,
+      description: receiptDescription,
+      reference_type: 'customer_payment',
+      reference_id: referenceId,
+      entry_date: entryDate,
+      created_by: null,
+    });
+  } else {
+    await trx('cash_ledger').insert({
+      dealer_id: input.dealerId,
+      type: 'receipt',
+      amount: totalApplied,
+      description: receiptDescription,
+      reference_type: 'customer_payment',
+      reference_id: referenceId,
+      entry_date: entryDate,
+      ...(input.payment_mode ? { payment_mode: input.payment_mode } : {}),
+    });
+  }
 
   return { allocations, totalApplied };
 }

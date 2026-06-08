@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Search, Wallet, AlertTriangle, CheckCircle, DollarSign, TrendingDown, CalendarIcon, X, Download, Printer, MessageSquare, BookOpen, Clock, MessageSquareText, MessageCircle } from "lucide-react";
+import { bankAccountService } from "@/services/bankAccountService";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -80,6 +81,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
   const [payDialog, setPayDialog] = useState<{ open: boolean; customer?: CustomerOutstanding }>({ open: false });
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+  const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [sortBy, setSortBy] = useState<SortOption>("highest");
@@ -115,12 +117,29 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
     queryFn: () => collectionsService.listRecent(dealerId, 20),
   });
 
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId,
+  });
+
   const recordPayment = useMutation({
-    mutationFn: async ({ customerId, amount, note }: { customerId: string; amount: number; note: string }) => {
+    mutationFn: async ({
+      customerId,
+      amount,
+      note,
+      paid_account_id,
+    }: {
+      customerId: string;
+      amount: number;
+      note: string;
+      paid_account_id?: string | null;
+    }) => {
       return collectionsService.recordPayment(dealerId, {
         customer_id: customerId,
         amount,
         note: note || undefined,
+        paid_account_id: paid_account_id ?? null,
       });
     },
     onSuccess: (result, variables) => {
@@ -139,7 +158,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
       queryClient.invalidateQueries({ queryKey: ["recent-collections"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-top-overdue"] });
       queryClient.invalidateQueries({ queryKey: ["sale"] });
-      setPayDialog({ open: false }); setPayAmount(""); setPayNote("");
+      setPayDialog({ open: false }); setPayAmount(""); setPayNote(""); setPaidAccountId(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -502,6 +521,25 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
               ))}
             </div>
             <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <Wallet className="h-3 w-3" /> Received Into
+              </Label>
+              <Select
+                value={paidAccountId ?? "__cash__"}
+                onValueChange={(v) => setPaidAccountId(v === "__cash__" ? null : v)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__cash__">Cash in Hand</SelectItem>
+                  {bankAccounts.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.bank_name} — {b.account_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Note (optional)</Label>
               <Textarea placeholder="Collection note..." value={payNote} onChange={(e) => setPayNote(e.target.value)} rows={2} />
             </div>
@@ -512,7 +550,12 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
               disabled={!payAmount || Number(payAmount) <= 0 || recordPayment.isPending}
               onClick={() => {
                 if (!payDialog.customer) return;
-                recordPayment.mutate({ customerId: payDialog.customer.id, amount: Number(payAmount), note: payNote });
+                recordPayment.mutate({
+                  customerId: payDialog.customer.id,
+                  amount: Number(payAmount),
+                  note: payNote,
+                  paid_account_id: paidAccountId,
+                });
               }}
             >
               {recordPayment.isPending ? "Recording..." : "Record Payment"}
