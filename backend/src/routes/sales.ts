@@ -169,16 +169,17 @@ router.get('/:id/returns', async (req: Request, res: Response) => {
 
 // ── POST /api/sales/:id/payment ────────────────────────────────────────────
 // Atomic payment recording for an existing sale.
-//   Body: { amount, note?, payment_mode? }
+//   Body: { amount, note?, payment_mode?, paid_account_id? }
 // Side effects (one transaction):
 //   1. Insert customer_ledger row (type='payment')
-//   2. Insert cash_ledger row (type='receipt')
+//   2. Insert cash_ledger or bank_ledger row (type='receipt')
 //   3. UPDATE sales.paid_amount + due_amount
 // Replaces the previous unsafe inline supabase update from InvoicePage.
 const paymentSchema = z.object({
   amount: z.coerce.number().positive(),
   note: z.string().trim().max(500).optional(),
   payment_mode: z.string().trim().max(50).optional(),
+  paid_account_id: z.string().uuid().optional().nullable(),
 });
 router.post('/:id/payment', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
@@ -188,7 +189,7 @@ router.post('/:id/payment', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
     return;
   }
-  const { amount, note, payment_mode } = parsed.data;
+  const { amount, note, payment_mode, paid_account_id } = parsed.data;
 
   try {
     const result = await db.transaction(async (trx) => {
@@ -205,6 +206,7 @@ router.post('/:id/payment', async (req: Request, res: Response) => {
         amount,
         note,
         payment_mode,
+        paid_account_id,
       });
     });
     res.json({ ok: true, ...result });

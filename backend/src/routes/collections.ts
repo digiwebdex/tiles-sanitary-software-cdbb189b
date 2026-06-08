@@ -136,6 +136,7 @@ const collectionPaymentSchema = z.object({
   amount: z.coerce.number().positive(),
   note: z.string().trim().max(500).optional(),
   payment_mode: z.string().trim().max(50).optional(),
+  paid_account_id: z.string().uuid().optional().nullable(),
 });
 
 router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'salesman'), async (req: Request, res: Response) => {
@@ -148,7 +149,7 @@ router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'sa
     return;
   }
 
-  const { customer_id, amount, note, payment_mode } = parsed.data;
+  const { customer_id, amount, note, payment_mode, paid_account_id } = parsed.data;
 
   try {
     const result = await db.transaction(async (trx) =>
@@ -158,6 +159,7 @@ router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'sa
         amount,
         note,
         payment_mode,
+        paid_account_id,
       }),
     );
     res.status(201).json({ ok: true, ...result });

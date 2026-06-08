@@ -10,7 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Printer, Download, Pencil, Truck, Mail, CreditCard, Trash2, X, FileText } from "lucide-react";
+import { Printer, Download, Pencil, Truck, Mail, CreditCard, Trash2, X, FileText, Wallet } from "lucide-react";
+import { bankAccountService } from "@/services/bankAccountService";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
 import { useDealerId } from "@/hooks/useDealerId";
@@ -30,6 +38,7 @@ const InvoicePage = () => {
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+  const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
 
   const { data: sale, isLoading } = useQuery({
     queryKey: ["sale", id],
@@ -58,9 +67,28 @@ const InvoicePage = () => {
     queryFn: () => projectService.getProjectAndSite(dealerId, projectId, siteId),
     enabled: !!sale && (!!projectId || !!siteId),
   });
+
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId,
+  });
+
   const paymentMutation = useMutation({
-    mutationFn: async ({ amount, note }: { amount: number; note: string }) => {
-      return salesService.recordPayment(id!, { amount, note: note || undefined });
+    mutationFn: async ({
+      amount,
+      note,
+      paid_account_id,
+    }: {
+      amount: number;
+      note: string;
+      paid_account_id?: string | null;
+    }) => {
+      return salesService.recordPayment(id!, {
+        amount,
+        note: note || undefined,
+        paid_account_id: paid_account_id ?? null,
+      });
     },
     onSuccess: () => {
       toast.success("Payment recorded successfully");
@@ -70,6 +98,7 @@ const InvoicePage = () => {
       setPayOpen(false);
       setPayAmount("");
       setPayNote("");
+      setPaidAccountId(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -98,7 +127,7 @@ const InvoicePage = () => {
       toast.error(`Amount cannot exceed due balance of ৳${dueAmount.toLocaleString()}`);
       return;
     }
-    paymentMutation.mutate({ amount: amt, note: payNote });
+    paymentMutation.mutate({ amount: amt, note: payNote, paid_account_id: paidAccountId });
   };
 
   return (
@@ -275,6 +304,27 @@ const InvoicePage = () => {
                   </Button>
                 ))}
               </div>
+            </div>
+
+            {/* Received into */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <Wallet className="h-3 w-3" /> Received Into
+              </Label>
+              <Select
+                value={paidAccountId ?? "__cash__"}
+                onValueChange={(v) => setPaidAccountId(v === "__cash__" ? null : v)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__cash__">Cash in Hand</SelectItem>
+                  {bankAccounts.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.bank_name} — {b.account_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Note */}
