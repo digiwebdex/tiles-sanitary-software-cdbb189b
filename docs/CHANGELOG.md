@@ -25,7 +25,19 @@
 
 ---
 
-## [2026-06-08] — Fix purchase "Not authenticated" on submit
+## [2026-06-08] — VPS database setup fix (postgres auth error)
+
+### Fixed
+- **`loadBackendEnv`** — production now prefers `DB_PASSWORD` + component vars over stale `DATABASE_URL=postgres://...` copy-paste configs.
+- Added `databaseUrl.ts` helper with canonical defaults (`tileserp@127.0.0.1:5440`).
+
+### Added
+- `scripts/vps-db-doctor.sh` — diagnose DB connection on VPS.
+- `scripts/vps-fresh-setup.sh` — one-command fresh DB + migrations + PM2 restart.
+- `backend/src/scripts/dbDoctor.ts` — `npm run db:doctor` connectivity test.
+- `docs/VPS_FRESH_DEPLOY.md` — step-by-step fix for `password authentication failed for user "postgres"`.
+
+---
 
 ### Fixed
 - **Purchase create auth** — `getAuthenticatedDealerId()` now re-fetches `/api/auth/me` when access token exists but `vps.user` is missing from localStorage.

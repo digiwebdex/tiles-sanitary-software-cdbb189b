@@ -8,7 +8,7 @@
 ## 🚀 Full Deployment (One-Liner — PRODUCTION TESTED)
 
 ```bash
-cd /var/www/tilessaas && git pull && npm install && npm run build && cd backend && npm install && set -a && . .env && set +a && npx knex migrate:latest --knexfile src/db/knexfile.ts && pm2 restart tilessaas-api && pm2 save && sleep 2 && curl -s http://127.0.0.1:3003/api/health
+cd /var/www/tilessaas && git pull && npm install && npm run build && cd backend && npm install && set -a && source /var/www/tilessaas/.env && set +a && npx knex migrate:latest --knexfile src/db/knexfile.ts && pm2 restart tilessaas-api && pm2 save && sleep 2 && curl -s http://127.0.0.1:3003/api/health
 ```
 
 **Expected Output:** `{"status":"ok","database":"connected"}`
@@ -43,9 +43,11 @@ npm install
 
 ### Step 5: Load Environment Variables
 ```bash
-set -a && . .env && set +a
+# Use ROOT env (not backend/.env) for database config
+set -a && source /var/www/tilessaas/.env && set +a
 ```
-**Note:** Backend `.env` is NOT in git — maintained directly on VPS
+**Note:** Set `DB_PASSWORD`, `DB_USER=tileserp`, `DB_PORT=5440` in `/var/www/tilessaas/.env`.  
+**Do NOT** use `DATABASE_URL=postgres://postgres:...` — see `docs/VPS_FRESH_DEPLOY.md`.
 
 ### Step 6: Run Database Migrations
 ```bash

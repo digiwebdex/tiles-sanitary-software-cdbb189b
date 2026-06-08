@@ -9,7 +9,8 @@
     "migrate:latest": "knex migrate:latest --knexfile src/db/knexfile.ts",
     "migrate:rollback": "knex migrate:rollback --knexfile src/db/knexfile.ts",
     "migrate:make": "knex migrate:make --knexfile src/db/knexfile.ts",
-    "seed": "knex seed:run --knexfile src/db/knexfile.ts"
+    "seed": "knex seed:run --knexfile src/db/knexfile.ts",
+    "db:doctor": "tsx src/scripts/dbDoctor.ts"
   },
   "dependencies": {
     "@types/multer": "^2.1.0",
