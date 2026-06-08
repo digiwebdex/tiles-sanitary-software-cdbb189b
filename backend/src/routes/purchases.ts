@@ -39,6 +39,15 @@ import { formatBoxPiece } from '../lib/units';
 import { attachPurchasePaymentSummaries, buildPurchasePaymentSummary, sumPurchaseLedgerPayments } from '../lib/purchasePaymentSummary';
 import { recordSupplierPayment } from '../lib/supplierPayment';
 import { requireRole } from '../middleware/roles';
+import {
+  isPostingEngineEnabled,
+  mirrorToPostingTables,
+} from '../services/posting/PostingOrchestrator';
+import { buildPurchaseLedgerLines } from '../services/posting/LedgerPostingEngine';
+import {
+  buildPurchaseStockLines,
+  type PurchaseStockPostedItem,
+} from '../services/posting/StockPostingEngine';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -537,6 +546,7 @@ router.post('/', async (req: Request, res: Response) => {
       const itemIdsByIndex: string[] = inserted.map((r: any) => r.id);
 
       const allocationsToRun: { productId: string; qty: number; purchaseItemId: string }[] = [];
+      const postingStockItems: PurchaseStockPostedItem[] = [];
 
       // Per-item: batch + stock + avg cost
       for (let idx = 0; idx < itemsCalc.length; idx++) {
@@ -615,6 +625,17 @@ router.post('/', async (req: Request, res: Response) => {
 
         // Link purchase_item → batch
         await trx('purchase_items').where({ id: purchaseItemId }).update({ batch_id: batchId });
+
+        postingStockItems.push({
+          purchaseItemId,
+          productId: item.product_id,
+          productBatchId: batchId,
+          quantity: item.quantity,
+          unitType: x.unitType,
+          totalPieces: x.totalPieces,
+          totalSft: x.totalSft,
+          landedCost: x.landed,
+        });
 
         // ── Aggregate stock add ──
         const stockRow = await trx('stock')
@@ -771,9 +792,11 @@ router.post('/', async (req: Request, res: Response) => {
 
       // ── Supplier ledger (Phase 3U-31 aware) ──
       // We owe the supplier the net (after voucher discount).
+      const invoiceLabel = input.invoice_number || purchaseRowId;
       const supplierDesc = voucherDiscount > 0
-        ? `Purchase ${input.invoice_number || purchaseRowId} (disc ${voucherDiscount})`
-        : `Purchase ${input.invoice_number || purchaseRowId}`;
+        ? `Purchase ${invoiceLabel} (disc ${voucherDiscount})`
+        : `Purchase ${invoiceLabel}`;
+      const paymentDesc = `Payment on purchase ${invoiceLabel}`;
       await trx('supplier_ledger').insert({
         dealer_id: dealerId,
         supplier_id: input.supplier_id,
@@ -794,7 +817,7 @@ router.post('/', async (req: Request, res: Response) => {
           purchase_id: purchaseRowId,
           type: 'payment',
           amount: paidOnCreate,
-          description: `Payment on purchase ${input.invoice_number || purchaseRowId}`,
+          description: paymentDesc,
           entry_date: input.purchase_date,
         });
 
@@ -804,7 +827,7 @@ router.post('/', async (req: Request, res: Response) => {
             bank_account_id: paidAccountId,
             type: 'payment',
             amount: -paidOnCreate,
-            description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
+            description: `Purchase payment: ${invoiceLabel}`,
             reference_type: 'purchases',
             reference_id: purchaseRowId,
             entry_date: input.purchase_date,
@@ -815,12 +838,45 @@ router.post('/', async (req: Request, res: Response) => {
             dealer_id: dealerId,
             type: 'payment',
             amount: -paidOnCreate,
-            description: `Purchase payment: ${input.invoice_number || purchaseRowId}`,
+            description: `Purchase payment: ${invoiceLabel}`,
             reference_type: 'purchases',
             reference_id: purchaseRowId,
             entry_date: input.purchase_date,
           });
         }
+      }
+
+      // Phase 2 (P2-05): mirror stock + ledger effects into posting tables when enabled.
+      if (isPostingEngineEnabled()) {
+        await mirrorToPostingTables(
+          {
+            trx,
+            dealerId,
+            documentType: 'purchase',
+            documentId: purchaseRowId,
+            eventType: 'posted',
+            entryDate: input.purchase_date,
+            postedBy: userId,
+            idempotencyKey: `purchase:post:${purchaseRowId}`,
+          },
+          [
+            ...buildPurchaseStockLines({
+              purchaseId: purchaseRowId,
+              entryDate: input.purchase_date,
+              items: postingStockItems,
+            }),
+            ...buildPurchaseLedgerLines({
+              purchaseId: purchaseRowId,
+              supplierId: input.supplier_id,
+              entryDate: input.purchase_date,
+              netPayable,
+              paidOnCreate,
+              paidAccountId,
+              description: supplierDesc,
+              paymentDescription: paymentDesc,
+            }),
+          ],
+        );
       }
 
       // ── Audit log ──
