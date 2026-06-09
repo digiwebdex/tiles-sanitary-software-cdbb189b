@@ -514,6 +514,9 @@ router.post('/', async (req: Request, res: Response) => {
           paid_account_id: paidAccountId,
           notes: input.notes?.trim() || null,
           created_by: userId,
+          document_status: 'posted',
+          posted_at: trx.fn.now(),
+          posted_by: userId,
         })
         .returning('id');
       const purchaseRowId = purchase.id;
@@ -848,7 +851,7 @@ router.post('/', async (req: Request, res: Response) => {
 
       // Phase 2 (P2-05): mirror stock + ledger effects into posting tables when enabled.
       if (isPostingEngineEnabled()) {
-        await mirrorToPostingTables(
+        const posting = await mirrorToPostingTables(
           {
             trx,
             dealerId,
@@ -877,6 +880,9 @@ router.post('/', async (req: Request, res: Response) => {
             }),
           ],
         );
+        await trx('purchases')
+          .where({ id: purchaseRowId })
+          .update({ posting_batch_id: posting.batchId });
       }
 
       // ── Audit log ──
