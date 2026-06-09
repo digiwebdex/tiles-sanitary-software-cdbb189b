@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useDealerId } from "@/hooks/useDealerId";
-import { supabase } from "@/integrations/supabase/client";
+import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,41 @@ import { DemandPlanningSettingsCard } from "@/components/DemandPlanningSettingsC
 import WhatsAppSettingsCard from "@/components/whatsapp/WhatsAppSettingsCard";
 import { SmtpSettingsCard } from "@/components/settings/SmtpSettingsCard";
 
+type DealerSettingsRow = {
+  id: string;
+  name: string;
+  allow_backorder: boolean;
+  default_wastage_pct: number;
+  dual_unit_enabled: boolean;
+};
+
+async function fetchDealerSettings(dealerId: string): Promise<DealerSettingsRow> {
+  const res = await vpsAuthedFetch(`/api/dealer-settings?dealerId=${encodeURIComponent(dealerId)}`);
+  const body = await res.json().catch(() => ({} as any));
+  if (!res.ok) {
+    const msg = (body as any)?.error || `Failed to load settings (${res.status})`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  return (body as any).dealer as DealerSettingsRow;
+}
+
+async function patchDealerSettings(
+  dealerId: string,
+  patch: Partial<Pick<DealerSettingsRow, "allow_backorder" | "default_wastage_pct" | "dual_unit_enabled">>,
+): Promise<DealerSettingsRow> {
+  const res = await vpsAuthedFetch(`/api/dealer-settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dealerId, ...patch }),
+  });
+  const body = await res.json().catch(() => ({} as any));
+  if (!res.ok) {
+    const msg = (body as any)?.error || `Failed to save settings (${res.status})`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  return (body as any).dealer as DealerSettingsRow;
+}
+
 const SettingsPage = () => {
   const { isDealerAdmin } = usePermissions();
   const dealerId = useDealerId();
@@ -26,15 +61,7 @@ const SettingsPage = () => {
 
   const { data: dealer, isLoading } = useQuery({
     queryKey: ["dealer-settings", dealerId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("dealers")
-        .select("id, name, allow_backorder, default_wastage_pct, dual_unit_enabled" as never)
-        .eq("id", dealerId)
-        .single();
-      if (error) throw new Error(error.message);
-      return data as unknown as { id: string; name: string; allow_backorder: boolean; default_wastage_pct: number; dual_unit_enabled: boolean };
-    },
+    queryFn: () => fetchDealerSettings(dealerId),
     enabled: !!dealerId,
   });
 
@@ -45,52 +72,38 @@ const SettingsPage = () => {
     }
   }, [dealer?.default_wastage_pct]);
 
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["dealer-settings"] });
+    queryClient.invalidateQueries({ queryKey: ["dealer-info"] });
+  };
+
   const toggleBackorder = useMutation({
-    mutationFn: async (enabled: boolean) => {
-      const { error } = await supabase
-        .from("dealers")
-        .update({ allow_backorder: enabled } as never)
-        .eq("id", dealerId);
-      if (error) throw new Error(error.message);
-    },
+    mutationFn: (enabled: boolean) => patchDealerSettings(dealerId, { allow_backorder: enabled }),
     onSuccess: (_, enabled) => {
-      queryClient.invalidateQueries({ queryKey: ["dealer-settings"] });
-      queryClient.invalidateQueries({ queryKey: ["dealer-info"] });
+      invalidate();
       toast.success(enabled ? "Backorder mode enabled" : "Backorder mode disabled");
     },
     onError: (e) => toast.error((e as Error).message),
   });
 
   const saveWastage = useMutation({
-    mutationFn: async (pct: number) => {
+    mutationFn: (pct: number) => {
       if (!Number.isFinite(pct) || pct < 0 || pct > 25) {
         throw new Error("Default wastage must be between 0 and 25");
       }
-      const { error } = await supabase
-        .from("dealers")
-        .update({ default_wastage_pct: pct } as never)
-        .eq("id", dealerId);
-      if (error) throw new Error(error.message);
+      return patchDealerSettings(dealerId, { default_wastage_pct: pct });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dealer-settings"] });
-      queryClient.invalidateQueries({ queryKey: ["dealer-info"] });
+      invalidate();
       toast.success("Default wastage saved");
     },
     onError: (e) => toast.error((e as Error).message),
   });
 
   const toggleDualUnit = useMutation({
-    mutationFn: async (enabled: boolean) => {
-      const { error } = await supabase
-        .from("dealers")
-        .update({ dual_unit_enabled: enabled } as never)
-        .eq("id", dealerId);
-      if (error) throw new Error(error.message);
-    },
+    mutationFn: (enabled: boolean) => patchDealerSettings(dealerId, { dual_unit_enabled: enabled }),
     onSuccess: (_, enabled) => {
-      queryClient.invalidateQueries({ queryKey: ["dealer-settings"] });
-      queryClient.invalidateQueries({ queryKey: ["dealer-info"] });
+      invalidate();
       toast.success(enabled ? "Dual-unit (Box + Pc) mode enabled" : "Dual-unit mode disabled");
     },
     onError: (e) => toast.error((e as Error).message),
@@ -217,7 +230,7 @@ const SettingsPage = () => {
                 </div>
                 <Switch
                   id="dual-unit"
-                  checked={(dealer as any)?.dual_unit_enabled === true}
+                  checked={dealer?.dual_unit_enabled === true}
                   onCheckedChange={(checked) => toggleDualUnit.mutate(checked)}
                   disabled={toggleDualUnit.isPending}
                 />

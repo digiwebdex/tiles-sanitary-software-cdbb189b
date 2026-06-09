@@ -16,11 +16,7 @@ export interface DealerInfo {
 }
 
 /**
- * Phase 3U-27: Migrated from Supabase `dealers` select to VPS GET /api/dealers/:id.
- * The endpoint returns { dealer, users, subscription }; we only consume `dealer`.
- *
- * Phase 3U-30: extended to surface `allow_backorder` so SaleForm can ditch its
- * inline `supabase.from('dealers').select('allow_backorder')` query.
+ * Phase 3U-27: Migrated from Supabase `dealers` select to VPS GET /api/dealer-settings.
  */
 export function useDealerInfo() {
   const dealerId = useDealerId();
@@ -28,7 +24,9 @@ export function useDealerInfo() {
   return useQuery({
     queryKey: ["dealer-info", dealerId],
     queryFn: async (): Promise<DealerInfo> => {
-      const res = await vpsAuthedFetch(`/api/dealers/${dealerId}`);
+      const res = await vpsAuthedFetch(
+        `/api/dealer-settings?dealerId=${encodeURIComponent(dealerId)}`,
+      );
       const body = await res.json().catch(() => ({} as any));
       if (!res.ok) {
         const msg = (body as any)?.error || `Failed to load dealer info (${res.status})`;
