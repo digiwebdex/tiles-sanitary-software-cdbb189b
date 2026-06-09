@@ -572,6 +572,9 @@ router.post('/', async (req: Request, res: Response) => {
           created_by: userId,
           sale_type: input.sale_type,
           sale_status: isChallanMode ? 'draft' : 'invoiced',
+          document_status: isChallanMode ? 'draft' : 'posted',
+          posted_at: isChallanMode ? null : trx.fn.now(),
+          posted_by: isChallanMode ? null : userId,
           has_backorder: hasBackorder,
           project_id: input.project_id ?? null,
           site_id: input.site_id ?? null,
@@ -815,7 +818,7 @@ router.post('/', async (req: Request, res: Response) => {
 
         // Phase 2 (P2-06): mirror stock + ledger effects into posting tables when enabled.
         if (isPostingEngineEnabled()) {
-          await mirrorToPostingTables(
+          const posting = await mirrorToPostingTables(
             {
               trx,
               dealerId,
@@ -843,6 +846,9 @@ router.post('/', async (req: Request, res: Response) => {
               }),
             ],
           );
+          await trx('sales')
+            .where({ id: newSaleId })
+            .update({ posting_batch_id: posting.batchId });
         }
       }
 
