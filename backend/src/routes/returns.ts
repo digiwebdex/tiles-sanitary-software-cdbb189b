@@ -18,6 +18,8 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { restoreSaleReturnStock } from '../services/saleReturnStock';
+import { deductPurchaseReturnStock } from '../services/purchaseReturnStock';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -62,65 +64,6 @@ function clientMeta(req: Request) {
     null;
   const ua = (req.headers['user-agent'] as string) || null;
   return { ip, ua };
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Stock helpers (aggregate-only — purchase/sales returns mirror the legacy
-// Supabase service which adjusts the `stock` row, not individual batches).
-// ────────────────────────────────────────────────────────────────────────────
-
-async function adjustAggregateStock(
-  trx: any,
-  dealerId: string,
-  productId: string,
-  qty: number,
-  direction: 'add' | 'deduct',
-) {
-  const product = await trx('products')
-    .where({ id: productId, dealer_id: dealerId })
-    .first('id', 'unit_type', 'per_box_sft');
-  if (!product) throw new Error(`Product not found: ${productId}`);
-
-  const stock = await trx('stock')
-    .where({ product_id: productId, dealer_id: dealerId })
-    .forUpdate()
-    .first();
-
-  const sign = direction === 'deduct' ? -1 : 1;
-  const unitType = product.unit_type ?? 'piece';
-  const perBoxSft = Number(product.per_box_sft ?? 0);
-
-  if (!stock) {
-    if (direction === 'deduct') throw new Error('Insufficient stock to deduct');
-    const row: any = {
-      dealer_id: dealerId,
-      product_id: productId,
-      box_qty: 0,
-      piece_qty: 0,
-      sft_qty: 0,
-      average_cost_per_unit: 0,
-    };
-    if (unitType === 'box_sft') {
-      row.box_qty = qty;
-      row.sft_qty = qty * perBoxSft;
-    } else {
-      row.piece_qty = qty;
-    }
-    await trx('stock').insert(row);
-    return;
-  }
-
-  if (unitType === 'box_sft') {
-    const newBox = Number(stock.box_qty) + sign * qty;
-    if (newBox < 0) throw new Error('Insufficient box stock');
-    await trx('stock')
-      .where({ id: stock.id })
-      .update({ box_qty: newBox, sft_qty: newBox * perBoxSft });
-  } else {
-    const newPiece = Number(stock.piece_qty) + sign * qty;
-    if (newPiece < 0) throw new Error('Insufficient piece stock');
-    await trx('stock').where({ id: stock.id }).update({ piece_qty: newPiece });
-  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -200,6 +143,42 @@ router.get('/sales', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[returns.sales.list] error', err);
     res.status(500).json({ error: err?.message || 'Failed to load sales returns' });
+  }
+});
+
+router.get('/sales/sale-items/:saleId/batches', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const { saleId } = req.params;
+
+  try {
+    const sale = await db('sales').where({ id: saleId, dealer_id: dealerId }).first('id');
+    if (!sale) {
+      res.status(404).json({ error: 'Sale not found' });
+      return;
+    }
+
+    const rows = await db('sale_item_batches as sib')
+      .join('sale_items as si', 'si.id', 'sib.sale_item_id')
+      .join('product_batches as pb', 'pb.id', 'sib.batch_id')
+      .where('si.sale_id', saleId)
+      .where('sib.dealer_id', dealerId)
+      .select(
+        'sib.sale_item_id',
+        'si.product_id',
+        'sib.batch_id',
+        'sib.allocated_qty',
+        'pb.batch_no',
+        'pb.shade_code',
+        'pb.caliber',
+        'pb.lot_no',
+      )
+      .orderBy('sib.created_at', 'asc');
+
+    res.json({ data: rows });
+  } catch (err: any) {
+    console.error('[returns.sales.getSaleItemBatches] error', err);
+    res.status(500).json({ error: err?.message || 'Failed to load batch allocations' });
   }
 });
 
@@ -329,9 +308,16 @@ router.post('/purchases', async (req: Request, res: Response) => {
       }));
       await trx('purchase_return_items').insert(itemRows);
 
-      // Deduct stock for each returned item
+      // Deduct stock from batches FIFO (P3-04)
       for (const it of itemsCalc) {
-        await adjustAggregateStock(trx, dealerId, it.product_id, it.quantity, 'deduct');
+        await deductPurchaseReturnStock(trx, {
+          dealerId,
+          productId: it.product_id,
+          quantity: it.quantity,
+          purchaseReturnId: rid,
+          returnNo: input.return_no,
+          userId,
+        });
       }
 
       // Supplier ledger — refund (+amount means supplier owes us back / reduces our payable)
@@ -379,6 +365,10 @@ router.post('/purchases', async (req: Request, res: Response) => {
     res.status(201).json(created);
   } catch (err: any) {
     console.error('[returns.purchase.create] error', err);
+    if (err?.message?.includes('Insufficient')) {
+      res.status(400).json({ error: err.message, code: 'INSUFFICIENT_STOCK' });
+      return;
+    }
     res.status(500).json({ error: err?.message || 'Failed to create purchase return' });
   }
 });
@@ -447,6 +437,8 @@ router.post('/sales', async (req: Request, res: Response) => {
     }
 
     const returnId = await db.transaction(async (trx) => {
+      let cogsReversal = 0;
+
       const [header] = await trx('sales_returns')
         .insert({
           dealer_id: dealerId,
@@ -460,16 +452,24 @@ router.post('/sales', async (req: Request, res: Response) => {
           refund_mode: input.refund_mode || null,
           return_date: input.return_date,
           created_by: userId,
+          cogs_reversal: 0,
         })
         .returning('id');
       const rid = header.id;
 
-      // Restore stock if not broken (aggregate stock; batch-level restoration
-      // is intentionally not done because original sale FIFO allocation may
-      // have spanned multiple batches and current Supabase service also
-      // restores at aggregate level only).
+      // Restore stock with batch-aware LIFO (P3-01) + compute COGS reversal (P3-02)
       if (!input.is_broken) {
-        await adjustAggregateStock(trx, dealerId, input.product_id, input.qty, 'add');
+        const stockResult = await restoreSaleReturnStock(trx, {
+          dealerId,
+          saleItemId: saleItem.id,
+          productId: input.product_id,
+          returnQty: Number(input.qty),
+          saleReturnId: rid,
+          invoiceNumber: sale.invoice_number,
+          userId,
+        });
+        cogsReversal = stockResult.cogsReversal;
+        await trx('sales_returns').where({ id: rid }).update({ cogs_reversal: cogsReversal });
       }
 
       // Backorder cleanup if this sale_item still had backorder tracking
@@ -557,6 +557,7 @@ router.post('/sales', async (req: Request, res: Response) => {
           is_broken: input.is_broken,
           refund_amount: input.refund_amount,
           refund_mode: input.refund_mode,
+          cogs_reversal: cogsReversal,
         },
         ip_address: ip,
         user_agent: ua,

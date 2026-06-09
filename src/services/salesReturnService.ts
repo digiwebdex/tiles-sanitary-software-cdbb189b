@@ -47,6 +47,13 @@ export const salesReturnService = {
     return await vpsRequest<any[]>(`/api/returns/sales/sale-items/${saleId}`);
   },
 
+  async getSaleItemBatches(saleId: string) {
+    const body = await vpsRequest<{ data: any[] }>(
+      `/api/returns/sales/sale-items/${saleId}/batches`,
+    );
+    return body.data ?? [];
+  },
+
   async create(input: CreateSalesReturnInput) {
     await assertDealerId(input.dealer_id);
     validateInput(createSalesReturnServiceSchema, input);

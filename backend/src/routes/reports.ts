@@ -523,35 +523,13 @@ router.get('/product-history', async (req, res) => {
   }
 });
 
-// ─── 7. Customer Due Report ───────────────────────────────────────────────
-router.get('/customer-due', async (req, res) => {
-  const dealerId = resolveDealer(req, res);
-  if (!dealerId) return;
-  if (!requireFinancialRole(req, res)) return;
-  const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
-
-  try {
-    const [ledger, customers] = await Promise.all([
-      fetchCustomerLedgerEntries(dealerId),
-      db('customers').where({ dealer_id: dealerId }).select('id', 'name', 'type'),
-    ]);
-    const cm = new Map(
-      (customers as Array<{ id: string; name: string; type: string }>).map((c) => [
-        c.id,
-        { name: c.name, type: c.type },
-      ]),
-    );
-    const grouped = groupCustomerLedger(ledger);
-    const all = buildCustomerDueReportRows(grouped, cm);
-
-    res.json({
-      rows: all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-      total: all.length,
-    });
-  } catch (err) {
-    console.error('[reports.customer-due]', err);
-    res.status(500).json({ error: 'Failed to load customer due report' });
-  }
+// ─── 7. Customer Due Report (deprecated — use /collections/outstanding) ───
+router.get('/customer-due', async (_req, res) => {
+  res.status(410).json({
+    error: 'This report has been retired. Use GET /api/collections/outstanding or Due Aging in Collections.',
+    redirect: '/collections/outstanding',
+    replacement: '/api/collections/outstanding',
+  });
 });
 
 // ─── 8. Supplier Payable Report ───────────────────────────────────────────
