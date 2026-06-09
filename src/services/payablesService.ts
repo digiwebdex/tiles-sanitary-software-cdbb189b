@@ -39,6 +39,7 @@ export const payablesService = {
       amount: number;
       note?: string;
       paid_account_id?: string | null;
+      purchase_id?: string;
     },
   ) {
     return await vpsRequest<{

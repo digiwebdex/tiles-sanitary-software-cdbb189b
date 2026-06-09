@@ -43,6 +43,7 @@ import { tenantGuard } from '../middleware/tenant';
 import { safeSum, safeQuery } from '../lib/safeSum';
 import { logRouteWarn } from '../lib/logger';
 import { sumSupplierPayable } from '../services/reportQueryService';
+import { detectCogsDataQualityWarnings } from '../lib/pnlMath';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -184,6 +185,16 @@ router.get('/p-and-l', async (req, res) => {
 
   const gross_profit = revenue - sales_returns - net_cogs;
   const net_profit = gross_profit - total_expenses;
+
+  for (const w of detectCogsDataQualityWarnings({
+    revenue,
+    sales_returns,
+    cogs,
+    cogs_reversal,
+    legacyPreFixCount: legacyCogsCount,
+  })) {
+    if (!warnings.includes(w)) warnings.push(w);
+  }
 
   res.json({
     period: { from, to },

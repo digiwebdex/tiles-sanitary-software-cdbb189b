@@ -280,17 +280,25 @@ router.get('/onboarding-counts', async (req: Request, res: Response) => {
   if (!dealerId) return;
 
   try {
-    const [products, customers, suppliers, sales] = await Promise.all([
+    const [products, customers, suppliers, sales, purchases, collections, supplierPayments, salesReturns] = await Promise.all([
       db('products').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
       db('customers').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
       db('suppliers').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
       db('sales').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
+      db('purchases').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
+      db('customer_ledger').where({ dealer_id: dealerId, type: 'payment' }).count<{ count: string }[]>('* as count').first(),
+      db('supplier_ledger').where({ dealer_id: dealerId, type: 'payment' }).count<{ count: string }[]>('* as count').first(),
+      db('sales_returns').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
     ]);
     res.json({
       products: Number(products?.count ?? 0),
       customers: Number(customers?.count ?? 0),
       suppliers: Number(suppliers?.count ?? 0),
       sales: Number(sales?.count ?? 0),
+      purchases: Number(purchases?.count ?? 0),
+      collections: Number(collections?.count ?? 0),
+      supplier_payments: Number(supplierPayments?.count ?? 0),
+      sales_returns: Number(salesReturns?.count ?? 0),
     });
   } catch (err: any) {
     console.error('[dashboard/onboarding-counts]', err.message);

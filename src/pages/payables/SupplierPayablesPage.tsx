@@ -133,7 +133,12 @@ const SupplierPayablesPage = () => {
             Unpaid purchase bills — pay a supplier in one click (oldest bills first) or open a bill to pay partially.
           </p>
         </div>
-        <Button onClick={() => navigate("/purchases/new")}>New Purchase</Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={() => navigate("/payables/pay")}>
+            <CreditCard className="mr-1 h-4 w-4" /> Pay Supplier
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/purchases/new")}>New Purchase</Button>
+        </div>
       </div>
 
       <Card>

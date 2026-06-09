@@ -73,6 +73,7 @@ const payablesPaymentSchema = z.object({
   amount: z.coerce.number().positive(),
   note: z.string().trim().max(500).optional(),
   paid_account_id: z.string().uuid().optional().nullable(),
+  purchase_id: z.string().uuid().optional(),
 });
 
 router.post(
@@ -88,7 +89,7 @@ router.post(
       return;
     }
 
-    const { supplier_id, amount, note, paid_account_id } = parsed.data;
+    const { supplier_id, amount, note, paid_account_id, purchase_id } = parsed.data;
 
     try {
       const result = await db.transaction(async (trx) =>
@@ -98,6 +99,7 @@ router.post(
           amount,
           note,
           paid_account_id,
+          purchaseId: purchase_id,
         }),
       );
       res.status(201).json({ ok: true, ...result });
