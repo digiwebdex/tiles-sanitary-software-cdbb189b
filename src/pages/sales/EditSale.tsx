@@ -74,8 +74,61 @@ const EditSalePage = () => {
     onError: (e) => toast.error(e.message),
   });
 
+  const reverseMutation = useMutation({
+    mutationFn: () => salesService.reverse(id!, dealerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sales"] });
+      queryClient.invalidateQueries({ queryKey: ["sale", id] });
+      queryClient.invalidateQueries({ queryKey: ["stock"] });
+      toast.success("Invoice reversed. Create a new sale to re-post with changes.");
+      navigate("/sales");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   if (loading) return <p className="p-6 text-muted-foreground">Loading…</p>;
   if (!sale) return <p className="p-6 text-destructive">Sale not found</p>;
+
+  const docStatus = (sale as any).document_status ?? "posted";
+  const isImmutable = docStatus === "posted" || docStatus === "reversed";
+
+  if (isImmutable) {
+    return (
+      <div className="container mx-auto max-w-2xl space-y-4 p-6">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => navigate(`/sales/${id}/invoice`)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-2xl font-bold text-foreground">Edit Invoice</h1>
+          <span className="text-sm font-mono text-muted-foreground">{sale.invoice_number}</span>
+        </div>
+        <div className="rounded-md border border-warning/40 bg-warning-muted p-4 space-y-3">
+          <p className="text-sm font-medium">
+            {docStatus === "reversed"
+              ? "This invoice has been reversed and cannot be edited."
+              : "Posted invoices cannot be edited directly."}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            To change items or amounts, reverse this invoice and create a new sale with the correct details.
+          </p>
+          {docStatus === "posted" && (
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                disabled={reverseMutation.isPending}
+                onClick={() => reverseMutation.mutate()}
+              >
+                Reverse Invoice
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/sales/new")}>
+                New Sale
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const customer = (sale as any).customers;
   const saleItems = ((sale as any).sale_items ?? []).map((si: any) => ({

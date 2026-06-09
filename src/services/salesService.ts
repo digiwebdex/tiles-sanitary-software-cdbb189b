@@ -306,6 +306,15 @@ export const salesService = {
     );
   },
 
+  /** Reverse a posted sale (P2-08). Restores stock + ledger; marks document reversed. */
+  async reverse(saleId: string, dealerId: string) {
+    await assertDealerId(dealerId);
+    return await vpsRequest<{ sale: any; reversed: boolean }>(
+      `/api/sales/${saleId}/reverse?dealerId=${encodeURIComponent(dealerId)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    );
+  },
+
   /** Atomic payment on a specific invoice — updates ledger + sale due. */
   async recordPayment(
     saleId: string,

@@ -33,6 +33,14 @@ import {
   consumeRequiredSaleApprovals,
   SaleApprovalRequiredError,
 } from '../services/approval/SaleApprovalGate';
+import {
+  insertSaleReverseLedgerEntries,
+  restoreSaleItemStock,
+} from '../services/saleReverse';
+import {
+  invertPostingLines,
+  postingLinesFromDbRows,
+} from '../services/posting/invertPostingLines';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -228,6 +236,169 @@ router.post('/:id/payment', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[sales.payment]', err.message);
     res.status(400).json({ error: err.message || 'Failed to record payment' });
+  }
+});
+
+// POST /api/sales/:id/reverse — reverse a posted sale (P2-08). Immutable posted docs.
+router.post('/:id/reverse', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('super_admin') && !roles.includes('dealer_admin')) {
+    res.status(403).json({ error: 'Only dealer_admin can reverse sales' });
+    return;
+  }
+
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const { id: saleId } = req.params;
+  const userId = req.user?.userId ?? null;
+  const ip =
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress ||
+    null;
+  const ua = (req.headers['user-agent'] as string) || null;
+
+  try {
+    const sale = await db('sales').where({ id: saleId, dealer_id: dealerId }).first();
+    if (!sale) {
+      res.status(404).json({ error: 'Sale not found' });
+      return;
+    }
+
+    const docStatus = (sale as any).document_status ?? 'posted';
+    if (docStatus === 'reversed') {
+      res.status(409).json({ error: 'Sale is already reversed', code: 'ALREADY_REVERSED' });
+      return;
+    }
+    if (docStatus !== 'posted') {
+      res.status(409).json({
+        error: 'Only posted sales can be reversed. Draft sales can be edited or deleted.',
+        code: 'NOT_POSTED',
+      });
+      return;
+    }
+
+    const items = await db('sale_items')
+      .where({ sale_id: saleId })
+      .select(
+        'id',
+        'product_id',
+        'quantity',
+        'available_qty_at_sale',
+        'box_qty',
+        'piece_qty',
+        'total_pieces',
+      );
+
+    const challans = await db('challans')
+      .where({ sale_id: saleId, dealer_id: dealerId })
+      .select('id', 'status', 'delivery_status');
+    const hasDelivered = challans.some(
+      (c: any) => c.delivery_status === 'delivered' || c.status === 'delivered',
+    );
+    if (hasDelivered) {
+      res.status(400).json({ error: 'Cannot reverse a sale that has been delivered' });
+      return;
+    }
+
+    const [{ count: deliveryCount }] = await db('deliveries')
+      .where({ sale_id: saleId, dealer_id: dealerId })
+      .count<{ count: string }[]>('id as count');
+    if (Number(deliveryCount) > 0) {
+      res.status(400).json({ error: 'Cannot reverse a sale with existing deliveries' });
+      return;
+    }
+
+    const reverseDate = new Date().toISOString().slice(0, 10);
+    const totalAmount = Number(sale.total_amount);
+    const paidAmount = Number(sale.paid_amount);
+
+    await db.transaction(async (trx) => {
+      for (const it of items) {
+        await restoreSaleItemStock(trx, {
+          dealerId,
+          saleId,
+          invoiceNumber: sale.invoice_number,
+          userId,
+          item: it,
+        });
+      }
+
+      const saleItemIds = items.map((i: any) => i.id).filter(Boolean);
+      if (saleItemIds.length > 0) {
+        await trx('backorder_allocations').whereIn('sale_item_id', saleItemIds).delete();
+        await trx('sale_item_batches').whereIn('sale_item_id', saleItemIds).delete();
+      }
+
+      await insertSaleReverseLedgerEntries(trx, {
+        dealerId,
+        saleId,
+        customerId: sale.customer_id,
+        invoiceNumber: sale.invoice_number,
+        totalAmount,
+        paidAmount,
+        entryDate: reverseDate,
+      });
+
+      for (const ch of challans) {
+        if (ch.status !== 'cancelled') {
+          await trx('challans').where({ id: ch.id }).update({ status: 'cancelled' });
+        }
+      }
+
+      await trx('sales')
+        .where({ id: saleId })
+        .update({
+          document_status: 'reversed',
+          sale_status: 'cancelled',
+          due_amount: 0,
+        });
+
+      if (isPostingEngineEnabled() && (sale as any).posting_batch_id) {
+        const originalLines = await trx('posting_lines')
+          .where({ posting_batch_id: (sale as any).posting_batch_id })
+          .select('*');
+        if (originalLines.length > 0) {
+          const inverted = invertPostingLines(postingLinesFromDbRows(originalLines as any[]));
+          await mirrorToPostingTables(
+            {
+              trx,
+              dealerId,
+              documentType: 'sale',
+              documentId: saleId,
+              eventType: 'reversed',
+              entryDate: reverseDate,
+              postedBy: userId,
+              idempotencyKey: `sale:reverse:${saleId}`,
+              reversesBatchId: (sale as any).posting_batch_id,
+            },
+            inverted,
+          );
+        }
+      }
+
+      await trx('audit_logs').insert({
+        dealer_id: dealerId,
+        user_id: userId,
+        action: 'sale_reverse',
+        table_name: 'sales',
+        record_id: saleId,
+        old_data: {
+          invoice_number: sale.invoice_number,
+          total_amount: totalAmount,
+          paid_amount: paidAmount,
+          document_status: docStatus,
+        },
+        new_data: { document_status: 'reversed' },
+        ip_address: ip,
+        user_agent: ua,
+      });
+    });
+
+    const updated = await db('sales').where({ id: saleId }).first();
+    res.json({ sale: updated, reversed: true });
+  } catch (err: any) {
+    console.error('[sales.reverse] error', err);
+    res.status(500).json({ error: err?.message || 'Failed to reverse sale' });
   }
 });
 
@@ -1047,6 +1218,21 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Sale not found' });
       return;
     }
+
+    const oldDocStatus = (oldSale as any).document_status ?? 'posted';
+    if (oldDocStatus === 'posted') {
+      res.status(409).json({
+        error:
+          'Posted sales cannot be edited. Reverse this invoice (POST /api/sales/:id/reverse) and create a new sale.',
+        code: 'SALE_IMMUTABLE',
+      });
+      return;
+    }
+    if (oldDocStatus === 'reversed') {
+      res.status(409).json({ error: 'Reversed sales cannot be edited.', code: 'SALE_REVERSED' });
+      return;
+    }
+
     const oldItems = await db('sale_items')
       .where({ sale_id: saleId })
       .select('id', 'product_id', 'quantity', 'available_qty_at_sale', 'box_qty', 'piece_qty', 'total_pieces');
