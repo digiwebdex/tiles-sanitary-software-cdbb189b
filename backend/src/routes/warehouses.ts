@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { applyWarehouseTransferStock } from '../services/warehouseTransferStock';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -129,6 +130,22 @@ router.get('/transfers', async (req, res) => {
   res.json(rows);
 });
 
+/** Post stock movement between warehouses when transfer completes. */
+async function postTransferStock(trx: any, dealerId: string, userId: string | null, row: any) {
+  if (!row.product_id || !row.from_warehouse_id || !row.to_warehouse_id) return;
+  await applyWarehouseTransferStock(trx, {
+    dealerId,
+    fromWarehouseId: row.from_warehouse_id,
+    toWarehouseId: row.to_warehouse_id,
+    productId: row.product_id,
+    quantity: Number(row.quantity),
+    unit: row.unit ?? 'pc',
+    transferId: row.id,
+    transferNo: row.transfer_no ?? null,
+    userId,
+  });
+}
+
 /** Internal helper: post transport_cost as cash/bank outflow */
 async function postTransportCost(trx: any, dealerId: string, userId: string | null, row: any) {
   const cost = Number(row.transport_cost) || 0;
@@ -182,12 +199,15 @@ router.post('/transfers', async (req, res) => {
       received_by: userId, received_at: trx.fn.now(),
       created_by: userId,
     }).returning('*');
+    await postTransferStock(trx, dealerId, userId, row);
     await postTransportCost(trx, dealerId, userId, row);
     await trx.commit();
     res.status(201).json(row);
   } catch (e: any) {
     await trx.rollback();
-    res.status(500).json({ error: e.message });
+    const msg = e.message || 'Transfer failed';
+    const code = msg.includes('Insufficient') ? 400 : 500;
+    res.status(code).json({ error: msg, code: msg.includes('Insufficient') ? 'INSUFFICIENT_WH_STOCK' : undefined });
   }
 });
 
@@ -256,12 +276,15 @@ router.post('/transfers/:id/receive', async (req, res) => {
       .update({ status: 'received', received_by: userId, received_at: trx.fn.now() })
       .returning('*');
     if (!row) { await trx.rollback(); res.status(404).json({ error: 'Not found or not approved' }); return; }
+    await postTransferStock(trx, dealerId, userId, row);
     await postTransportCost(trx, dealerId, userId, row);
     await trx.commit();
     res.json(row);
   } catch (e: any) {
     await trx.rollback();
-    res.status(500).json({ error: e.message });
+    const msg = e.message || 'Receive failed';
+    const code = msg.includes('Insufficient') ? 400 : 500;
+    res.status(code).json({ error: msg, code: msg.includes('Insufficient') ? 'INSUFFICIENT_WH_STOCK' : undefined });
   }
 });
 
