@@ -28,6 +28,11 @@ import {
   type SaleBatchAllocation,
   type SaleStockPostedItem,
 } from '../services/posting/StockPostingEngine';
+import {
+  buildRequiredSaleApprovals,
+  consumeRequiredSaleApprovals,
+  SaleApprovalRequiredError,
+} from '../services/approval/SaleApprovalGate';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -383,6 +388,44 @@ router.post('/', async (req: Request, res: Response) => {
       customerId = created.id;
     }
 
+    const customerRow = await db('customers')
+      .where({ id: customerId, dealer_id: dealerId })
+      .first('price_tier_id', 'credit_limit', 'max_overdue_days');
+
+    const [ledgerRows, oldestDueSale] = await Promise.all([
+      db('customer_ledger')
+        .where({ customer_id: customerId, dealer_id: dealerId })
+        .select('amount', 'type'),
+      db('sales')
+        .where({ customer_id: customerId, dealer_id: dealerId })
+        .andWhere('due_amount', '>', 0)
+        .orderBy('sale_date', 'asc')
+        .select('sale_date')
+        .first(),
+    ]);
+
+    let customerOutstanding = 0;
+    for (const row of ledgerRows as any[]) {
+      const amt = Number(row.amount);
+      if (row.type === 'sale') customerOutstanding += amt;
+      else if (row.type === 'payment' || row.type === 'refund') customerOutstanding -= amt;
+      else if (row.type === 'adjustment') customerOutstanding += amt;
+    }
+
+    const oldestDate = (oldestDueSale as any)?.sale_date ?? null;
+    const customerDaysOverdue = oldestDate
+      ? Math.max(0, Math.floor((Date.now() - new Date(oldestDate).getTime()) / 86400000))
+      : 0;
+
+    let customerTierName: string | null = null;
+    const customerPriceTierId = (customerRow as any)?.price_tier_id ?? null;
+    if (customerPriceTierId) {
+      const tierRow = await db('price_tiers')
+        .where({ id: customerPriceTierId, dealer_id: dealerId })
+        .first('name');
+      customerTierName = (tierRow as any)?.name ?? null;
+    }
+
     // ── 2. Determine backorder mode ──
     let backorderEnabled = !!input.allow_backorder;
     if (!backorderEnabled) {
@@ -540,6 +583,26 @@ router.post('/', async (req: Request, res: Response) => {
     const invoiceNumber = invoiceRes.rows[0]?.generate_next_invoice_no
       ?? `INV-${String(Date.now()).slice(-5)}`;
 
+    const { required: saleApprovalsRequired } = await buildRequiredSaleApprovals({
+      db,
+      dealerId,
+      roles,
+      customerId,
+      customerName,
+      customerPriceTierId,
+      tierName: customerTierName,
+      input,
+      itemsCalc,
+      subtotal,
+      totalAmount,
+      hasBackorder,
+      productMap,
+      outstanding: customerOutstanding,
+      daysOverdue: customerDaysOverdue,
+      creditLimit: Number((customerRow as any)?.credit_limit ?? 0),
+      maxOverdueDays: Number((customerRow as any)?.max_overdue_days ?? 0),
+    });
+
     // ── 6. Atomic transaction: header + items + stock + ledger + audit ──
     const saleId: string = await db.transaction(async (trx) => {
       // Sale header
@@ -581,6 +644,9 @@ router.post('/', async (req: Request, res: Response) => {
         })
         .returning('id');
       const newSaleId = sale.id;
+
+      // P2-10: consume required approvals atomically with the sale post.
+      await consumeRequiredSaleApprovals(trx, dealerId, newSaleId, saleApprovalsRequired);
 
       // Sale items
       const itemRows = itemsCalc.map((item) => ({
@@ -905,6 +971,14 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json(created);
   } catch (err: any) {
     console.error('[sales.create] error', err);
+    if (err instanceof SaleApprovalRequiredError) {
+      res.status(403).json({
+        error: err.message,
+        approval_type: err.approvalType,
+        code: 'APPROVAL_REQUIRED',
+      });
+      return;
+    }
     // Phase 1A — surface tile-product master-data issues as a clean 400
     // instead of an opaque 500. The InvalidProductPerBoxSftError is
     // thrown by computeLineCogs when a 'box_sft' product has a missing or

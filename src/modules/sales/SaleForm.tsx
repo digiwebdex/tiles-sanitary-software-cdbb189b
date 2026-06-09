@@ -43,8 +43,6 @@ import {
   isApprovalRequired,
   createApprovalRequest,
   findValidApproval,
-  consumeApprovalRequest,
-  generateActionHash,
   type ApprovalContextData,
   type ApprovalType,
 } from "@/services/approvalService";
@@ -428,13 +426,10 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
     context: ApprovalContextData,
     reason?: string
   ): Promise<boolean> => {
-    // Check if there's already a valid approved request
+    // Check if there's already a valid approved request — server consumes on POST.
     const existing = await findValidApproval(dealerId, type, context);
     if (existing) {
-      // Consume it
-      const hash = await generateActionHash(type, context);
-      await consumeApprovalRequest(existing.id, hash);
-      return true; // can proceed
+      return true;
     }
 
     // Auto-approve for admins
