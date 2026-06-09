@@ -12,6 +12,11 @@ import {
 } from "@/components/ui/select";
 import Pagination from "@/components/Pagination";
 import {
+  resolveSalePaymentStatus,
+  salePaymentStatusClassName,
+  salePaymentStatusLabel,
+} from "@/lib/salePaymentStatus";
+import {
   fetchStockReport,
   fetchProductsReport,
   fetchBrandStockReport,
@@ -790,10 +795,16 @@ function DetailedSalesReport({ dealerId }: { dealerId: string }) {
   const sales = data?.sales ?? [];
   const total = data?.total ?? 0;
 
-  const paymentBadge = (due: number, paid: number) => {
-    if (due <= 0) return <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs">Paid</Badge>;
-    if (paid > 0) return <Badge variant="outline" className="border-yellow-500 text-yellow-600 text-xs">Partial</Badge>;
-    return <Badge className="bg-orange-100 text-orange-700 text-xs">Pending</Badge>;
+  const paymentBadge = (sale: { due_amount?: number | string; paid_amount?: number | string; document_status?: string; sale_status?: string }) => {
+    const status = resolveSalePaymentStatus(sale);
+    return (
+      <Badge
+        variant={status === "paid" ? "default" : "outline"}
+        className={`text-xs ${salePaymentStatusClassName(status)}`}
+      >
+        {salePaymentStatusLabel(status)}
+      </Badge>
+    );
   };
 
   return (
@@ -857,7 +868,7 @@ function DetailedSalesReport({ dealerId }: { dealerId: string }) {
                         <TableCell className="text-right font-medium">{formatCurrency(s.total_amount)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(paid)}</TableCell>
                         <TableCell className={`text-right ${due > 0 ? "text-destructive font-semibold" : ""}`}>{formatCurrency(due)}</TableCell>
-                        <TableCell>{paymentBadge(due, paid)}</TableCell>
+                        <TableCell>{paymentBadge(s)}</TableCell>
                       </TableRow>
                     );
                   })}

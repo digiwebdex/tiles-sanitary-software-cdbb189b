@@ -33,6 +33,11 @@ import { ProjectSiteFilter } from "@/components/project/ProjectSiteFilter";
 import SendWhatsAppDialog from "@/components/whatsapp/SendWhatsAppDialog";
 import { buildInvoiceMessage } from "@/services/whatsappService";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
+import {
+  resolveSalePaymentStatus,
+  salePaymentStatusClassName,
+  salePaymentStatusLabel,
+} from "@/lib/salePaymentStatus";
 
 interface SaleListProps {
   dealerId: string;
@@ -47,18 +52,7 @@ const statusColors: Record<string, string> = {
   invoiced: "default",
   completed: "default",
   partially_delivered: "outline",
-};
-
-const paymentStatusVariant = (due: number, paid: number) => {
-  if (due <= 0) return "default";
-  if (paid > 0) return "outline";
-  return "secondary";
-};
-
-const paymentStatusLabel = (due: number, paid: number) => {
-  if (due <= 0) return "Paid";
-  if (paid > 0) return "Partial";
-  return "Pending";
+  cancelled: "secondary",
 };
 
 const SaleList = ({ dealerId }: SaleListProps) => {
@@ -303,6 +297,8 @@ const SaleList = ({ dealerId }: SaleListProps) => {
                   const isChallan = s.sale_type === "challan_mode";
                   const due = Number(s.due_amount) || 0;
                   const paid = Number(s.paid_amount) || 0;
+                  const paymentStatus = resolveSalePaymentStatus(s);
+                  const isReversed = paymentStatus === "reversed";
 
                   return (
                     <TableRow
@@ -323,7 +319,15 @@ const SaleList = ({ dealerId }: SaleListProps) => {
                         <div className="flex flex-col gap-1">
                           <Badge
                             variant={statusColors[s.sale_status] as any ?? "secondary"}
-                            className={`capitalize text-xs ${s.sale_status === "partially_delivered" ? "border-orange-500 text-orange-600" : s.sale_status === "delivered" ? "bg-green-600 text-white" : ""}`}
+                            className={`capitalize text-xs ${
+                              isReversed
+                                ? "bg-red-100 text-red-700 border-red-200"
+                                : s.sale_status === "partially_delivered"
+                                  ? "border-orange-500 text-orange-600"
+                                  : s.sale_status === "delivered"
+                                    ? "bg-green-600 text-white"
+                                    : ""
+                            }`}
                           >
                             {s.sale_status === "partially_delivered" 
                               ? "Partial Delivery" 
@@ -349,10 +353,10 @@ const SaleList = ({ dealerId }: SaleListProps) => {
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={paymentStatusVariant(due, paid) as any}
-                          className={`text-xs ${due <= 0 ? "bg-green-600 text-white hover:bg-green-700" : due > 0 && paid > 0 ? "border-yellow-500 text-yellow-600" : "bg-orange-100 text-orange-700"}`}
+                          variant={paymentStatus === "paid" ? "default" : "outline"}
+                          className={`text-xs ${salePaymentStatusClassName(paymentStatus)}`}
                         >
-                          {paymentStatusLabel(due, paid)}
+                          {salePaymentStatusLabel(paymentStatus)}
                         </Badge>
                       </TableCell>
                       <TableCell>
