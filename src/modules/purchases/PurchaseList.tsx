@@ -157,9 +157,15 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
                       <TableCell className="font-mono text-sm">{p.invoice_number || "—"}</TableCell>
                       <TableCell>{p.suppliers?.name ?? "—"}</TableCell>
                       <TableCell>
-                        <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
-                          Received
-                        </Badge>
+                        {(p.document_status ?? "posted") === "reversed" ? (
+                          <Badge variant="secondary" className="bg-red-100 text-red-700 text-xs">
+                            Reversed
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
+                            Received
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(total)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(paid)}</TableCell>

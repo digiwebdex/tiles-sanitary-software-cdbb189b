@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, CreditCard, Wallet } from "lucide-react";
+import { ArrowLeft, CreditCard, RotateCcw, Wallet } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { LinkedShortagesPanel } from "@/components/LinkedShortagesPanel";
 import { useDealerId } from "@/hooks/useDealerId";
@@ -93,6 +93,19 @@ const ViewPurchasePage = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const reverseMutation = useMutation({
+    mutationFn: () => purchaseService.reverse(id!, dealerId!),
+    onSuccess: () => {
+      toast.success("Purchase reversed. Record a new purchase to re-post with changes.");
+      queryClient.invalidateQueries({ queryKey: ["purchase", id] });
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["stock"] });
+      queryClient.invalidateQueries({ queryKey: ["supplier-ledger"] });
+      navigate("/purchases");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   if (isLoading) return <p className="p-6 text-muted-foreground">Loading…</p>;
   if (!purchase) return <p className="p-6 text-destructive">Purchase not found</p>;
 
@@ -102,6 +115,9 @@ const ViewPurchasePage = () => {
   const dueAmount = Number(purchase.due_amount ?? netPayable - paidAmount);
   const paymentHistory = (purchase as any).payment_history ?? [];
   const status = purchase.payment_status ?? (dueAmount <= 0.01 ? "paid" : paidAmount > 0 ? "partial" : "pending");
+  const docStatus = (purchase as any).document_status ?? "posted";
+  const isReversed = docStatus === "reversed";
+  const canReverse = docStatus === "posted";
 
   return (
     <div className="container mx-auto max-w-7xl space-y-6 p-6">
@@ -111,12 +127,29 @@ const ViewPurchasePage = () => {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h1 className="text-2xl font-bold text-foreground">Purchase Details</h1>
+          {isReversed && (
+            <Badge variant="secondary" className="bg-red-100 text-red-700">
+              Reversed
+            </Badge>
+          )}
         </div>
-        {dueAmount > 0.01 && (
-          <Button onClick={() => setPayOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
-            <CreditCard className="mr-2 h-4 w-4" /> Record Payment
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canReverse && (
+            <Button
+              variant="destructive"
+              disabled={reverseMutation.isPending}
+              onClick={() => reverseMutation.mutate()}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              {reverseMutation.isPending ? "Reversing…" : "Reverse Purchase"}
+            </Button>
+          )}
+          {!isReversed && dueAmount > 0.01 && (
+            <Button onClick={() => setPayOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
+              <CreditCard className="mr-2 h-4 w-4" /> Record Payment
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
