@@ -27,14 +27,13 @@ import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
 import {
   buildCustomerDueReportRows,
-  buildSupplierPayableReportRows,
+  buildSupplierPayableReportRowsFromReadModel,
   fetchCustomerLedgerEntries,
   fetchSupplierLedgerEntries,
+  fetchSupplierPayableReadRows,
   groupCustomerLedger,
   groupSupplierLedger,
 } from '../services/reportQueryService';
-import { computeSupplierBalance } from '../lib/ledgerBalance';
-
 const router = Router();
 router.use(authenticate, tenantGuard);
 
@@ -540,15 +539,7 @@ router.get('/supplier-payable', async (req, res) => {
   const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
 
   try {
-    const [ledger, suppliers] = await Promise.all([
-      fetchSupplierLedgerEntries(dealerId),
-      db('suppliers').where({ dealer_id: dealerId }).select('id', 'name'),
-    ]);
-    const sm = new Map(
-      (suppliers as Array<{ id: string; name: string }>).map((s) => [s.id, { name: s.name }]),
-    );
-    const grouped = groupSupplierLedger(ledger);
-    const all = buildSupplierPayableReportRows(grouped, sm);
+    const all = await buildSupplierPayableReportRowsFromReadModel(dealerId);
 
     res.json({
       rows: all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -919,32 +910,33 @@ router.get('/supplier-outstanding', async (req, res) => {
   if (!dealerId) return;
   if (!requireFinancialRole(req, res)) return;
   try {
-    const [ledger, suppliers] = await Promise.all([
-      fetchSupplierLedgerEntries(dealerId),
+    const [readRows, suppliers, ledger] = await Promise.all([
+      fetchSupplierPayableReadRows(dealerId),
       db('suppliers')
         .where({ dealer_id: dealerId })
         .select('id', 'name', 'phone', 'status'),
+      fetchSupplierLedgerEntries(dealerId),
     ]);
     const suppMap = new Map<string, any>((suppliers as any[]).map((s) => [s.id, s]));
     const bySupplier = groupSupplierLedger(ledger);
-    const rows = Array.from(bySupplier.entries())
-      .map(([sid, entryRows]) => {
-        const s = suppMap.get(sid);
-        const outstanding = computeSupplierBalance(entryRows);
+    const rows = readRows
+      .map((r) => {
+        const s = suppMap.get(r.supplier_id);
+        const entryRows = bySupplier.get(r.supplier_id) ?? [];
         const totalPurchase = entryRows
-          .filter((r) => r.type === 'purchase')
-          .reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0);
+          .filter((row) => row.type === 'purchase')
+          .reduce((sum, row) => sum + Math.abs(Number(row.amount)), 0);
         const totalPaid = entryRows
-          .filter((r) => r.type === 'payment')
-          .reduce((sum, r) => sum + Number(r.amount), 0);
-        const paymentCount = entryRows.filter((r) => r.type === 'payment').length;
+          .filter((row) => row.type === 'payment')
+          .reduce((sum, row) => sum + Number(row.amount), 0);
+        const paymentCount = entryRows.filter((row) => row.type === 'payment').length;
         return {
-          supplierId: sid,
+          supplierId: r.supplier_id,
           name: s?.name ?? '—',
           phone: s?.phone ?? '—',
           totalPurchase: round2(totalPurchase),
           totalPaid: round2(totalPaid),
-          outstanding: round2(outstanding),
+          outstanding: r.outstanding,
           payments: paymentCount,
         };
       })

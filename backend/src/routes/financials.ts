@@ -42,7 +42,11 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { safeSum, safeQuery } from '../lib/safeSum';
 import { logRouteWarn } from '../lib/logger';
-import { sumSupplierPayable } from '../services/reportQueryService';
+import {
+  sumCustomerOutstandingFromReadModel,
+  sumInventoryValuationWac,
+  sumSupplierPayable,
+} from '../services/reportQueryService';
 import { detectCogsDataQualityWarnings } from '../lib/pnlMath';
 
 const router = Router();
@@ -253,32 +257,22 @@ router.get('/balance-sheet', async (req, res) => {
   )).map(b => ({ ...b, balance: num(b.balance) }));
   const bank_total = bankList.reduce((s, b) => s + b.balance, 0);
 
-  // ── Inventory valuation at average cost (falls back to product cost_price) ──
+  // ── Inventory valuation at WAC (P4-03) ──
   const inventory = await safeSum(
-    { route: 'financials.bs.inventory', label: 'Inventory valuation', warnings, context: ctx },
-    async () => {
-      const row = await db('stock as s')
-        .join('products as p', 'p.id', 's.product_id')
-        .where('s.dealer_id', dealerId)
-        .sum({
-          total: db.raw(`
-            CASE
-              WHEN p.unit_type = 'box_sft' THEN COALESCE(s.box_qty, 0) * COALESCE(p.cost_price, 0) * COALESCE(p.per_box_sft, 1)
-              ELSE COALESCE(s.piece_qty, 0) * COALESCE(p.cost_price, 0)
-            END
-          `),
-        }).first();
-      return num(row?.total);
-    },
+    { route: 'financials.bs.inventory', label: 'Inventory valuation (WAC)', warnings, context: ctx },
+    () => sumInventoryValuationWac(dealerId),
   );
 
-  // ── Accounts receivable: unpaid sales (clamped at zero per sale) ──
+  // ── Accounts receivable: read model (current) or sales snapshot (asOf) ──
   const receivable = await safeSum(
     { route: 'financials.bs.ar', label: 'Accounts Receivable', warnings, context: ctx },
     async () => {
+      if (!asOf) {
+        return sumCustomerOutstandingFromReadModel(dealerId);
+      }
       const row = await db('sales')
         .where({ dealer_id: dealerId })
-        .modify(qb => { if (asOf) qb.where('sale_date', '<=', asOf); })
+        .where('sale_date', '<=', asOf)
         .sum({ total: db.raw('GREATEST(0, COALESCE(total_amount,0) - COALESCE(paid_amount,0))') })
         .first();
       return num(row?.total);
@@ -384,29 +378,19 @@ router.get('/trial-balance', async (req, res) => {
   for (const b of banks) push(`Bank — ${b.bank_name} (${b.account_number})`, num(b.balance));
 
   const inventoryTotal = await safeSum(
-    { route: 'financials.tb.inventory', label: 'Inventory valuation', warnings, context: ctx },
-    async () => {
-      const row = await db('stock as s')
-        .join('products as p', 'p.id', 's.product_id')
-        .where('s.dealer_id', dealerId)
-        .sum({
-          total: db.raw(`
-            CASE
-              WHEN p.unit_type = 'box_sft' THEN COALESCE(s.box_qty, 0) * COALESCE(p.cost_price, 0) * COALESCE(p.per_box_sft, 1)
-              ELSE COALESCE(s.piece_qty, 0) * COALESCE(p.cost_price, 0)
-            END
-          `),
-        }).first();
-      return num(row?.total);
-    },
+    { route: 'financials.tb.inventory', label: 'Inventory valuation (WAC)', warnings, context: ctx },
+    () => sumInventoryValuationWac(dealerId),
   );
   push('Inventory', inventoryTotal);
 
   const arTotal = await safeSum(
     { route: 'financials.tb.ar', label: 'Accounts Receivable', warnings, context: ctx },
     async () => {
+      if (!asOf) {
+        return sumCustomerOutstandingFromReadModel(dealerId);
+      }
       const row = await db('sales').where({ dealer_id: dealerId })
-        .modify(qb => { if (asOf) qb.where('sale_date', '<=', asOf); })
+        .where('sale_date', '<=', asOf)
         .sum({ total: db.raw('GREATEST(0, COALESCE(total_amount,0) - COALESCE(paid_amount,0))') })
         .first();
       return num(row?.total);

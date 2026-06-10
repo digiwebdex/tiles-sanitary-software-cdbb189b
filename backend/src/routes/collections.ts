@@ -17,6 +17,7 @@ import { requireRole } from '../middleware/roles';
 import { recordCustomerPayment } from '../lib/customerPayment';
 import {
   getCustomerAggById,
+  getCustomerOutstandingMapFromReadModel,
   getOldestUnpaidSaleDateByCustomer,
 } from '../services/reportQueryService';
 
@@ -56,7 +57,7 @@ router.get('/outstanding', async (req: Request, res: Response) => {
   if (!dealerId) return;
 
   try {
-    const [custs, sales, followups, aggMap, oldestMap] = await Promise.all([
+    const [custs, sales, followups, aggMap, outstandingMap, oldestMap] = await Promise.all([
       db('customers')
         .select('id', 'name', 'phone', 'type', 'max_overdue_days')
         .where({ dealer_id: dealerId, status: 'active' })
@@ -71,6 +72,7 @@ router.get('/outstanding', async (req: Request, res: Response) => {
         .orderBy('created_at', 'desc')
         .catch(() => [] as any[]),
       getCustomerAggById(dealerId),
+      getCustomerOutstandingMapFromReadModel(dealerId),
       getOldestUnpaidSaleDateByCustomer(dealerId),
     ]);
 
@@ -97,6 +99,7 @@ router.get('/outstanding', async (req: Request, res: Response) => {
       const a = aggMap.get(c.id) ?? {
         outstanding: 0, total_sales: 0, total_paid: 0, last_payment: null,
       };
+      const outstanding = outstandingMap.get(c.id) ?? a.outstanding;
       const oldest = oldestMapFromSales.get(c.id) ?? null;
       const daysOverdue = oldest
         ? Math.max(0, Math.floor((today.getTime() - new Date(oldest).getTime()) / 86400000))
@@ -107,7 +110,7 @@ router.get('/outstanding', async (req: Request, res: Response) => {
         name: c.name,
         phone: c.phone,
         type: c.type,
-        outstanding: a.outstanding,
+        outstanding,
         last_payment_date: a.last_payment,
         total_sales: a.total_sales,
         total_paid: a.total_paid,

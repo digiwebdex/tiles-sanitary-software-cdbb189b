@@ -1,6 +1,9 @@
 /**
  * Shared balance queries for reports, dashboard, collections, and financials.
- * All customer/supplier outstanding math flows through ledgerBalance helpers here.
+ *
+ * Phase 4 (P4-01/P4-02): AR/AP totals and Tier A list endpoints read from
+ * `mv_customer_outstanding` and `mv_supplier_payable` (migration 062).
+ * Ledger helpers remain for line-level detail, as-of snapshots, and parity tests.
  */
 import type { Knex } from 'knex';
 import { db } from '../db/connection';
@@ -44,6 +47,33 @@ export interface SupplierPayableReportRow {
   totalCredit: number;
   balance: number;
 }
+
+/** Row from `mv_customer_outstanding` (sales-header AR read model). */
+export interface CustomerOutstandingReadRow {
+  customer_id: string;
+  outstanding: number;
+  oldest_unpaid_date: string | null;
+  open_invoice_count: number;
+}
+
+/** Row from `mv_supplier_payable` (supplier-ledger AP read model). */
+export interface SupplierPayableReadRow {
+  supplier_id: string;
+  outstanding: number;
+}
+
+/** WAC inventory valuation SQL fragment (P4-03). Falls back to cost_price when WAC unset. */
+export const INVENTORY_WAC_VALUATION_EXPR = `
+  CASE
+    WHEN p.unit_type = 'box_sft' THEN
+      COALESCE(s.box_qty, 0)
+      * COALESCE(NULLIF(s.average_cost_per_unit, 0), p.cost_price, 0)
+      * COALESCE(p.per_box_sft, 1)
+    ELSE
+      COALESCE(s.piece_qty, 0)
+      * COALESCE(NULLIF(s.average_cost_per_unit, 0), p.cost_price, 0)
+  END
+`;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -190,7 +220,90 @@ export async function fetchSupplierLedgerEntries(
   return q as Promise<SupplierLedgerEntry[]>;
 }
 
-/** Σ positive customer ledger balances (matches Collections grand total). */
+/** Per-customer AR from read model (sales due_amount, excludes reversed). */
+export async function fetchCustomerOutstandingReadRows(
+  dealerId: string,
+): Promise<CustomerOutstandingReadRow[]> {
+  const rows = await db('mv_customer_outstanding')
+    .where({ dealer_id: dealerId })
+    .select(
+      'customer_id',
+      'outstanding',
+      'oldest_unpaid_date',
+      'open_invoice_count',
+    );
+  return (rows as CustomerOutstandingReadRow[]).map((r) => ({
+    customer_id: r.customer_id,
+    outstanding: round2(num(r.outstanding)),
+    oldest_unpaid_date: r.oldest_unpaid_date
+      ? String(r.oldest_unpaid_date).slice(0, 10)
+      : null,
+    open_invoice_count: Number(r.open_invoice_count) || 0,
+  }));
+}
+
+/** Per-supplier AP from read model (supplier_ledger rollup). */
+export async function fetchSupplierPayableReadRows(
+  dealerId: string,
+): Promise<SupplierPayableReadRow[]> {
+  const rows = await db('mv_supplier_payable')
+    .where({ dealer_id: dealerId })
+    .select('supplier_id', 'outstanding');
+  return (rows as SupplierPayableReadRow[]).map((r) => ({
+    supplier_id: r.supplier_id,
+    outstanding: round2(num(r.outstanding)),
+  }));
+}
+
+export async function sumCustomerOutstandingFromReadModel(dealerId: string): Promise<number> {
+  const row = await db('mv_customer_outstanding')
+    .where({ dealer_id: dealerId })
+    .sum({ total: 'outstanding' })
+    .first();
+  return round2(num(row?.total));
+}
+
+export async function sumSupplierPayableFromReadModel(dealerId: string): Promise<number> {
+  const row = await db('mv_supplier_payable')
+    .where({ dealer_id: dealerId })
+    .sum({ total: 'outstanding' })
+    .first();
+  return round2(num(row?.total));
+}
+
+/** Inventory valuation at WAC (average_cost_per_unit), cost_price fallback (P4-03). */
+export async function sumInventoryValuationWac(dealerId: string): Promise<number> {
+  const row = await db('stock as s')
+    .join('products as p', 'p.id', 's.product_id')
+    .where('s.dealer_id', dealerId)
+    .sum({ total: db.raw(INVENTORY_WAC_VALUATION_EXPR) })
+    .first();
+  return round2(num(row?.total));
+}
+
+export async function buildSupplierPayableReportRowsFromReadModel(
+  dealerId: string,
+): Promise<SupplierPayableReportRow[]> {
+  const [readRows, suppliers] = await Promise.all([
+    fetchSupplierPayableReadRows(dealerId),
+    db('suppliers').where({ dealer_id: dealerId }).select('id', 'name'),
+  ]);
+  const sm = new Map(
+    (suppliers as Array<{ id: string; name: string }>).map((s) => [s.id, s.name]),
+  );
+  return readRows
+    .map((r) => ({
+      supplierId: r.supplier_id,
+      supplierName: sm.get(r.supplier_id) ?? '—',
+      totalDebit: r.outstanding,
+      totalCredit: 0,
+      balance: r.outstanding,
+    }))
+    .filter((r) => r.balance > 0)
+    .sort((a, b) => b.balance - a.balance);
+}
+
+/** Σ positive customer ledger balances (legacy / as-of / parity). */
 export async function sumCustomerOutstandingFromLedger(dealerId: string): Promise<number> {
   const entries = await fetchCustomerLedgerEntries(dealerId);
   const grouped = groupCustomerLedger(entries);
@@ -202,17 +315,19 @@ export async function sumCustomerOutstandingFromLedger(dealerId: string): Promis
   return round2(total);
 }
 
-/** Σ sales.due_amount — matches Due Aging report grand total. */
+/** Σ AR from read model — matches Due Aging grand total. */
 export async function sumCustomerOutstandingFromSales(dealerId: string): Promise<number> {
-  const row = await db('sales').where({ dealer_id: dealerId }).sum({ total: 'due_amount' }).first();
-  return round2(num(row?.total));
+  return sumCustomerOutstandingFromReadModel(dealerId);
 }
 
-/** Total AP = Σ per-supplier outstanding (dashboard, financials, supplier reports). */
+/** Total AP — read model for current; ledger rollup when asOf is set. */
 export async function sumSupplierPayable(
   dealerId: string,
   asOf?: string | null,
 ): Promise<number> {
+  if (!asOf) {
+    return sumSupplierPayableFromReadModel(dealerId);
+  }
   const entries = await fetchSupplierLedgerEntries(dealerId, { asOf });
   const grouped = groupSupplierLedger(entries);
   let total = 0;
@@ -220,6 +335,14 @@ export async function sumSupplierPayable(
     total += computeSupplierOutstanding(rows);
   }
   return round2(total);
+}
+
+/** Map customer_id → outstanding from read model. */
+export async function getCustomerOutstandingMapFromReadModel(
+  dealerId: string,
+): Promise<Map<string, number>> {
+  const rows = await fetchCustomerOutstandingReadRows(dealerId);
+  return new Map(rows.map((r) => [r.customer_id, r.outstanding]));
 }
 
 export async function getCustomerAggById(
