@@ -23,18 +23,19 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
+import { normalizePaymentMode, paymentModeLabel } from '../lib/paymentModes';
 import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
 import {
   buildCustomerDueReportRows,
-  buildSupplierPayableReportRows,
+  buildDueAgingReportRows,
+  buildSaleOverdueCheckResult,
+  buildSupplierOutstandingSummaryRows,
+  buildSupplierPayableReportRowsFromReadModel,
   fetchCustomerLedgerEntries,
-  fetchSupplierLedgerEntries,
+  getPurchasePaidAmountMap,
   groupCustomerLedger,
-  groupSupplierLedger,
 } from '../services/reportQueryService';
-import { computeSupplierBalance } from '../lib/ledgerBalance';
-
 const router = Router();
 router.use(authenticate, tenantGuard);
 
@@ -523,35 +524,13 @@ router.get('/product-history', async (req, res) => {
   }
 });
 
-// ─── 7. Customer Due Report ───────────────────────────────────────────────
-router.get('/customer-due', async (req, res) => {
-  const dealerId = resolveDealer(req, res);
-  if (!dealerId) return;
-  if (!requireFinancialRole(req, res)) return;
-  const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
-
-  try {
-    const [ledger, customers] = await Promise.all([
-      fetchCustomerLedgerEntries(dealerId),
-      db('customers').where({ dealer_id: dealerId }).select('id', 'name', 'type'),
-    ]);
-    const cm = new Map(
-      (customers as Array<{ id: string; name: string; type: string }>).map((c) => [
-        c.id,
-        { name: c.name, type: c.type },
-      ]),
-    );
-    const grouped = groupCustomerLedger(ledger);
-    const all = buildCustomerDueReportRows(grouped, cm);
-
-    res.json({
-      rows: all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-      total: all.length,
-    });
-  } catch (err) {
-    console.error('[reports.customer-due]', err);
-    res.status(500).json({ error: 'Failed to load customer due report' });
-  }
+// ─── 7. Customer Due Report (deprecated — use /collections/outstanding) ───
+router.get('/customer-due', async (_req, res) => {
+  res.status(410).json({
+    error: 'This report has been retired. Use GET /api/collections/outstanding or Due Aging in Collections.',
+    redirect: '/collections/outstanding',
+    replacement: '/api/collections/outstanding',
+  });
 });
 
 // ─── 8. Supplier Payable Report ───────────────────────────────────────────
@@ -562,15 +541,7 @@ router.get('/supplier-payable', async (req, res) => {
   const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
 
   try {
-    const [ledger, suppliers] = await Promise.all([
-      fetchSupplierLedgerEntries(dealerId),
-      db('suppliers').where({ dealer_id: dealerId }).select('id', 'name'),
-    ]);
-    const sm = new Map(
-      (suppliers as Array<{ id: string; name: string }>).map((s) => [s.id, { name: s.name }]),
-    );
-    const grouped = groupSupplierLedger(ledger);
-    const all = buildSupplierPayableReportRows(grouped, sm);
+    const all = await buildSupplierPayableReportRowsFromReadModel(dealerId);
 
     res.json({
       rows: all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -941,37 +912,7 @@ router.get('/supplier-outstanding', async (req, res) => {
   if (!dealerId) return;
   if (!requireFinancialRole(req, res)) return;
   try {
-    const [ledger, suppliers] = await Promise.all([
-      fetchSupplierLedgerEntries(dealerId),
-      db('suppliers')
-        .where({ dealer_id: dealerId })
-        .select('id', 'name', 'phone', 'status'),
-    ]);
-    const suppMap = new Map<string, any>((suppliers as any[]).map((s) => [s.id, s]));
-    const bySupplier = groupSupplierLedger(ledger);
-    const rows = Array.from(bySupplier.entries())
-      .map(([sid, entryRows]) => {
-        const s = suppMap.get(sid);
-        const outstanding = computeSupplierBalance(entryRows);
-        const totalPurchase = entryRows
-          .filter((r) => r.type === 'purchase')
-          .reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0);
-        const totalPaid = entryRows
-          .filter((r) => r.type === 'payment')
-          .reduce((sum, r) => sum + Number(r.amount), 0);
-        const paymentCount = entryRows.filter((r) => r.type === 'payment').length;
-        return {
-          supplierId: sid,
-          name: s?.name ?? '—',
-          phone: s?.phone ?? '—',
-          totalPurchase: round2(totalPurchase),
-          totalPaid: round2(totalPaid),
-          outstanding: round2(outstanding),
-          payments: paymentCount,
-        };
-      })
-      .filter((r) => r.outstanding > 0)
-      .sort((a, b) => b.outstanding - a.outstanding);
+    const rows = await buildSupplierOutstandingSummaryRows(dealerId);
     res.json({ rows });
   } catch (err: any) {
     console.error('[reports.supplier-outstanding]', err.message);
@@ -989,49 +930,12 @@ router.get('/sale-overdue-check', async (req, res) => {
     return;
   }
   try {
-    const [customer, ledger, oldestSale] = await Promise.all([
-      db('customers')
-        .where({ id: customerId, dealer_id: dealerId })
-        .select('credit_limit', 'max_overdue_days')
-        .first(),
-      db('customer_ledger')
-        .where({ customer_id: customerId, dealer_id: dealerId })
-        .select('amount', 'type'),
-      db('sales')
-        .where({ customer_id: customerId, dealer_id: dealerId })
-        .andWhere('due_amount', '>', 0)
-        .orderBy('sale_date', 'asc')
-        .select('sale_date')
-        .first(),
-    ]);
-    if (!customer) {
+    const result = await buildSaleOverdueCheckResult(dealerId, customerId);
+    if (!result) {
       res.status(404).json({ error: 'Customer not found' });
       return;
     }
-    let outstanding = 0;
-    for (const row of ledger as any[]) {
-      const amt = Number(row.amount);
-      if (row.type === 'sale') outstanding += amt;
-      else if (row.type === 'payment' || row.type === 'refund') outstanding -= amt;
-      else if (row.type === 'adjustment') outstanding += amt;
-    }
-    const oldestDate = (oldestSale as any)?.sale_date ?? null;
-    const daysOverdue = oldestDate
-      ? Math.max(
-          0,
-          Math.floor((Date.now() - new Date(oldestDate).getTime()) / 86400000),
-        )
-      : 0;
-    const maxOverdueDays = Number(customer.max_overdue_days ?? 0);
-    const creditLimit = Number(customer.credit_limit ?? 0);
-    res.json({
-      outstanding: round2(outstanding),
-      daysOverdue,
-      maxOverdueDays,
-      creditLimit,
-      isOverdueViolated: maxOverdueDays > 0 && daysOverdue > maxOverdueDays,
-      isCreditExceeded: creditLimit > 0 && outstanding > creditLimit,
-    });
+    res.json(result);
   } catch (err: any) {
     console.error('[reports.sale-overdue-check]', err.message);
     res.status(500).json({ error: 'Failed to load overdue check' });
@@ -2263,15 +2167,7 @@ router.get('/page/purchases', async (req, res) => {
         });
       }
 
-      const ledger = await db('supplier_ledger')
-        .whereIn('purchase_id', purchaseIds)
-        .where('type', 'payment')
-        .select('purchase_id', 'amount');
-      for (const e of ledger as any[]) {
-        const pid = e.purchase_id;
-        if (!paidMap[pid]) paidMap[pid] = 0;
-        paidMap[pid] += toNum(e.amount);
-      }
+      Object.assign(paidMap, await getPurchasePaidAmountMap(dealerId, purchaseIds));
     }
 
     const rows = (purchases as any[]).map((p) => ({
@@ -2317,7 +2213,8 @@ router.get('/page/payments', async (req, res) => {
         ),
       db('supplier_ledger as sl')
         .leftJoin('suppliers as s', 's.id', 'sl.supplier_id')
-        .where({ 'sl.dealer_id': dealerId, 'sl.type': 'payment' })
+        .where({ 'sl.dealer_id': dealerId })
+        .whereIn('sl.type', ['payment', 'refund'])
         .select(
           'sl.id',
           'sl.created_at',
@@ -2334,7 +2231,7 @@ router.get('/page/payments', async (req, res) => {
     const saleIds = (customerRows as any[]).map((r) => r.sale_id).filter(Boolean);
     const purchaseIds = (supplierRows as any[]).map((r) => r.purchase_id).filter(Boolean);
 
-    const [sales, purchases, bankEntries] = await Promise.all([
+    const [sales, purchases, bankEntries, cashEntries] = await Promise.all([
       saleIds.length
         ? db('sales').where({ dealer_id: dealerId }).whereIn('id', saleIds).select('id', 'invoice_number')
         : Promise.resolve([]),
@@ -2343,8 +2240,12 @@ router.get('/page/payments', async (req, res) => {
         : Promise.resolve([]),
       db('bank_ledger')
         .where({ dealer_id: dealerId })
-        .whereIn('reference_type', ['customer_payment', 'purchases'])
-        .select('reference_type', 'reference_id', 'amount', 'bank_account_id'),
+        .whereIn('reference_type', ['customer_payment', 'purchases', 'sales'])
+        .select('reference_type', 'reference_id', 'amount', 'bank_account_id', 'payment_mode'),
+      db('cash_ledger')
+        .where({ dealer_id: dealerId })
+        .whereIn('reference_type', ['customer_payment', 'sales'])
+        .select('reference_type', 'reference_id', 'amount', 'payment_mode'),
     ]);
 
     const saleMap: Record<string, string> = {};
@@ -2354,8 +2255,31 @@ router.get('/page/payments', async (req, res) => {
     for (const p of purchases as any[]) purchaseMap[p.id] = p.invoice_number ?? '';
 
     const bankRefSet = new Set<string>();
+    const paidViaByRef = new Map<string, string>();
     for (const b of bankEntries as any[]) {
-      bankRefSet.add(`${b.reference_type}:${b.reference_id}`);
+      const key = `${b.reference_type}:${b.reference_id}`;
+      bankRefSet.add(key);
+      const mode = normalizePaymentMode(b.payment_mode);
+      if (mode) paidViaByRef.set(key, paymentModeLabel(mode));
+    }
+    for (const c of cashEntries as any[]) {
+      const key = `${c.reference_type}:${c.reference_id}`;
+      const mode = normalizePaymentMode(c.payment_mode);
+      if (mode) paidViaByRef.set(key, paymentModeLabel(mode));
+    }
+
+    function resolvePaidVia(refType: string, refId: string | null): string {
+      if (!refId) return 'Cash';
+      const key = `${refType}:${refId}`;
+      if (paidViaByRef.has(key)) return paidViaByRef.get(key)!;
+      const salesKey = `sales:${refId}`;
+      const payKey = `customer_payment:${refId}`;
+      if (paidViaByRef.has(salesKey)) return paidViaByRef.get(salesKey)!;
+      if (paidViaByRef.has(payKey)) return paidViaByRef.get(payKey)!;
+      if (bankRefSet.has(key) || bankRefSet.has(salesKey) || bankRefSet.has(payKey)) {
+        return 'Bank';
+      }
+      return 'Cash';
     }
 
     type UnifiedRow = {
@@ -2376,7 +2300,6 @@ router.get('/page/payments', async (req, res) => {
     for (const r of customerRows as any[]) {
       const isReturn = r.type === 'refund' || r.sales_return_id;
       const saleRef = r.sale_id ? (saleMap[r.sale_id] || String(r.sale_id).substring(0, 12)) : '';
-      const refKey = r.sale_id ? `customer_payment:${r.sale_id}` : '';
       unified.push({
         id: `c-${r.id}`,
         created_at: r.created_at,
@@ -2384,7 +2307,7 @@ router.get('/page/payments', async (req, res) => {
         saleRef: saleRef ? `SALE${saleRef}` : '—',
         purchaseRef: '—',
         partyName: r.party_name ?? 'Customer',
-        paidVia: refKey && bankRefSet.has(refKey) ? 'Bank' : 'Cash',
+        paidVia: resolvePaidVia('customer_payment', r.sale_id ?? null),
         amount: toNum(r.amount),
         type: isReturn ? 'Return Paid' : 'Received from Customer',
         direction: isReturn ? 'out' : 'in',
@@ -2392,21 +2315,21 @@ router.get('/page/payments', async (req, res) => {
     }
 
     for (const r of supplierRows as any[]) {
+      const isRefund = r.type === 'refund';
       const purchaseRef = r.purchase_id
         ? (purchaseMap[r.purchase_id] || String(r.purchase_id).substring(0, 12))
         : '';
-      const refKey = r.purchase_id ? `purchases:${r.purchase_id}` : '';
       unified.push({
         id: `s-${r.id}`,
         created_at: r.created_at,
-        paymentRef: r.description || 'Supplier payment',
+        paymentRef: r.description || (isRefund ? 'Supplier refund' : 'Supplier payment'),
         saleRef: '—',
         purchaseRef: purchaseRef || '—',
         partyName: r.party_name ?? 'Supplier',
-        paidVia: refKey && bankRefSet.has(refKey) ? 'Bank' : 'Cash',
+        paidVia: resolvePaidVia('purchases', r.purchase_id ?? null),
         amount: toNum(r.amount),
-        type: 'Paid to Supplier',
-        direction: 'out',
+        type: isRefund ? 'Refund from Supplier' : 'Paid to Supplier',
+        direction: isRefund ? 'in' : 'out',
       });
     }
 
@@ -2441,52 +2364,7 @@ router.get('/page/due-aging', async (req, res) => {
   if (!requireFinancialRole(req, res)) return;
 
   try {
-    const [customers, sales] = await Promise.all([
-      db('customers')
-        .where({ dealer_id: dealerId, status: 'active' })
-        .orderBy('name', 'asc')
-        .select('id', 'name', 'phone', 'type'),
-      db('sales')
-        .where({ dealer_id: dealerId })
-        .andWhere('due_amount', '>', 0)
-        .select('id', 'customer_id', 'sale_date', 'due_amount', 'total_amount', 'invoice_number'),
-    ]);
-
-    const today = new Date();
-    const msPerDay = 86_400_000;
-
-    const customerMap = new Map<string, any>();
-    for (const c of customers as any[]) {
-      customerMap.set(c.id, {
-        id: c.id, name: c.name, phone: c.phone, type: c.type,
-        current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0, total: 0, invoices: [],
-      });
-    }
-    for (const s of sales as any[]) {
-      const cust = customerMap.get(s.customer_id);
-      if (!cust) continue;
-      const due = toNum(s.due_amount);
-      const days = Math.max(0, Math.floor((today.getTime() - new Date(s.sale_date).getTime()) / msPerDay));
-      if (days <= 0) cust.current += due;
-      else if (days <= 30) cust.d30 += due;
-      else if (days <= 60) cust.d60 += due;
-      else if (days <= 90) cust.d90 += due;
-      else cust.d90plus += due;
-      cust.total += due;
-      cust.invoices.push({
-        id: s.id,
-        invoice_number: s.invoice_number,
-        sale_date: typeof s.sale_date === 'string' ? s.sale_date : new Date(s.sale_date).toISOString().split('T')[0],
-        due_amount: due,
-        days,
-      });
-    }
-
-    const rows = Array.from(customerMap.values())
-      .filter((v) => v.total > 0)
-      .map((v) => ({ ...v, invoices: v.invoices.sort((a: any, b: any) => b.days - a.days) }))
-      .sort((a, b) => b.total - a.total);
-
+    const rows = await buildDueAgingReportRows(dealerId);
     res.json({ rows });
   } catch (err: any) {
     console.error('[reports.page.due-aging]', err.message);

@@ -178,9 +178,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             name="gstin"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>GSTIN / TIN</FormLabel>
+                <FormLabel>BIN / TIN (VAT)</FormLabel>
                 <FormControl>
-                  <Input placeholder="GST number" {...field} />
+                  <Input placeholder="Supplier BIN or TIN" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

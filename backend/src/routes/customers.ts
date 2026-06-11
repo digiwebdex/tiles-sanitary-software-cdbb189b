@@ -56,6 +56,7 @@ const WRITABLE = new Set([
   'credit_limit',
   'max_overdue_days',
   'price_tier_id',
+  'tax_id',
 ]);
 
 const CUSTOMER_TYPES = ['retailer', 'customer', 'project'] as const;
@@ -72,6 +73,7 @@ const customerWriteSchema = z.object({
   credit_limit: z.number().finite().min(0).optional(),
   max_overdue_days: z.number().int().min(0).optional(),
   price_tier_id: z.string().uuid().nullable().optional(),
+  tax_id: z.string().trim().max(50).nullable().optional(),
 });
 
 function resolveDealerScope(req: Request, res: Response): string | null {

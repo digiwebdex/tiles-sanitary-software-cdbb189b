@@ -6,7 +6,8 @@
  * Endpoints (per kind = customers | suppliers | cash | expenses):
  *   GET  /api/ledger/:kind?dealerId=&customerId=&supplierId=&page=&pageSize=
  *   GET  /api/ledger/:kind/monthly-summary?dealerId=&year=
- *   GET  /api/ledger/:kind/due-balance?dealerId=&customerId=        (customers only)
+ *   GET  /api/ledger/customers/due-balance/:customerId
+ *   GET  /api/ledger/suppliers/due-balance/:supplierId
  *   POST /api/ledger/:kind                                          { dealerId, data }
  *
  * All scoped to dealer_id; super_admin must pass an explicit dealerId.
@@ -17,6 +18,10 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
+import {
+  getCustomerOutstandingFromReadModel,
+  getSupplierOutstandingFromReadModel,
+} from '../services/reportQueryService';
 
 const router = Router();
 
@@ -133,21 +138,25 @@ router.get('/customers/due-balance/:customerId', async (req: Request, res: Respo
     if (!dealerId) return;
     const { customerId } = req.params;
 
-    const rows = await db('customer_ledger')
-      .select('amount', 'type')
-      .where({ dealer_id: dealerId, customer_id: customerId });
-
-    let total = 0;
-    for (const r of rows) {
-      const amt = Number(r.amount);
-      if (r.type === 'sale') total += amt;
-      else if (r.type === 'payment' || r.type === 'refund') total -= amt;
-      else if (r.type === 'adjustment') total += amt;
-    }
-    res.json({ balance: Math.round(total * 100) / 100 });
+    const balance = await getCustomerOutstandingFromReadModel(dealerId, customerId);
+    res.json({ balance, source: 'read_model' });
   } catch (err: any) {
     console.error('[ledger/due]', err.message);
     res.status(500).json({ error: 'Failed to compute due balance' });
+  }
+});
+
+router.get('/suppliers/due-balance/:supplierId', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealerScope(req, res);
+    if (!dealerId) return;
+    const { supplierId } = req.params;
+
+    const balance = await getSupplierOutstandingFromReadModel(dealerId, supplierId);
+    res.json({ balance, source: 'read_model' });
+  } catch (err: any) {
+    console.error('[ledger/supplier-due]', err.message);
+    res.status(500).json({ error: 'Failed to compute supplier payable balance' });
   }
 });
 

@@ -12,6 +12,11 @@ import {
 } from "@/components/ui/select";
 import Pagination from "@/components/Pagination";
 import {
+  resolveSalePaymentStatus,
+  salePaymentStatusClassName,
+  salePaymentStatusLabel,
+} from "@/lib/salePaymentStatus";
+import {
   fetchStockReport,
   fetchProductsReport,
   fetchBrandStockReport,
@@ -37,6 +42,7 @@ import {
   DeliveryStatusReport,
   StockMovementReport,
 } from "./AdditionalReports";
+import { PostingTraceDialog, type PostingTraceTarget } from "@/components/PostingTraceDialog";
 import {
   BackorderReport,
   PendingFulfillmentReport,
@@ -107,6 +113,7 @@ import {
   HighReturnSuppliersReport,
   SupplierPriceTrendReport,
 } from "./SupplierPerformanceReports";
+import { VatRegisterHub } from "./VatRegisterReports";
 import {
   ReorderSuggestionReport,
   StockoutRiskReport,
@@ -127,7 +134,7 @@ import {
   ShoppingCart, DollarSign, Users, History, BookOpen, Clock, TrendingUp,
   ChevronDown, GitBranch, Shield, Lock, ShieldCheck, FileBarChart, UserCheck,
   FileSignature, Coins, Pencil, Folder, MapPin, Banknote, MonitorSpeaker, Send, PackageCheck as PackageCheck2,
-  Truck, Wallet, Brain, Archive, TrendingDown,
+  Truck, Wallet, Brain, Archive, TrendingDown, Search, FileSpreadsheet,
 } from "lucide-react";
 
 interface ReportsPageContentProps {
@@ -144,7 +151,7 @@ const months = [
 
 // Reports that require admin-only access
 const ADMIN_ONLY_REPORTS = new Set([
-  "profit-analysis", "accounting", "supplier-outstanding", "purchases",
+  "profit-analysis", "accounting", "supplier-outstanding", "purchases", "vat-registers",
 ]);
 
 const reportGroups = [
@@ -329,6 +336,13 @@ const reportGroups = [
       { key: "accounting", label: "Expenses Report", icon: DollarSign },
     ],
   },
+  {
+    label: "VAT / Mushak",
+    icon: FileSpreadsheet,
+    items: [
+      { key: "vat-registers", label: "VAT Registers (6.3 / 6.1)", icon: FileSpreadsheet },
+    ],
+  },
 ];
 
 // Flat list for mobile tab bar
@@ -336,6 +350,7 @@ const reportNavItems = reportGroups.flatMap((g) => g.items);
 
 const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
   const [activeReport, setActiveReport] = useState("stock");
+  const [hubSearch, setHubSearch] = useState("");
   const permissions = usePermissions();
 
   // Filter out admin-only reports for non-privileged users
@@ -346,6 +361,14 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
         .filter((g) => g.items.length > 0);
 
   const filteredNavItems = filteredGroups.flatMap((g) => g.items);
+
+  const hubSearchNorm = hubSearch.trim().toLowerCase();
+  const searchMatchedItems = hubSearchNorm
+    ? filteredNavItems.filter((item) => {
+        const groupLabel = filteredGroups.find((g) => g.items.some((i) => i.key === item.key))?.label ?? "";
+        return `${item.label} ${groupLabel}`.toLowerCase().includes(hubSearchNorm);
+      })
+    : [];
 
   const renderReport = () => {
     switch (activeReport) {
@@ -360,6 +383,7 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
       case "sales-report": return <DetailedSalesReport dealerId={dealerId} />;
       case "sales-by-salesman": return <SalesBySalesmanReport dealerId={dealerId} />;
       case "purchases": return <PurchasesReport dealerId={dealerId} />;
+      case "vat-registers": return <VatRegisterHub dealerId={dealerId} />;
       case "payments": return <PaymentsReport dealerId={dealerId} />;
       case "retailer": return <RetailerSalesReport dealerId={dealerId} />;
       case "product-history": return <ProductHistoryReport dealerId={dealerId} />;
@@ -440,9 +464,39 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
     <div className="min-h-[calc(100vh-8rem)] flex flex-col md:flex-row">
       {/* Desktop: Accordion sidebar */}
       <aside className="hidden md:block w-60 shrink-0 border-r bg-card overflow-y-auto">
-        <div className="flex items-center gap-2 px-4 py-3 border-b">
-          <BarChart3 className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-bold text-foreground">Reports</h2>
+        <div className="px-4 py-3 border-b space-y-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-bold text-foreground">Reports</h2>
+          </div>
+          <Input
+            value={hubSearch}
+            onChange={(e) => setHubSearch(e.target.value)}
+            placeholder="Search reports..."
+            className="h-8 text-xs"
+          />
+          {hubSearchNorm && (
+            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+              {searchMatchedItems.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-1">No reports match</p>
+              ) : (
+                searchMatchedItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setActiveReport(item.key);
+                      setHubSearch("");
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted/60"
+                  >
+                    <item.icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    {item.label}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
         <nav className="p-2 space-y-1">
           {filteredGroups.map((group) => {
@@ -485,6 +539,31 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
           <BarChart3 className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-bold text-foreground">Reports</h2>
         </div>
+        <Input
+          value={hubSearch}
+          onChange={(e) => setHubSearch(e.target.value)}
+          placeholder="Search reports..."
+          className="h-8 text-xs mb-2"
+        />
+        {hubSearchNorm && searchMatchedItems.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1">
+            {searchMatchedItems.slice(0, 8).map((item) => (
+              <Button
+                key={item.key}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setActiveReport(item.key);
+                  setHubSearch("");
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        )}
         <div className="flex overflow-x-auto gap-0 -mb-px">
           {filteredNavItems.map((item) => (
             <button
@@ -790,10 +869,16 @@ function DetailedSalesReport({ dealerId }: { dealerId: string }) {
   const sales = data?.sales ?? [];
   const total = data?.total ?? 0;
 
-  const paymentBadge = (due: number, paid: number) => {
-    if (due <= 0) return <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs">Paid</Badge>;
-    if (paid > 0) return <Badge variant="outline" className="border-yellow-500 text-yellow-600 text-xs">Partial</Badge>;
-    return <Badge className="bg-orange-100 text-orange-700 text-xs">Pending</Badge>;
+  const paymentBadge = (sale: { due_amount?: number | string; paid_amount?: number | string; document_status?: string; sale_status?: string }) => {
+    const status = resolveSalePaymentStatus(sale);
+    return (
+      <Badge
+        variant={status === "paid" ? "default" : "outline"}
+        className={`text-xs ${salePaymentStatusClassName(status)}`}
+      >
+        {salePaymentStatusLabel(status)}
+      </Badge>
+    );
   };
 
   return (
@@ -857,7 +942,7 @@ function DetailedSalesReport({ dealerId }: { dealerId: string }) {
                         <TableCell className="text-right font-medium">{formatCurrency(s.total_amount)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(paid)}</TableCell>
                         <TableCell className={`text-right ${due > 0 ? "text-destructive font-semibold" : ""}`}>{formatCurrency(due)}</TableCell>
-                        <TableCell>{paymentBadge(due, paid)}</TableCell>
+                        <TableCell>{paymentBadge(s)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -1859,6 +1944,8 @@ function PaymentsReport({ dealerId }: { dealerId: string }) {
 // ─── Due Aging Report ─────────────────────────────────────
 function DueAgingReport({ dealerId }: { dealerId: string }) {
   const [search, setSearch] = useState("");
+  const [traceTarget, setTraceTarget] = useState<PostingTraceTarget | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["report-due-aging", dealerId],
@@ -1898,6 +1985,11 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
     }),
     { current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0, total: 0 }
   );
+
+  const openTrace = (customerId: string, name: string) => {
+    setTraceTarget({ lineDomain: "customer", partyId: customerId, partyName: name });
+    setTraceOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -1941,13 +2033,14 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
                   <TableHead className="text-right">61-90 Days</TableHead>
                   <TableHead className="text-right text-destructive">90+ Days</TableHead>
                   <TableHead className="text-right font-bold">Total Due</TableHead>
+                  <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No overdue invoices found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No overdue invoices found</TableCell></TableRow>
                 ) : (
                   <>
                     {rows.map((r) => (
@@ -1965,6 +2058,17 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
                         <TableCell className="text-right font-medium">{r.d90 > 0 ? `৳${Math.round(r.d90).toLocaleString()}` : "—"}</TableCell>
                         <TableCell className="text-right font-semibold text-destructive">{r.d90plus > 0 ? `৳${Math.round(r.d90plus).toLocaleString()}` : "—"}</TableCell>
                         <TableCell className="text-right font-bold">৳{Math.round(r.total).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2"
+                            onClick={() => openTrace(r.id, r.name)}
+                            title="View posting trace"
+                          >
+                            <Search className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {/* Totals footer */}
@@ -1976,6 +2080,7 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
                       <TableCell className="text-right">৳{Math.round(totals.d90).toLocaleString()}</TableCell>
                       <TableCell className="text-right text-destructive">৳{Math.round(totals.d90plus).toLocaleString()}</TableCell>
                       <TableCell className="text-right">৳{Math.round(totals.total).toLocaleString()}</TableCell>
+                      <TableCell />
                     </TableRow>
                   </>
                 )}
@@ -1984,6 +2089,12 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
           </div>
         </CardContent>
       </Card>
+      <PostingTraceDialog
+        open={traceOpen}
+        onOpenChange={setTraceOpen}
+        dealerId={dealerId}
+        target={traceTarget}
+      />
     </div>
   );
 }

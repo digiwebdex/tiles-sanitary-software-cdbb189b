@@ -12,10 +12,11 @@ interface PaymentReceiptProps {
   date: string;
   receiptNo: string;
   remainingDue: number;
+  paymentMethod?: string;
 }
 
 const PaymentReceipt = forwardRef<HTMLDivElement, PaymentReceiptProps>(
-  ({ dealerName, dealerPhone, dealerAddress, customerName, customerPhone, amount, note, date, receiptNo, remainingDue }, ref) => {
+  ({ dealerName, dealerPhone, dealerAddress, customerName, customerPhone, amount, note, date, receiptNo, remainingDue, paymentMethod = "Cash" }, ref) => {
     return (
       <div ref={ref} className="p-8 max-w-md mx-auto bg-white text-black font-sans" style={{ fontFamily: "'Segoe UI', sans-serif" }}>
         {/* Header */}
@@ -56,7 +57,7 @@ const PaymentReceipt = forwardRef<HTMLDivElement, PaymentReceiptProps>(
           <tbody>
             <tr className="border-b border-gray-200">
               <td className="py-1.5 text-gray-600">Payment Method</td>
-              <td className="py-1.5 text-right font-medium">Cash</td>
+              <td className="py-1.5 text-right font-medium">{paymentMethod}</td>
             </tr>
             {note && (
               <tr className="border-b border-gray-200">

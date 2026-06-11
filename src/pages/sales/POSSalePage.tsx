@@ -4,6 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useDealerId } from "@/hooks/useDealerId";
 import { useAuth } from "@/contexts/AuthContext";
 import { salesService } from "@/services/salesService";
+import { bankAccountService } from "@/services/bankAccountService";
+import { PayFromAccountSelect } from "@/components/PayFromAccountSelect";
+import { PaymentModeSelect } from "@/components/PaymentModeSelect";
+import { paymentModeRequiresBankAccount } from "@/lib/paymentModes";
 import { pricingTierService, type RateSource } from "@/services/pricingTierService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,6 +45,7 @@ const POSSalePage = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
+  const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const paidRef = useRef<HTMLInputElement>(null);
@@ -61,6 +66,12 @@ const POSSalePage = () => {
     F5: () => paidRef.current?.focus(),
     F12: () => handleCheckout(),
     Escape: () => navigate("/sales"),
+  });
+
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId,
   });
 
   const { data: products = [] } = useQuery({
@@ -218,6 +229,11 @@ const POSSalePage = () => {
       return;
     }
 
+    if (paymentModeRequiresBankAccount(paymentMode) && !paidAccountId) {
+      toast({ title: "Select a bank account for this payment mode", variant: "destructive" });
+      return;
+    }
+
     setProcessing(true);
     try {
       await salesService.create({
@@ -231,6 +247,7 @@ const POSSalePage = () => {
         client_reference: "",
         fitter_reference: "",
         payment_mode: paymentMode,
+        paid_account_id: paymentMode === "cash" ? null : paidAccountId ?? null,
         notes: "POS Sale",
         created_by: user?.id,
         items: cart.map((c) => ({
@@ -320,17 +337,30 @@ const POSSalePage = () => {
         <div className="lg:w-80 xl:w-96 shrink-0 border-t lg:border-t-0 lg:border-l bg-card flex flex-col overflow-hidden">
           <div className="px-3 py-2 border-b flex items-center justify-between">
             <span className="text-sm font-semibold">Cart ({cart.length})</span>
-            <Select value={paymentMode} onValueChange={setPaymentMode}>
-              <SelectTrigger className="w-32 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="bank">Bank</SelectItem>
-                <SelectItem value="mobile_banking">mBanking</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="w-40">
+              <PaymentModeSelect
+                value={paymentMode}
+                onChange={(v) => {
+                  setPaymentMode(v);
+                  if (v === "cash") setPaidAccountId(null);
+                }}
+                label=""
+                triggerClassName="h-8 text-xs"
+              />
+            </div>
           </div>
+
+          {paymentMode !== "cash" && (
+            <div className="px-3 py-2 border-b">
+              <PayFromAccountSelect
+                value={paidAccountId}
+                onChange={setPaidAccountId}
+                bankAccounts={bankAccounts}
+                label={paymentModeRequiresBankAccount(paymentMode) ? "Deposit To (required)" : "Settlement Account (optional)"}
+                triggerClassName="h-8 text-xs"
+              />
+            </div>
+          )}
 
           {/* Cart items - scrollable */}
           <div className="flex-1 overflow-y-auto">

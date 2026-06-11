@@ -18,6 +18,7 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
+import { buildProjectOutstandingRows } from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -141,44 +142,8 @@ router.get('/outstanding', async (req, res) => {
 
   try {
     const projects = await loadProjectsMeta(dealerId);
-    const sales = await db('sales')
-      .where({ dealer_id: dealerId })
-      .whereNotNull('project_id')
-      .select('project_id', 'sale_date', 'total_amount', 'paid_amount', 'due_amount');
-
-    const today = todayStr();
-    const agg = new Map<string, { billed: number; paid: number; due: number; overdue: number }>();
-    for (const r of sales as any[]) {
-      const cur = agg.get(r.project_id) ?? { billed: 0, paid: 0, due: 0, overdue: 0 };
-      const due = toNum(r.due_amount);
-      cur.billed += toNum(r.total_amount);
-      cur.paid += toNum(r.paid_amount);
-      cur.due += due;
-      if (due > 0 && r.sale_date) {
-        const p = projects.get(r.project_id);
-        const maxDays = p?.max_overdue_days ?? 0;
-        const dStr = typeof r.sale_date === 'string' ? r.sale_date : new Date(r.sale_date).toISOString().split('T')[0];
-        if (daysBetween(dStr, today) > (maxDays ?? 0)) cur.overdue += due;
-      }
-      agg.set(r.project_id, cur);
-    }
-
-    const rows: any[] = [];
-    for (const [pid, v] of agg.entries()) {
-      const p = projects.get(pid);
-      if (!p) continue;
-      rows.push({
-        project_id: pid,
-        project_name: p.project_name,
-        project_code: p.project_code,
-        customer_name: p.customer_name ?? '—',
-        billed: v.billed,
-        paid: v.paid,
-        due: v.due,
-        overdue: v.overdue,
-      });
-    }
-    res.json(rows.sort((a, b) => b.due - a.due));
+    const rows = await buildProjectOutstandingRows(dealerId, projects, todayStr());
+    res.json(rows);
   } catch (err) {
     console.error('[projects.outstanding]', err);
     res.status(500).json({ error: 'Failed to load project outstanding' });

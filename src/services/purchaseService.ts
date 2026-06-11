@@ -122,6 +122,15 @@ export const purchaseService = {
     );
   },
 
+  /** Reverse a posted purchase (P2-09). Removes stock + ledger; marks document reversed. */
+  async reverse(purchaseId: string, dealerId: string) {
+    await assertDealerId(dealerId);
+    return await vpsRequest<{ purchase: any; reversed: boolean }>(
+      `/api/purchases/${purchaseId}/reverse?dealerId=${encodeURIComponent(dealerId)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    );
+  },
+
   async deleteDraft(dealerId: string, id: string): Promise<void> {
     await vpsRequest<{ ok: true }>(
       `/api/purchases/drafts/${id}?dealerId=${encodeURIComponent(dealerId)}`,

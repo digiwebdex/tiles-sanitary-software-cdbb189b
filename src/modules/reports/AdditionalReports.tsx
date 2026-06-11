@@ -16,7 +16,8 @@ import { formatStockUnit } from "@/lib/units";
 import { exportToExcel } from "@/lib/exportUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import Pagination from "@/components/Pagination";
-import { Download, UserCheck, Truck, TruckIcon } from "lucide-react";
+import { Download, UserCheck, Truck, TruckIcon, Search } from "lucide-react";
+import { PostingTraceDialog, type PostingTraceTarget } from "@/components/PostingTraceDialog";
 
 // ─── Sales by Salesman Report ─────────────────────────────
 export function SalesBySalesmanReport({ dealerId }: { dealerId: string }) {
@@ -122,6 +123,8 @@ export function SalesBySalesmanReport({ dealerId }: { dealerId: string }) {
 // ─── Supplier Outstanding Summary ─────────────────────────
 export function SupplierOutstandingReport({ dealerId }: { dealerId: string }) {
   const { canExportReports } = usePermissions();
+  const [traceTarget, setTraceTarget] = useState<PostingTraceTarget | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["report-supplier-outstanding", dealerId],
@@ -140,7 +143,13 @@ export function SupplierOutstandingReport({ dealerId }: { dealerId: string }) {
 
   const rows = data ?? [];
 
+  const openTrace = (supplierId: string, name: string) => {
+    setTraceTarget({ lineDomain: "supplier", partyId: supplierId, partyName: name });
+    setTraceOpen(true);
+  };
+
   return (
+    <>
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base">Supplier Outstanding Summary</CardTitle>
@@ -169,6 +178,7 @@ export function SupplierOutstandingReport({ dealerId }: { dealerId: string }) {
                   <TableHead className="text-right">Total Purchase</TableHead>
                   <TableHead className="text-right">Total Paid</TableHead>
                   <TableHead className="text-right">Outstanding</TableHead>
+                  <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -179,6 +189,17 @@ export function SupplierOutstandingReport({ dealerId }: { dealerId: string }) {
                     <TableCell className="text-right">{formatCurrency(r.totalPurchase)}</TableCell>
                     <TableCell className="text-right text-primary">{formatCurrency(r.totalPaid)}</TableCell>
                     <TableCell className="text-right font-semibold text-destructive">{formatCurrency(r.outstanding)}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2"
+                        onClick={() => openTrace(r.supplierId, r.name)}
+                        title="View posting trace"
+                      >
+                        <Search className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
                 <TableRow className="bg-muted/50 font-semibold">
@@ -186,6 +207,7 @@ export function SupplierOutstandingReport({ dealerId }: { dealerId: string }) {
                   <TableCell className="text-right">{formatCurrency(rows.reduce((s, r) => s + r.totalPurchase, 0))}</TableCell>
                   <TableCell className="text-right">{formatCurrency(rows.reduce((s, r) => s + r.totalPaid, 0))}</TableCell>
                   <TableCell className="text-right">{formatCurrency(rows.reduce((s, r) => s + r.outstanding, 0))}</TableCell>
+                  <TableCell />
                 </TableRow>
               </TableBody>
             </Table>
@@ -193,6 +215,13 @@ export function SupplierOutstandingReport({ dealerId }: { dealerId: string }) {
         )}
       </CardContent>
     </Card>
+    <PostingTraceDialog
+      open={traceOpen}
+      onOpenChange={setTraceOpen}
+      dealerId={dealerId}
+      target={traceTarget}
+    />
+    </>
   );
 }
 

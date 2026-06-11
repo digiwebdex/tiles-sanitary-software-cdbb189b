@@ -94,6 +94,10 @@ const FinancialStatementsPage = () => {
                     <TableRow><TableCell>Less: Sales Returns</TableCell><TableCell className="text-right font-mono text-red-500">({formatCurrency(pAndL.sales_returns)})</TableCell></TableRow>
                     <TableRow className="border-t"><TableCell className="font-semibold">Net Revenue</TableCell><TableCell className="text-right font-mono font-semibold">{formatCurrency(pAndL.net_revenue)}</TableCell></TableRow>
                     <TableRow><TableCell>Less: Cost of Goods Sold (COGS)</TableCell><TableCell className="text-right font-mono text-red-500">({formatCurrency(pAndL.cogs)})</TableCell></TableRow>
+                    {(pAndL.cogs_reversal ?? 0) > 0 && (
+                      <TableRow><TableCell className="pl-6 text-muted-foreground">Add: COGS Reversal (returns)</TableCell><TableCell className="text-right font-mono text-emerald-600">{formatCurrency(pAndL.cogs_reversal ?? 0)}</TableCell></TableRow>
+                    )}
+                    <TableRow><TableCell className="font-medium">Net COGS</TableCell><TableCell className="text-right font-mono text-red-500">({formatCurrency(pAndL.net_cogs ?? pAndL.cogs)})</TableCell></TableRow>
                     <TableRow className="bg-muted/40"><TableCell className="font-bold">Gross Profit</TableCell><TableCell className="text-right font-mono font-bold text-primary">{formatCurrency(pAndL.gross_profit)}</TableCell></TableRow>
                     <TableRow><TableCell colSpan={2} className="font-semibold pt-4">Operating Expenses</TableCell></TableRow>
                     {pAndL.expenses_by_category.map(e => (

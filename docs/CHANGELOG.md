@@ -4,6 +4,21 @@
 
 ---
 
+## [2026-06-09] — Phase 4 report cutover (Tier A balance SQL)
+
+### Changed
+- **Due Aging** (`GET /api/reports/page/due-aging`) — built via `buildDueAgingReportRows()`; per-customer totals from `mv_customer_outstanding`; invoice buckets exclude reversed sales.
+- **Sale overdue check** — AR from read model + `oldest_unpaid_date` (no inline `customer_ledger` loop).
+- **Project outstanding** — `buildProjectOutstandingRows()` in `reportQueryService`; excludes reversed sales.
+- **Purchases report** — paid amounts via `getPurchasePaidAmountMap()` / `sumPurchaseLedgerPayments()`.
+- **Collections aging** — `getOldestUnpaidSaleDateByCustomer()` excludes reversed sales.
+
+### Added
+- `src/test/dueAgingReport.test.ts` — aging bucket unit tests.
+- Read-model parity fixture for due-aging invoice rollup vs `mv_customer_outstanding`.
+
+---
+
 ## [2026-06-08] — Smooth operations restructure (fresh data)
 
 ### Fixed

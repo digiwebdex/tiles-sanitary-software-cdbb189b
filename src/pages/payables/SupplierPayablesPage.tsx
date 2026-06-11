@@ -53,11 +53,14 @@ const SupplierPayablesPage = () => {
   const [payNote, setPayNote] = useState("");
   const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
 
-  const { data: rows = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["payables-outstanding", dealerId],
     queryFn: () => payablesService.listOutstanding(dealerId),
     enabled: !!dealerId,
   });
+
+  const rows = data?.rows ?? [];
+  const summary = data?.summary;
 
   const { data: bankAccounts = [] } = useQuery({
     queryKey: ["bank-accounts", dealerId],
@@ -66,24 +69,36 @@ const SupplierPayablesPage = () => {
   });
 
   const supplierGroups = useMemo(() => {
+    const balanceMap = new Map(
+      (summary?.suppliers ?? []).map((s) => [s.supplierId, s.outstanding]),
+    );
     const map = new Map<string, SupplierGroup>();
     for (const row of rows) {
       const sid = row.supplier_id;
       if (!sid) continue;
       const existing = map.get(sid) ?? {
         supplierId: sid,
-        supplierName: row.suppliers?.name ?? "—",
-        totalDue: 0,
+        supplierName: row.suppliers?.name ?? summary?.suppliers.find((s) => s.supplierId === sid)?.name ?? "—",
+        totalDue: balanceMap.get(sid) ?? 0,
         bills: [],
       };
-      existing.totalDue += Number(row.due_amount) || 0;
       existing.bills.push(row);
       map.set(sid, existing);
     }
+    for (const s of summary?.suppliers ?? []) {
+      if (!map.has(s.supplierId)) {
+        map.set(s.supplierId, {
+          supplierId: s.supplierId,
+          supplierName: s.name,
+          totalDue: s.outstanding,
+          bills: [],
+        });
+      }
+    }
     return Array.from(map.values()).sort((a, b) => b.totalDue - a.totalDue);
-  }, [rows]);
+  }, [rows, summary]);
 
-  const totalDue = rows.reduce((sum, p) => sum + (Number(p.due_amount) || 0), 0);
+  const totalDue = summary?.totalOutstanding ?? 0;
 
   const paymentMutation = useMutation({
     mutationFn: async () => {
@@ -133,7 +148,12 @@ const SupplierPayablesPage = () => {
             Unpaid purchase bills — pay a supplier in one click (oldest bills first) or open a bill to pay partially.
           </p>
         </div>
-        <Button onClick={() => navigate("/purchases/new")}>New Purchase</Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={() => navigate("/payables/pay")}>
+            <CreditCard className="mr-1 h-4 w-4" /> Pay Supplier
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/purchases/new")}>New Purchase</Button>
+        </div>
       </div>
 
       <Card>
@@ -170,10 +190,10 @@ const SupplierPayablesPage = () => {
 
       {isLoading ? (
         <p className="text-muted-foreground">Loading…</p>
-      ) : rows.length === 0 ? (
+      ) : supplierGroups.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
-            No unpaid purchase bills. All supplier balances are settled.
+            No supplier payables outstanding.
           </CardContent>
         </Card>
       ) : (

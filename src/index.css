@@ -100,4 +100,19 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  .bangla-text {
+    font-family: "Noto Sans Bengali", "Hind Siliguri", "Segoe UI", sans-serif;
+  }
+}
+
+@media print {
+  .vat-tax-invoice {
+    font-size: 10pt;
+    color: #000 !important;
+  }
+
+  .vat-tax-invoice .bangla-text {
+    font-family: "Noto Sans Bengali", "Hind Siliguri", sans-serif;
+  }
 }

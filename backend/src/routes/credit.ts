@@ -1,17 +1,19 @@
 /**
- * Credit Control route — Phase 3U-12.
+ * Credit Control route — Phase 3U-12 / P4-02 read-model cutover.
  *
  *   GET /api/credit/report?dealerId=
  *
- * Returns per-customer outstanding (from customer_ledger), oldest unpaid
- * sale date (from sales.due_amount > 0), credit limit, status badge, and
- * utilization %. dealer_admin only — salesman has no business reading
- * full receivables exposure.
+ * Per-customer outstanding from `mv_customer_outstanding` (sales-header AR).
+ * dealer_admin only.
  */
 import { Router, Request, Response } from 'express';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import {
+  getCustomerOldestUnpaidMapFromReadModel,
+  getCustomerOutstandingMapFromReadModel,
+} from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -61,55 +63,24 @@ router.get('/report', async (req: Request, res: Response) => {
     if (!dealerId) return;
     if (!requireAdmin(req, res)) return;
 
-    // Active customers
-    const customers = await db('customers')
-      .select('id', 'name', 'credit_limit', 'max_overdue_days')
-      .where({ dealer_id: dealerId, status: 'active' })
-      .orderBy('name');
+    const [customers, outstandingMap, oldestMap] = await Promise.all([
+      db('customers')
+        .select('id', 'name', 'credit_limit', 'max_overdue_days')
+        .where({ dealer_id: dealerId, status: 'active' })
+        .orderBy('name'),
+      getCustomerOutstandingMapFromReadModel(dealerId),
+      getCustomerOldestUnpaidMapFromReadModel(dealerId),
+    ]);
 
     if (customers.length === 0) {
       res.json({ rows: [] });
       return;
     }
 
-    const customerIds = customers.map((c) => c.id);
-
-    // Aggregate ledger per customer using SQL (faster than per-row JS).
-    // Outstanding = sum(sale + adjustment) - sum(payment + refund).
-    const ledgerRows = await db('customer_ledger')
-      .select('customer_id', 'type')
-      .sum({ amount_sum: 'amount' })
-      .where({ dealer_id: dealerId })
-      .whereIn('customer_id', customerIds)
-      .groupBy('customer_id', 'type') as Array<{ customer_id: string; type: string; amount_sum: any }>;
-
-    const outstandingMap = new Map<string, number>();
-    for (const row of ledgerRows) {
-      const cur = outstandingMap.get(row.customer_id) ?? 0;
-      const amt = Number(row.amount_sum) || 0;
-      let delta = 0;
-      if (row.type === 'sale' || row.type === 'adjustment') delta = amt;
-      else if (row.type === 'payment' || row.type === 'refund') delta = -amt;
-      outstandingMap.set(row.customer_id, cur + delta);
-    }
-
-    // Oldest unpaid sale per customer.
-    const oldestRows = await db('sales')
-      .select('customer_id')
-      .min({ oldest: 'sale_date' })
-      .where({ dealer_id: dealerId })
-      .whereIn('customer_id', customerIds)
-      .where('due_amount', '>', 0)
-      .groupBy('customer_id') as Array<{ customer_id: string; oldest: any }>;
-    const oldestMap = new Map<string, string>();
-    for (const row of oldestRows) {
-      if (row.oldest) oldestMap.set(row.customer_id, String(row.oldest).slice(0, 10));
-    }
-
     const today = Date.now();
     const rows = customers
       .map((c) => {
-        const outstanding = Math.max(0, Math.round((outstandingMap.get(c.id) ?? 0) * 100) / 100);
+        const outstanding = outstandingMap.get(c.id) ?? 0;
         const oldest = oldestMap.get(c.id) ?? null;
         const overdue_days = oldest
           ? Math.max(0, Math.floor((today - new Date(oldest).getTime()) / 86_400_000))
@@ -129,6 +100,7 @@ router.get('/report', async (req: Request, res: Response) => {
           utilization_pct,
         };
       })
+      .filter((r) => r.current_outstanding > 0 || r.credit_limit > 0)
       .sort((a, b) => b.current_outstanding - a.current_outstanding);
 
     res.json({ rows });

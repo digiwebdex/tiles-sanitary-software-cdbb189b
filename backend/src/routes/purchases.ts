@@ -36,8 +36,15 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
-import { attachPurchasePaymentSummaries, buildPurchasePaymentSummary, sumPurchaseLedgerPayments } from '../lib/purchasePaymentSummary';
+import {
+  attachPurchasePaymentSummaries,
+  buildPurchasePaymentSummary,
+  computePurchaseNetPayable,
+  sumPurchaseLedgerPayments,
+} from '../lib/purchasePaymentSummary';
 import { recordSupplierPayment } from '../lib/supplierPayment';
+import { computeVatBreakdown, normalizeDealerVatSettings } from '../lib/vatMath';
+import { insertTaxPostingLine } from '../services/taxPostingService';
 import { requireRole } from '../middleware/roles';
 import {
   isPostingEngineEnabled,
@@ -48,6 +55,15 @@ import {
   buildPurchaseStockLines,
   type PurchaseStockPostedItem,
 } from '../services/posting/StockPostingEngine';
+import {
+  invertPostingLines,
+  postingLinesFromDbRows,
+} from '../services/posting/invertPostingLines';
+import {
+  insertPurchaseReverseLedgerEntries,
+  releaseBackorderAllocationsForPurchaseItems,
+  reversePurchaseItemStock,
+} from '../services/purchaseReverse';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -220,6 +236,171 @@ router.delete('/drafts/:id', async (req: Request, res: Response) => {
 });
 
 
+// POST /api/purchases/:id/reverse — reverse a posted purchase (P2-09).
+router.post('/:id/reverse', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('super_admin') && !roles.includes('dealer_admin')) {
+    res.status(403).json({ error: 'Only dealer_admin can reverse purchases' });
+    return;
+  }
+
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const { id: purchaseId } = req.params;
+  const userId = req.user?.userId ?? null;
+  const ip =
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress ||
+    null;
+  const ua = (req.headers['user-agent'] as string) || null;
+
+  try {
+    const purchase = await db('purchases').where({ id: purchaseId, dealer_id: dealerId }).first();
+    if (!purchase) {
+      res.status(404).json({ error: 'Purchase not found' });
+      return;
+    }
+
+    const docStatus = (purchase as any).document_status ?? 'posted';
+    if (docStatus === 'reversed') {
+      res.status(409).json({ error: 'Purchase is already reversed', code: 'ALREADY_REVERSED' });
+      return;
+    }
+    if (docStatus !== 'posted') {
+      res.status(409).json({
+        error: 'Only posted purchases can be reversed.',
+        code: 'NOT_POSTED',
+      });
+      return;
+    }
+
+    const paidOnCreate = Number(purchase.paid_on_create) || 0;
+    const paidMap = await sumPurchaseLedgerPayments(dealerId, [purchaseId]);
+    const totalPaid = paidMap.get(purchaseId) || 0;
+    if (totalPaid > paidOnCreate + 0.01) {
+      res.status(400).json({
+        error:
+          'Cannot reverse a purchase with additional supplier payments. Reverse or reallocate those payments first.',
+        code: 'EXTRA_PAYMENTS',
+      });
+      return;
+    }
+
+    const items = await db('purchase_items')
+      .where({ purchase_id: purchaseId })
+      .select(
+        'id',
+        'product_id',
+        'batch_id',
+        'quantity',
+        'box_qty',
+        'piece_qty',
+        'total_pieces',
+        'landed_cost',
+        'total_sft',
+      );
+
+    const productIds = Array.from(new Set(items.map((i: any) => i.product_id)));
+    const products = await db('products')
+      .whereIn('id', productIds)
+      .andWhere({ dealer_id: dealerId })
+      .select('id', 'unit_type', 'per_box_sft', 'pieces_per_box');
+    const productMap = new Map(products.map((p: any) => [p.id, p]));
+
+    const reverseDate = new Date().toISOString().slice(0, 10);
+    const netPayable = computePurchaseNetPayable(purchase);
+
+    await db.transaction(async (trx) => {
+      const purchaseItemIds = items.map((i: any) => i.id);
+
+      await releaseBackorderAllocationsForPurchaseItems(trx, dealerId, purchaseItemIds);
+
+      for (const item of items) {
+        const product = productMap.get(item.product_id);
+        if (!product) throw new Error('Product not found for purchase item');
+        await reversePurchaseItemStock(trx, {
+          dealerId,
+          purchaseId,
+          invoiceNumber: purchase.invoice_number,
+          userId,
+          item,
+          product,
+        });
+      }
+
+      await insertPurchaseReverseLedgerEntries(trx, {
+        dealerId,
+        purchaseId,
+        supplierId: purchase.supplier_id,
+        invoiceNumber: purchase.invoice_number,
+        netPayable,
+        paidOnCreate,
+        paidAccountId: purchase.paid_account_id ?? null,
+        entryDate: reverseDate,
+      });
+
+      await trx('purchases')
+        .where({ id: purchaseId })
+        .update({ document_status: 'reversed' });
+
+      if (isPostingEngineEnabled() && (purchase as any).posting_batch_id) {
+        const originalLines = await trx('posting_lines')
+          .where({ posting_batch_id: (purchase as any).posting_batch_id })
+          .select('*');
+        if (originalLines.length > 0) {
+          const inverted = invertPostingLines(postingLinesFromDbRows(originalLines as any[]));
+          await mirrorToPostingTables(
+            {
+              trx,
+              dealerId,
+              documentType: 'purchase',
+              documentId: purchaseId,
+              eventType: 'reversed',
+              entryDate: reverseDate,
+              postedBy: userId,
+              idempotencyKey: `purchase:reverse:${purchaseId}`,
+              reversesBatchId: (purchase as any).posting_batch_id,
+            },
+            inverted,
+          );
+        }
+      }
+
+      await trx('audit_logs').insert({
+        dealer_id: dealerId,
+        user_id: userId,
+        action: 'purchase_reverse',
+        table_name: 'purchases',
+        record_id: purchaseId,
+        old_data: {
+          invoice_number: purchase.invoice_number,
+          total_amount: Number(purchase.total_amount),
+          net_payable: netPayable,
+          paid_on_create: paidOnCreate,
+          document_status: docStatus,
+        },
+        new_data: { document_status: 'reversed' },
+        ip_address: ip,
+        user_agent: ua,
+      });
+    });
+
+    const updated = await db('purchases').where({ id: purchaseId }).first();
+    res.json({ purchase: updated, reversed: true });
+  } catch (err: any) {
+    console.error('[purchases.reverse] error', err);
+    if (err?.message === 'INSUFFICIENT_STOCK' || err?.message === 'INSUFFICIENT_BATCH_STOCK') {
+      res.status(400).json({
+        error:
+          'Cannot reverse: stock from this purchase has already been sold or adjusted below the received quantity.',
+        code: err.message,
+      });
+      return;
+    }
+    res.status(500).json({ error: err?.message || 'Failed to reverse purchase' });
+  }
+});
+
 // ── POST /api/purchases/:id/payment ───────────────────────────────────────
 const purchasePaymentSchema = z.object({
   amount: z.coerce.number().positive(),
@@ -236,6 +417,18 @@ router.post('/:id/payment', requireRole('dealer_admin', 'manager', 'accountant')
     return;
   }
   try {
+    const purchase = await db('purchases')
+      .where({ id: req.params.id, dealer_id: dealerId })
+      .first('document_status');
+    if (!purchase) {
+      res.status(404).json({ error: 'Purchase not found' });
+      return;
+    }
+    if ((purchase as any).document_status === 'reversed') {
+      res.status(409).json({ error: 'Cannot pay a reversed purchase', code: 'PURCHASE_REVERSED' });
+      return;
+    }
+
     const result = await db.transaction(async (trx) =>
       recordSupplierPayment(trx, {
         dealerId,
@@ -436,13 +629,20 @@ router.post('/', async (req: Request, res: Response) => {
     });
     const totalAmount = itemsCalc.reduce((s, x) => s + x.landed, 0);
 
+    const dealerRow = await db('dealers')
+      .where({ id: dealerId })
+      .first('vat_enabled', 'default_vat_rate');
+    const vatSettings = normalizeDealerVatSettings(dealerRow);
+
     // Phase 3U-31: voucher discount + paid_on_create normalization
     const voucherDiscount = Math.max(
       0,
       Math.min(input.voucher_discount ?? 0, totalAmount),
     );
     const netPayable = Math.max(0, totalAmount - voucherDiscount);
-    const paidOnCreate = Math.max(0, Math.min(input.paid_on_create ?? 0, netPayable));
+    const vatBreakdown = computeVatBreakdown(netPayable, vatSettings);
+    const grossPayable = vatBreakdown.total_with_tax;
+    const paidOnCreate = Math.max(0, Math.min(input.paid_on_create ?? 0, grossPayable));
     const paidAccountId = input.paid_account_id ?? null;
 
     // Validate paid_account_id belongs to dealer (if provided)
@@ -508,12 +708,19 @@ router.post('/', async (req: Request, res: Response) => {
           supplier_id: input.supplier_id,
           invoice_number: invoiceNumber,
           purchase_date: input.purchase_date,
-          total_amount: totalAmount,
+          total_amount: vatSettings.vat_enabled ? grossPayable : totalAmount,
+          taxable_amount: vatBreakdown.taxable_amount,
+          vat_rate: vatBreakdown.vat_rate,
+          vat_amount: vatBreakdown.vat_amount,
+          sd_amount: vatBreakdown.sd_amount,
           voucher_discount: voucherDiscount,
           paid_on_create: paidOnCreate,
           paid_account_id: paidAccountId,
           notes: input.notes?.trim() || null,
           created_by: userId,
+          document_status: 'posted',
+          posted_at: trx.fn.now(),
+          posted_by: userId,
         })
         .returning('id');
       const purchaseRowId = purchase.id;
@@ -802,7 +1009,7 @@ router.post('/', async (req: Request, res: Response) => {
         supplier_id: input.supplier_id,
         purchase_id: purchaseRowId,
         type: 'purchase',
-        amount: -netPayable,
+        amount: -grossPayable,
         description: supplierDesc,
         entry_date: input.purchase_date,
       });
@@ -848,7 +1055,7 @@ router.post('/', async (req: Request, res: Response) => {
 
       // Phase 2 (P2-05): mirror stock + ledger effects into posting tables when enabled.
       if (isPostingEngineEnabled()) {
-        await mirrorToPostingTables(
+        const posting = await mirrorToPostingTables(
           {
             trx,
             dealerId,
@@ -869,7 +1076,7 @@ router.post('/', async (req: Request, res: Response) => {
               purchaseId: purchaseRowId,
               supplierId: input.supplier_id,
               entryDate: input.purchase_date,
-              netPayable,
+              netPayable: grossPayable,
               paidOnCreate,
               paidAccountId,
               description: supplierDesc,
@@ -877,6 +1084,44 @@ router.post('/', async (req: Request, res: Response) => {
             }),
           ],
         );
+        await trx('purchases')
+          .where({ id: purchaseRowId })
+          .update({ posting_batch_id: posting.batchId });
+
+        const supplierTaxRow = await trx('suppliers')
+          .where({ id: input.supplier_id })
+          .first('gstin');
+        await insertTaxPostingLine(trx, {
+          dealerId,
+          postingBatchId: posting.batchId,
+          documentType: 'purchase',
+          documentId: purchaseRowId,
+          entryDate: input.purchase_date,
+          taxableAmount: vatBreakdown.taxable_amount,
+          taxRate: vatBreakdown.vat_rate,
+          taxAmount: vatBreakdown.vat_amount,
+          sdAmount: vatBreakdown.sd_amount,
+          partyId: input.supplier_id,
+          partyTaxId: (supplierTaxRow as any)?.gstin ?? null,
+          mushakForm: '6.1',
+        });
+      } else if (vatBreakdown.vat_amount > 0 || vatBreakdown.sd_amount > 0) {
+        const supplierTaxRow = await trx('suppliers')
+          .where({ id: input.supplier_id })
+          .first('gstin');
+        await insertTaxPostingLine(trx, {
+          dealerId,
+          documentType: 'purchase',
+          documentId: purchaseRowId,
+          entryDate: input.purchase_date,
+          taxableAmount: vatBreakdown.taxable_amount,
+          taxRate: vatBreakdown.vat_rate,
+          taxAmount: vatBreakdown.vat_amount,
+          sdAmount: vatBreakdown.sd_amount,
+          partyId: input.supplier_id,
+          partyTaxId: (supplierTaxRow as any)?.gstin ?? null,
+          mushakForm: '6.1',
+        });
       }
 
       // ── Audit log ──

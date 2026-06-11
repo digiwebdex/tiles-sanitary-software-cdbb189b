@@ -68,6 +68,12 @@ const SalesReturnForm = ({ dealerId, onSubmit, isLoading }: SalesReturnFormProps
     enabled: !!selectedSaleId,
   });
 
+  const { data: saleBatches = [] } = useQuery({
+    queryKey: ["sale-item-batches-return", selectedSaleId],
+    queryFn: () => salesReturnService.getSaleItemBatches(selectedSaleId),
+    enabled: !!selectedSaleId,
+  });
+
   const handleSaleChange = (saleId: string) => {
     setSelectedSaleId(saleId);
     form.setValue("sale_id", saleId);
@@ -80,6 +86,9 @@ const SalesReturnForm = ({ dealerId, onSubmit, isLoading }: SalesReturnFormProps
   const watchProductId = form.watch("product_id");
   const watchRefund = form.watch("refund_amount");
   const selectedItem = saleItems.find((i: any) => i.product_id === watchProductId);
+  const itemBatches = saleBatches.filter(
+    (b: any) => b.product_id === watchProductId && Number(b.allocated_qty) > 0,
+  );
   const isTile = selectedItem?.products?.unit_type === "box_sft";
   const ppb = Math.max(1, Number(selectedItem?.products?.pieces_per_box ?? 1));
   const boxPart = Math.floor(watchQty || 0);
@@ -252,6 +261,18 @@ const SalesReturnForm = ({ dealerId, onSubmit, isLoading }: SalesReturnFormProps
                       <TableCell>
                         <div className="text-sm font-medium">{selectedItem.products?.name}</div>
                         <div className="text-xs text-muted-foreground">{selectedItem.products?.sku}</div>
+                        {itemBatches.length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {itemBatches.map((b: any) => (
+                              <Badge key={b.batch_id} variant="outline" className="mr-1 text-xs">
+                                {b.batch_no}
+                                {b.shade_code ? ` · ${b.shade_code}` : ""}
+                                {b.caliber ? ` · ${b.caliber}` : ""}
+                                {" "}({Number(b.allocated_qty)} left)
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">{formatCurrency(Number(selectedItem.sale_rate))}</TableCell>
                       <TableCell>

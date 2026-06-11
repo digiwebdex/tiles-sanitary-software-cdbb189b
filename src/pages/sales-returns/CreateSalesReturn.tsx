@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { salesReturnService } from "@/services/salesReturnService";
-import SalesReturnForm from "@/modules/sales-returns/SalesReturnForm";
+import SalesReturnWizard from "@/modules/sales-returns/SalesReturnWizard";
 import type { SalesReturnFormValues } from "@/modules/sales-returns/salesReturnSchema";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
@@ -46,7 +46,7 @@ const CreateSalesReturnPage = () => {
         </Button>
         <h1 className="text-2xl font-bold text-foreground">New Sales Return</h1>
       </div>
-      <SalesReturnForm
+      <SalesReturnWizard
         dealerId={dealerId}
         onSubmit={async (v) => { await mutation.mutateAsync(v); }}
         isLoading={mutation.isPending}

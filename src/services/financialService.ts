@@ -6,6 +6,8 @@ export interface ProfitLoss {
   sales_returns: number;
   net_revenue: number;
   cogs: number;
+  cogs_reversal?: number;
+  net_cogs?: number;
   gross_profit: number;
   expenses_by_category: { category: string; amount: number }[];
   total_expenses: number;

@@ -1,4 +1,10 @@
 import type { Knex } from 'knex';
+import {
+  formatReceiptDescription,
+  normalizePaymentMode,
+  paymentModeRequiresBankAccount,
+  type PaymentModeId,
+} from './paymentModes';
 
 export interface RecordCustomerPaymentInput {
   dealerId: string;
@@ -56,11 +62,9 @@ export async function recordCustomerPayment(
   if (!customer) throw new Error('Customer not found');
 
   const paidAccountId = input.paid_account_id ?? null;
-  if (paidAccountId) {
-    const acct = await trx('bank_accounts')
-      .where({ id: paidAccountId, dealer_id: input.dealerId })
-      .first('id');
-    if (!acct) throw new Error('paid_account_id not found for this dealer');
+  const paymentMode = normalizePaymentMode(input.payment_mode);
+  if (paymentModeRequiresBankAccount(paymentMode) && !paidAccountId) {
+    throw new Error('Bank account is required for bank, cheque, or card payments');
   }
 
   let salesToPay: SaleRow[];
@@ -149,35 +153,77 @@ export async function recordCustomerPayment(
   }
 
   const totalApplied = round2(input.amount - remaining);
-  const receiptDescription = `Payment from ${customer.name}: ${input.note?.trim() || 'Collection'}`;
+  const receiptDescription = formatReceiptDescription(
+    `Payment from ${customer.name}: ${input.note?.trim() || 'Collection'}`,
+    paymentMode,
+  );
   const referenceId = allocations[0]?.saleId ?? null;
 
+  await postCustomerReceipt(trx, {
+    dealerId: input.dealerId,
+    amount: totalApplied,
+    description: receiptDescription,
+    referenceType: 'customer_payment',
+    referenceId,
+    entryDate,
+    paidAccountId,
+    payment_mode: paymentMode,
+  });
+
+  return { allocations, totalApplied };
+}
+
+/** Post a customer receipt to cash_ledger or bank_ledger (P1-04). */
+export async function postCustomerReceipt(
+  trx: Knex.Transaction,
+  input: {
+    dealerId: string;
+    amount: number;
+    description: string;
+    referenceType: string;
+    referenceId: string | null;
+    entryDate: string;
+    paidAccountId?: string | null;
+    payment_mode?: string | PaymentModeId | null;
+  },
+): Promise<void> {
+  if (!(input.amount > 0)) return;
+
+  const mode =
+    typeof input.payment_mode === 'string'
+      ? normalizePaymentMode(input.payment_mode)
+      : input.payment_mode ?? null;
+  const paidAccountId = input.paidAccountId ?? null;
   if (paidAccountId) {
+    const acct = await trx('bank_accounts')
+      .where({ id: paidAccountId, dealer_id: input.dealerId })
+      .first('id');
+    if (!acct) throw new Error('paid_account_id not found for this dealer');
     await trx('bank_ledger').insert({
       dealer_id: input.dealerId,
       bank_account_id: paidAccountId,
       type: 'receipt',
-      amount: totalApplied,
-      description: receiptDescription,
-      reference_type: 'customer_payment',
-      reference_id: referenceId,
-      entry_date: entryDate,
+      amount: input.amount,
+      description: input.description,
+      reference_type: input.referenceType,
+      reference_id: input.referenceId,
+      entry_date: input.entryDate,
       created_by: null,
+      ...(mode ? { payment_mode: mode } : {}),
     });
-  } else {
-    await trx('cash_ledger').insert({
-      dealer_id: input.dealerId,
-      type: 'receipt',
-      amount: totalApplied,
-      description: receiptDescription,
-      reference_type: 'customer_payment',
-      reference_id: referenceId,
-      entry_date: entryDate,
-      ...(input.payment_mode ? { payment_mode: input.payment_mode } : {}),
-    });
+    return;
   }
 
-  return { allocations, totalApplied };
+  await trx('cash_ledger').insert({
+    dealer_id: input.dealerId,
+    type: 'receipt',
+    amount: input.amount,
+    description: input.description,
+    reference_type: input.referenceType,
+    reference_id: input.referenceId,
+    entry_date: input.entryDate,
+    ...(mode ? { payment_mode: mode } : {}),
+  });
 }
 
 function round2(n: number): number {

@@ -14,6 +14,7 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
+import { getSupplierOutstandingMapFromReadModel } from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -163,11 +164,11 @@ async function listInternal(dealerId: string, startDate?: string, endDate?: stri
   if (startDate) retQ = retQ.andWhere('return_date', '>=', startDate);
   if (endDate) retQ = retQ.andWhere('return_date', '<=', endDate);
 
-  const [suppliers, purchases, returnsRaw, ledger, items] = await Promise.all([
+  const [suppliers, purchases, returnsRaw, outstandingMap, items] = await Promise.all([
     db('suppliers').where({ dealer_id: dealerId }).select('id', 'name', 'status'),
     purQ.select('id', 'supplier_id', 'purchase_date', 'total_amount'),
     retQ.select('id', 'supplier_id', 'return_date', 'total_amount', 'status'),
-    db('supplier_ledger').where({ dealer_id: dealerId }).select('supplier_id', 'amount', 'type'),
+    getSupplierOutstandingMapFromReadModel(dealerId),
     db('purchase_items').where({ dealer_id: dealerId }).select('purchase_id', 'product_id', 'purchase_rate', 'quantity'),
   ]);
 
@@ -189,17 +190,6 @@ async function listInternal(dealerId: string, startDate?: string, endDate?: stri
     cur.count += 1;
     cur.total += Number(r.total_amount ?? 0);
     retBySup.set(r.supplier_id, cur);
-  }
-
-  const outBySup = new Map<string, number>();
-  for (const e of ledger as any[]) {
-    if (!e.supplier_id) continue;
-    const amt = Number(e.amount);
-    const cur = outBySup.get(e.supplier_id) ?? 0;
-    const t = (e.type ?? '').toLowerCase();
-    if (t === 'purchase' || t === 'opening' || t === 'adjustment') outBySup.set(e.supplier_id, cur + amt);
-    else if (t === 'payment' || t === 'return' || t === 'refund') outBySup.set(e.supplier_id, cur - amt);
-    else outBySup.set(e.supplier_id, cur);
   }
 
   const today = Date.now();
@@ -249,7 +239,7 @@ async function listInternal(dealerId: string, startDate?: string, endDate?: stri
       ? Math.round((retInfo.total / totalPurchaseValue) * 10_000) / 100
       : 0;
 
-    const outstanding = Math.max(0, Math.round((outBySup.get(s.id) ?? 0) * 100) / 100);
+    const outstanding = outstandingMap.get(s.id) ?? 0;
     const trendInfo = trendMap.get(s.id) ?? { trend: 'insufficient_data' as PriceTrend, change_pct: 0, products_compared: 0 };
 
     const { score, factors } = computeScore({

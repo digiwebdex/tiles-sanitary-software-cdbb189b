@@ -70,6 +70,7 @@ export interface CreateSaleInput {
   fitter_reference: string;
   paid_amount: number;
   payment_mode?: string;
+  paid_account_id?: string | null;
   notes?: string;
   created_by?: string;
   items: SaleItemInput[];
@@ -189,6 +190,7 @@ export const salesService = {
         fitter_reference: input.fitter_reference || null,
         paid_amount: input.paid_amount,
         payment_mode: input.payment_mode || null,
+        paid_account_id: input.paid_account_id ?? null,
         notes: input.notes || null,
         allow_backorder: input.allow_backorder,
         mixed_batch_acknowledged: input.mixed_batch_acknowledged,
@@ -285,6 +287,7 @@ export const salesService = {
         fitter_reference: input.fitter_reference || null,
         paid_amount: input.paid_amount,
         payment_mode: input.payment_mode || null,
+        paid_account_id: input.paid_account_id ?? null,
         notes: input.notes || null,
         project_id: input.project_id ?? null,
         site_id: input.site_id ?? null,
@@ -303,6 +306,15 @@ export const salesService = {
     await vpsRequest<void>(
       `/api/sales/${saleId}?dealerId=${encodeURIComponent(dealerId)}`,
       { method: "DELETE" },
+    );
+  },
+
+  /** Reverse a posted sale (P2-08). Restores stock + ledger; marks document reversed. */
+  async reverse(saleId: string, dealerId: string) {
+    await assertDealerId(dealerId);
+    return await vpsRequest<{ sale: any; reversed: boolean }>(
+      `/api/sales/${saleId}/reverse?dealerId=${encodeURIComponent(dealerId)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
     );
   },
 

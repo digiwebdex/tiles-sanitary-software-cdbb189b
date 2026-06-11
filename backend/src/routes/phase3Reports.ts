@@ -117,6 +117,45 @@ router.get('/director-statement', async (req, res) => {
   });
 });
 
+// ── Stock movements (P3-05) ──
+router.get('/stock-movements', async (req, res) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
+
+  const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
+  const limit = Math.min(100, Math.max(1, parseInt((req.query.limit as string) || '50', 10)));
+  const offset = (page - 1) * limit;
+  const productId = req.query.product_id as string | undefined;
+  const from = req.query.from as string | undefined;
+  const to = req.query.to as string | undefined;
+
+  let base = db('stock_movements as sm')
+    .leftJoin('products as p', 'p.id', 'sm.product_id')
+    .leftJoin('warehouses as w', 'w.id', 'sm.warehouse_id')
+    .where('sm.dealer_id', dealerId);
+
+  if (productId) base = base.andWhere('sm.product_id', productId);
+  if (from) base = base.andWhere('sm.moved_at', '>=', from);
+  if (to) base = base.andWhere('sm.moved_at', '<=', `${to}T23:59:59.999Z`);
+
+  const [{ count }] = await base.clone().count<{ count: string }[]>('sm.id as count');
+
+  const rows = await base
+    .clone()
+    .orderBy('sm.moved_at', 'desc')
+    .limit(limit)
+    .offset(offset)
+    .select(
+      'sm.*',
+      'p.name as product_name',
+      'p.sku as product_sku',
+      'w.name as warehouse_name',
+    );
+
+  res.json({ data: rows, total: Number(count) || 0, page, limit });
+});
+
 // ── Warehouse stock & transfer report ──
 router.get('/warehouse-stock', async (req, res) => {
   const dealerId = resolveDealer(req, res); if (!dealerId) return;
@@ -126,6 +165,26 @@ router.get('/warehouse-stock', async (req, res) => {
     .where({ dealer_id: dealerId })
     .orderBy('name')
     .select('id', 'name', 'code', 'manager_name', 'is_default', 'is_active');
+
+  const whStockRows = await db('warehouse_stock as ws')
+    .leftJoin('products as p', 'p.id', 'ws.product_id')
+    .where('ws.dealer_id', dealerId)
+    .select(
+      'ws.warehouse_id',
+      'ws.product_id',
+      'ws.box_qty',
+      'ws.piece_qty',
+      'ws.total_pieces',
+      'p.name as product_name',
+      'p.sku as product_sku',
+    );
+
+  const stockByWh = new Map<string, any[]>();
+  for (const r of whStockRows as any[]) {
+    const list = stockByWh.get(r.warehouse_id) ?? [];
+    list.push(r);
+    stockByWh.set(r.warehouse_id, list);
+  }
 
   // Net movement per warehouse from transfers (in - out)
   const transferRows = await db('warehouse_transfers')
@@ -161,6 +220,7 @@ router.get('/warehouse-stock', async (req, res) => {
       total_in: inMap.get(w.id) ?? 0,
       total_out: outMap.get(w.id) ?? 0,
       net: (inMap.get(w.id) ?? 0) - (outMap.get(w.id) ?? 0),
+      products: stockByWh.get(w.id) ?? [],
     })),
     recent_transfers: recent,
   });

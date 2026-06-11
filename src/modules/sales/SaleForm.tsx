@@ -21,6 +21,8 @@ import { Plus, Trash2, Search, Barcode, AlertTriangle, PackageX, Layers, Lock, C
 import { formatCurrency, CURRENCY_CODE } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Separator } from "@/components/ui/separator";
+import { PaymentModeSelect } from "@/components/PaymentModeSelect";
+import { paymentModeRequiresBankAccount } from "@/lib/paymentModes";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -43,13 +45,13 @@ import {
   isApprovalRequired,
   createApprovalRequest,
   findValidApproval,
-  consumeApprovalRequest,
-  generateActionHash,
   type ApprovalContextData,
   type ApprovalType,
 } from "@/services/approvalService";
 import { ApprovalRequestDialog } from "@/components/approval/ApprovalRequestDialog";
 import SaleCommissionSection, { type SaleCommissionDraft } from "@/components/sale/SaleCommissionSection";
+import { PayFromAccountSelect } from "@/components/PayFromAccountSelect";
+import { bankAccountService } from "@/services/bankAccountService";
 import { enrichItemsWithSqft } from "@/lib/tileSqftEnrich";
 
 interface StockShortageItem {
@@ -107,6 +109,12 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
     enabled: !!dealerId,
   });
 
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId,
+  });
+
   const form = useForm<SaleFormValues>({
     resolver: zodResolver(saleSchema),
     defaultValues: {
@@ -118,6 +126,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
       client_reference: dv?.client_reference ?? "",
       fitter_reference: dv?.fitter_reference ?? "",
       paid_amount: dv?.paid_amount ?? 0,
+      payment_mode: dv?.payment_mode ?? "",
+      paid_account_id: dv?.paid_account_id ?? null,
       notes: dv?.notes ?? "",
       project_id: dv?.project_id ?? null,
       site_id: dv?.site_id ?? null,
@@ -428,13 +438,10 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
     context: ApprovalContextData,
     reason?: string
   ): Promise<boolean> => {
-    // Check if there's already a valid approved request
+    // Check if there's already a valid approved request — server consumes on POST.
     const existing = await findValidApproval(dealerId, type, context);
     if (existing) {
-      // Consume it
-      const hash = await generateActionHash(type, context);
-      await consumeApprovalRequest(existing.id, hash);
-      return true; // can proceed
+      return true;
     }
 
     // Auto-approve for admins
@@ -1337,6 +1344,39 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   )}
                 />
               </div>
+
+              {watchPaid > 0 && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <PayFromAccountSelect
+                    value={form.watch("paid_account_id") ?? null}
+                    onChange={(v) => form.setValue("paid_account_id", v, { shouldDirty: true })}
+                    bankAccounts={bankAccounts}
+                    label="Received Into"
+                  />
+                  <FormField
+                    control={form.control}
+                    name="payment_mode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <PaymentModeSelect
+                          value={field.value || "cash"}
+                          onChange={(v) => {
+                            field.onChange(v);
+                            if (v === "cash") {
+                              form.setValue("paid_account_id", null, { shouldDirty: true });
+                            }
+                          }}
+                          label="Payment Mode"
+                        />
+                        {paymentModeRequiresBankAccount(field.value) && !form.watch("paid_account_id") && (
+                          <p className="text-xs text-destructive">Select a bank account for this payment mode.</p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
 
               <Separator />
 

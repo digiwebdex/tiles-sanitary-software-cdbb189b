@@ -17,7 +17,10 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
 import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
-import { recordCustomerPayment } from '../lib/customerPayment';
+import { postCustomerReceipt, recordCustomerPayment } from '../lib/customerPayment';
+import { computeVatBreakdown, normalizeDealerVatSettings } from '../lib/vatMath';
+import { normalizePaymentMode, paymentModeRequiresBankAccount } from '../lib/paymentModes';
+import { insertTaxPostingLine } from '../services/taxPostingService';
 import {
   isPostingEngineEnabled,
   mirrorToPostingTables,
@@ -28,6 +31,19 @@ import {
   type SaleBatchAllocation,
   type SaleStockPostedItem,
 } from '../services/posting/StockPostingEngine';
+import {
+  buildRequiredSaleApprovals,
+  consumeRequiredSaleApprovals,
+  SaleApprovalRequiredError,
+} from '../services/approval/SaleApprovalGate';
+import {
+  insertSaleReverseLedgerEntries,
+  restoreSaleItemStock,
+} from '../services/saleReverse';
+import {
+  invertPostingLines,
+  postingLinesFromDbRows,
+} from '../services/posting/invertPostingLines';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -226,6 +242,169 @@ router.post('/:id/payment', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/sales/:id/reverse — reverse a posted sale (P2-08). Immutable posted docs.
+router.post('/:id/reverse', async (req: Request, res: Response) => {
+  const roles = (req.user?.roles ?? []) as string[];
+  if (!roles.includes('super_admin') && !roles.includes('dealer_admin')) {
+    res.status(403).json({ error: 'Only dealer_admin can reverse sales' });
+    return;
+  }
+
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const { id: saleId } = req.params;
+  const userId = req.user?.userId ?? null;
+  const ip =
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress ||
+    null;
+  const ua = (req.headers['user-agent'] as string) || null;
+
+  try {
+    const sale = await db('sales').where({ id: saleId, dealer_id: dealerId }).first();
+    if (!sale) {
+      res.status(404).json({ error: 'Sale not found' });
+      return;
+    }
+
+    const docStatus = (sale as any).document_status ?? 'posted';
+    if (docStatus === 'reversed') {
+      res.status(409).json({ error: 'Sale is already reversed', code: 'ALREADY_REVERSED' });
+      return;
+    }
+    if (docStatus !== 'posted') {
+      res.status(409).json({
+        error: 'Only posted sales can be reversed. Draft sales can be edited or deleted.',
+        code: 'NOT_POSTED',
+      });
+      return;
+    }
+
+    const items = await db('sale_items')
+      .where({ sale_id: saleId })
+      .select(
+        'id',
+        'product_id',
+        'quantity',
+        'available_qty_at_sale',
+        'box_qty',
+        'piece_qty',
+        'total_pieces',
+      );
+
+    const challans = await db('challans')
+      .where({ sale_id: saleId, dealer_id: dealerId })
+      .select('id', 'status', 'delivery_status');
+    const hasDelivered = challans.some(
+      (c: any) => c.delivery_status === 'delivered' || c.status === 'delivered',
+    );
+    if (hasDelivered) {
+      res.status(400).json({ error: 'Cannot reverse a sale that has been delivered' });
+      return;
+    }
+
+    const [{ count: deliveryCount }] = await db('deliveries')
+      .where({ sale_id: saleId, dealer_id: dealerId })
+      .count<{ count: string }[]>('id as count');
+    if (Number(deliveryCount) > 0) {
+      res.status(400).json({ error: 'Cannot reverse a sale with existing deliveries' });
+      return;
+    }
+
+    const reverseDate = new Date().toISOString().slice(0, 10);
+    const totalAmount = Number(sale.total_amount);
+    const paidAmount = Number(sale.paid_amount);
+
+    await db.transaction(async (trx) => {
+      for (const it of items) {
+        await restoreSaleItemStock(trx, {
+          dealerId,
+          saleId,
+          invoiceNumber: sale.invoice_number,
+          userId,
+          item: it,
+        });
+      }
+
+      const saleItemIds = items.map((i: any) => i.id).filter(Boolean);
+      if (saleItemIds.length > 0) {
+        await trx('backorder_allocations').whereIn('sale_item_id', saleItemIds).delete();
+        await trx('sale_item_batches').whereIn('sale_item_id', saleItemIds).delete();
+      }
+
+      await insertSaleReverseLedgerEntries(trx, {
+        dealerId,
+        saleId,
+        customerId: sale.customer_id,
+        invoiceNumber: sale.invoice_number,
+        totalAmount,
+        paidAmount,
+        entryDate: reverseDate,
+      });
+
+      for (const ch of challans) {
+        if (ch.status !== 'cancelled') {
+          await trx('challans').where({ id: ch.id }).update({ status: 'cancelled' });
+        }
+      }
+
+      await trx('sales')
+        .where({ id: saleId })
+        .update({
+          document_status: 'reversed',
+          sale_status: 'cancelled',
+          due_amount: 0,
+        });
+
+      if (isPostingEngineEnabled() && (sale as any).posting_batch_id) {
+        const originalLines = await trx('posting_lines')
+          .where({ posting_batch_id: (sale as any).posting_batch_id })
+          .select('*');
+        if (originalLines.length > 0) {
+          const inverted = invertPostingLines(postingLinesFromDbRows(originalLines as any[]));
+          await mirrorToPostingTables(
+            {
+              trx,
+              dealerId,
+              documentType: 'sale',
+              documentId: saleId,
+              eventType: 'reversed',
+              entryDate: reverseDate,
+              postedBy: userId,
+              idempotencyKey: `sale:reverse:${saleId}`,
+              reversesBatchId: (sale as any).posting_batch_id,
+            },
+            inverted,
+          );
+        }
+      }
+
+      await trx('audit_logs').insert({
+        dealer_id: dealerId,
+        user_id: userId,
+        action: 'sale_reverse',
+        table_name: 'sales',
+        record_id: saleId,
+        old_data: {
+          invoice_number: sale.invoice_number,
+          total_amount: totalAmount,
+          paid_amount: paidAmount,
+          document_status: docStatus,
+        },
+        new_data: { document_status: 'reversed' },
+        ip_address: ip,
+        user_agent: ua,
+      });
+    });
+
+    const updated = await db('sales').where({ id: saleId }).first();
+    res.json({ sale: updated, reversed: true });
+  } catch (err: any) {
+    console.error('[sales.reverse] error', err);
+    res.status(500).json({ error: err?.message || 'Failed to reverse sale' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;
@@ -244,7 +423,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       sale.customer_id
         ? db('customers')
             .where({ id: sale.customer_id })
-            .first('id', 'name', 'type', 'phone', 'address')
+            .first('id', 'name', 'type', 'phone', 'address', 'tax_id')
         : Promise.resolve(null),
       db('sale_items as si')
         .leftJoin('products as p', 'p.id', 'si.product_id')
@@ -323,6 +502,7 @@ const createSaleSchema = z.object({
   fitter_reference: z.string().trim().max(100).optional().nullable(),
   paid_amount: z.coerce.number().min(0).default(0),
   payment_mode: z.string().trim().max(50).optional().nullable(),
+  paid_account_id: z.string().uuid().optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),
   allow_backorder: z.boolean().optional(),
   mixed_batch_acknowledged: z.boolean().optional(),
@@ -383,12 +563,53 @@ router.post('/', async (req: Request, res: Response) => {
       customerId = created.id;
     }
 
-    // ── 2. Determine backorder mode ──
+    const customerRow = await db('customers')
+      .where({ id: customerId, dealer_id: dealerId })
+      .first('price_tier_id', 'credit_limit', 'max_overdue_days');
+
+    const [ledgerRows, oldestDueSale] = await Promise.all([
+      db('customer_ledger')
+        .where({ customer_id: customerId, dealer_id: dealerId })
+        .select('amount', 'type'),
+      db('sales')
+        .where({ customer_id: customerId, dealer_id: dealerId })
+        .andWhere('due_amount', '>', 0)
+        .orderBy('sale_date', 'asc')
+        .select('sale_date')
+        .first(),
+    ]);
+
+    let customerOutstanding = 0;
+    for (const row of ledgerRows as any[]) {
+      const amt = Number(row.amount);
+      if (row.type === 'sale') customerOutstanding += amt;
+      else if (row.type === 'payment' || row.type === 'refund') customerOutstanding -= amt;
+      else if (row.type === 'adjustment') customerOutstanding += amt;
+    }
+
+    const oldestDate = (oldestDueSale as any)?.sale_date ?? null;
+    const customerDaysOverdue = oldestDate
+      ? Math.max(0, Math.floor((Date.now() - new Date(oldestDate).getTime()) / 86400000))
+      : 0;
+
+    let customerTierName: string | null = null;
+    const customerPriceTierId = (customerRow as any)?.price_tier_id ?? null;
+    if (customerPriceTierId) {
+      const tierRow = await db('price_tiers')
+        .where({ id: customerPriceTierId, dealer_id: dealerId })
+        .first('name');
+      customerTierName = (tierRow as any)?.name ?? null;
+    }
+
+    // ── 2. Dealer settings (backorder + VAT) ──
+    const dealerRow = await db('dealers')
+      .where({ id: dealerId })
+      .first('allow_backorder', 'vat_enabled', 'default_vat_rate');
     let backorderEnabled = !!input.allow_backorder;
     if (!backorderEnabled) {
-      const dealer = await db('dealers').where({ id: dealerId }).first('allow_backorder');
-      backorderEnabled = (dealer as any)?.allow_backorder === true;
+      backorderEnabled = (dealerRow as any)?.allow_backorder === true;
     }
+    const vatSettings = normalizeDealerVatSettings(dealerRow);
 
     // ── 3. Pre-fetch products + stock ──
     const productIds = Array.from(new Set(input.items.map((i) => i.product_id)));
@@ -527,10 +748,21 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     const subtotal = itemsCalc.reduce((s, i) => s + i.total, 0);
-    const totalAmount = subtotal - input.discount;
+    const taxableBase = Math.max(0, subtotal - input.discount);
+    const vatBreakdown = computeVatBreakdown(taxableBase, vatSettings);
+    const totalAmount = vatBreakdown.total_with_tax;
     const dueAmount = totalAmount - input.paid_amount;
-    const grossProfit = totalAmount - totalCogs;
+    const grossProfit = taxableBase - totalCogs;
     const isChallanMode = input.sale_type === 'challan_mode';
+    const salePaymentMode = normalizePaymentMode(input.payment_mode);
+    if (
+      input.paid_amount > 0 &&
+      paymentModeRequiresBankAccount(salePaymentMode) &&
+      !input.paid_account_id
+    ) {
+      res.status(400).json({ error: 'Bank account is required for bank, cheque, or card payments' });
+      return;
+    }
 
     // ── 5. Generate invoice number (RPC, runs its own tx) ──
     const invoiceRes = await db.raw<{ rows: { generate_next_invoice_no: string }[] }>(
@@ -539,6 +771,26 @@ router.post('/', async (req: Request, res: Response) => {
     );
     const invoiceNumber = invoiceRes.rows[0]?.generate_next_invoice_no
       ?? `INV-${String(Date.now()).slice(-5)}`;
+
+    const { required: saleApprovalsRequired } = await buildRequiredSaleApprovals({
+      db,
+      dealerId,
+      roles,
+      customerId,
+      customerName,
+      customerPriceTierId,
+      tierName: customerTierName,
+      input,
+      itemsCalc,
+      subtotal,
+      totalAmount,
+      hasBackorder,
+      productMap,
+      outstanding: customerOutstanding,
+      daysOverdue: customerDaysOverdue,
+      creditLimit: Number((customerRow as any)?.credit_limit ?? 0),
+      maxOverdueDays: Number((customerRow as any)?.max_overdue_days ?? 0),
+    });
 
     // ── 6. Atomic transaction: header + items + stock + ledger + audit ──
     const saleId: string = await db.transaction(async (trx) => {
@@ -550,6 +802,10 @@ router.post('/', async (req: Request, res: Response) => {
           invoice_number: invoiceNumber,
           sale_date: input.sale_date,
           total_amount: totalAmount,
+          taxable_amount: vatBreakdown.taxable_amount,
+          vat_rate: vatBreakdown.vat_rate,
+          vat_amount: vatBreakdown.vat_amount,
+          sd_amount: vatBreakdown.sd_amount,
           discount: input.discount,
           discount_reference: input.discount_reference?.trim() || null,
           client_reference: input.client_reference?.trim() || null,
@@ -568,16 +824,22 @@ router.post('/', async (req: Request, res: Response) => {
           total_sft: totalSft,
           total_piece: totalPiece,
           notes: input.notes?.trim() || null,
-          payment_mode: input.payment_mode || null,
+          payment_mode: salePaymentMode || input.payment_mode?.trim() || null,
           created_by: userId,
           sale_type: input.sale_type,
           sale_status: isChallanMode ? 'draft' : 'invoiced',
+          document_status: isChallanMode ? 'draft' : 'posted',
+          posted_at: isChallanMode ? null : trx.fn.now(),
+          posted_by: isChallanMode ? null : userId,
           has_backorder: hasBackorder,
           project_id: input.project_id ?? null,
           site_id: input.site_id ?? null,
         })
         .returning('id');
       const newSaleId = sale.id;
+
+      // P2-10: consume required approvals atomically with the sale post.
+      await consumeRequiredSaleApprovals(trx, dealerId, newSaleId, saleApprovalsRequired);
 
       // Sale items
       const itemRows = itemsCalc.map((item) => ({
@@ -802,20 +1064,21 @@ router.post('/', async (req: Request, res: Response) => {
             entry_date: input.sale_date,
           });
 
-          await trx('cash_ledger').insert({
-            dealer_id: dealerId,
-            type: 'receipt',
+          await postCustomerReceipt(trx, {
+            dealerId,
             amount: input.paid_amount,
             description: `Payment received: ${invoiceNumber}`,
-            reference_type: 'sales',
-            reference_id: newSaleId,
-            entry_date: input.sale_date,
+            referenceType: 'sales',
+            referenceId: newSaleId,
+            entryDate: input.sale_date,
+            paidAccountId: input.paid_account_id ?? null,
+            payment_mode: input.payment_mode ?? undefined,
           });
         }
 
         // Phase 2 (P2-06): mirror stock + ledger effects into posting tables when enabled.
         if (isPostingEngineEnabled()) {
-          await mirrorToPostingTables(
+          const posting = await mirrorToPostingTables(
             {
               trx,
               dealerId,
@@ -838,11 +1101,51 @@ router.post('/', async (req: Request, res: Response) => {
                 entryDate: input.sale_date,
                 totalAmount,
                 paidAmount: input.paid_amount,
+                paidAccountId: input.paid_account_id ?? null,
+                paymentMode: normalizePaymentMode(input.payment_mode),
                 description: saleDesc,
                 paymentDescription: paymentDesc,
               }),
             ],
           );
+          await trx('sales')
+            .where({ id: newSaleId })
+            .update({ posting_batch_id: posting.batchId });
+
+          const customerTaxRow = await trx('customers')
+            .where({ id: customerId })
+            .first('tax_id');
+          await insertTaxPostingLine(trx, {
+            dealerId,
+            postingBatchId: posting.batchId,
+            documentType: 'sale',
+            documentId: newSaleId,
+            entryDate: input.sale_date,
+            taxableAmount: vatBreakdown.taxable_amount,
+            taxRate: vatBreakdown.vat_rate,
+            taxAmount: vatBreakdown.vat_amount,
+            sdAmount: vatBreakdown.sd_amount,
+            partyId: customerId,
+            partyTaxId: (customerTaxRow as any)?.tax_id ?? null,
+            mushakForm: '6.3',
+          });
+        } else if (vatBreakdown.vat_amount > 0 || vatBreakdown.sd_amount > 0) {
+          const customerTaxRow = await trx('customers')
+            .where({ id: customerId })
+            .first('tax_id');
+          await insertTaxPostingLine(trx, {
+            dealerId,
+            documentType: 'sale',
+            documentId: newSaleId,
+            entryDate: input.sale_date,
+            taxableAmount: vatBreakdown.taxable_amount,
+            taxRate: vatBreakdown.vat_rate,
+            taxAmount: vatBreakdown.vat_amount,
+            sdAmount: vatBreakdown.sd_amount,
+            partyId: customerId,
+            partyTaxId: (customerTaxRow as any)?.tax_id ?? null,
+            mushakForm: '6.3',
+          });
         }
       }
 
@@ -899,6 +1202,14 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json(created);
   } catch (err: any) {
     console.error('[sales.create] error', err);
+    if (err instanceof SaleApprovalRequiredError) {
+      res.status(403).json({
+        error: err.message,
+        approval_type: err.approvalType,
+        code: 'APPROVAL_REQUIRED',
+      });
+      return;
+    }
     // Phase 1A — surface tile-product master-data issues as a clean 400
     // instead of an opaque 500. The InvalidProductPerBoxSftError is
     // thrown by computeLineCogs when a 'box_sft' product has a missing or
@@ -967,6 +1278,21 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Sale not found' });
       return;
     }
+
+    const oldDocStatus = (oldSale as any).document_status ?? 'posted';
+    if (oldDocStatus === 'posted') {
+      res.status(409).json({
+        error:
+          'Posted sales cannot be edited. Reverse this invoice (POST /api/sales/:id/reverse) and create a new sale.',
+        code: 'SALE_IMMUTABLE',
+      });
+      return;
+    }
+    if (oldDocStatus === 'reversed') {
+      res.status(409).json({ error: 'Reversed sales cannot be edited.', code: 'SALE_REVERSED' });
+      return;
+    }
+
     const oldItems = await db('sale_items')
       .where({ sale_id: saleId })
       .select('id', 'product_id', 'quantity', 'available_qty_at_sale', 'box_qty', 'piece_qty', 'total_pieces');
@@ -991,6 +1317,11 @@ router.put('/:id', async (req: Request, res: Response) => {
         .returning('id');
       customerId = created.id;
     }
+
+    const dealerRow = await db('dealers')
+      .where({ id: dealerId })
+      .first('vat_enabled', 'default_vat_rate');
+    const vatSettings = normalizeDealerVatSettings(dealerRow);
 
     // ── Pre-tx: products + stock for new items (avg cost) ──
     const productIds = Array.from(new Set(input.items.map((i) => i.product_id)));
@@ -1071,9 +1402,11 @@ router.put('/:id', async (req: Request, res: Response) => {
     });
 
     const subtotal = itemsCalc.reduce((s, i) => s + i.total, 0);
-    const totalAmount = subtotal - input.discount;
+    const taxableBase = Math.max(0, subtotal - input.discount);
+    const vatBreakdown = computeVatBreakdown(taxableBase, vatSettings);
+    const totalAmount = vatBreakdown.total_with_tax;
     const dueAmount = totalAmount - input.paid_amount;
-    const grossProfit = totalAmount - totalCogs;
+    const grossProfit = taxableBase - totalCogs;
 
     // ── Atomic transaction ──
     await db.transaction(async (trx) => {
@@ -1163,6 +1496,12 @@ router.put('/:id', async (req: Request, res: Response) => {
       await trx('cash_ledger')
         .where({ reference_id: saleId, dealer_id: dealerId })
         .delete();
+      await trx('bank_ledger')
+        .where({ reference_id: saleId, dealer_id: dealerId })
+        .delete();
+      await trx('tax_posting_lines')
+        .where({ dealer_id: dealerId, document_type: 'sale', document_id: saleId })
+        .delete();
 
       // 3. Delete old sale_items (also cleans sale_item_batches if any
       // remain, via FK cascade — but restore_sale_batches already cleaned).
@@ -1175,6 +1514,10 @@ router.put('/:id', async (req: Request, res: Response) => {
           customer_id: customerId,
           sale_date: input.sale_date,
           total_amount: totalAmount,
+          taxable_amount: vatBreakdown.taxable_amount,
+          vat_rate: vatBreakdown.vat_rate,
+          vat_amount: vatBreakdown.vat_amount,
+          sd_amount: vatBreakdown.sd_amount,
           discount: input.discount,
           discount_reference: input.discount_reference?.trim() || null,
           client_reference: input.client_reference?.trim() || null,
@@ -1328,14 +1671,34 @@ router.put('/:id', async (req: Request, res: Response) => {
           description: `Payment for ${oldSale.invoice_number} (edited)`,
           entry_date: input.sale_date,
         });
-        await trx('cash_ledger').insert({
-          dealer_id: dealerId,
-          type: 'receipt',
+        await postCustomerReceipt(trx, {
+          dealerId,
           amount: input.paid_amount,
           description: `Payment: ${oldSale.invoice_number} (edited)`,
-          reference_type: 'sales',
-          reference_id: saleId,
-          entry_date: input.sale_date,
+          referenceType: 'sales',
+          referenceId: saleId,
+          entryDate: input.sale_date,
+          paidAccountId: input.paid_account_id ?? null,
+          payment_mode: input.payment_mode ?? undefined,
+        });
+      }
+
+      if (vatBreakdown.vat_amount > 0 || vatBreakdown.sd_amount > 0) {
+        const customerTaxRow = await trx('customers')
+          .where({ id: customerId })
+          .first('tax_id');
+        await insertTaxPostingLine(trx, {
+          dealerId,
+          documentType: 'sale',
+          documentId: saleId,
+          entryDate: input.sale_date,
+          taxableAmount: vatBreakdown.taxable_amount,
+          taxRate: vatBreakdown.vat_rate,
+          taxAmount: vatBreakdown.vat_amount,
+          sdAmount: vatBreakdown.sd_amount,
+          partyId: customerId,
+          partyTaxId: (customerTaxRow as any)?.tax_id ?? null,
+          mushakForm: '6.3',
         });
       }
 
@@ -1526,6 +1889,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
         .where({ sale_id: saleId, dealer_id: dealerId })
         .delete();
       await trx('cash_ledger')
+        .where({ reference_id: saleId, dealer_id: dealerId })
+        .delete();
+      await trx('bank_ledger')
         .where({ reference_id: saleId, dealer_id: dealerId })
         .delete();
 

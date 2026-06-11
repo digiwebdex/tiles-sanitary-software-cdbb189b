@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Search, Wallet, AlertTriangle, CheckCircle, DollarSign, TrendingDown, CalendarIcon, X, Download, Printer, MessageSquare, BookOpen, Clock, MessageSquareText, MessageCircle } from "lucide-react";
 import { bankAccountService } from "@/services/bankAccountService";
+import { PaymentModeSelect } from "@/components/PaymentModeSelect";
+import { paymentModeLabel, paymentModeRequiresBankAccount } from "@/lib/paymentModes";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -82,6 +84,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
+  const [payPaymentMode, setPayPaymentMode] = useState("cash");
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [sortBy, setSortBy] = useState<SortOption>("highest");
@@ -95,6 +98,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
     remainingDue: number;
     receiptNo: string;
     date: string;
+    paymentMethod: string;
   } | null>(null);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [waDialog, setWaDialog] = useState<null | {
@@ -129,17 +133,20 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
       amount,
       note,
       paid_account_id,
+      payment_mode,
     }: {
       customerId: string;
       amount: number;
       note: string;
       paid_account_id?: string | null;
+      payment_mode: string;
     }) => {
       return collectionsService.recordPayment(dealerId, {
         customer_id: customerId,
         amount,
         note: note || undefined,
         paid_account_id: paid_account_id ?? null,
+        payment_mode: payment_mode || undefined,
       });
     },
     onSuccess: (result, variables) => {
@@ -152,6 +159,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
           remainingDue: Math.max(0, customer.outstanding - (result?.totalApplied ?? variables.amount)),
           receiptNo: `RCP-${Date.now().toString(36).toUpperCase()}`,
           date: new Date().toISOString(),
+          paymentMethod: paymentModeLabel(variables.payment_mode),
         });
       }
       queryClient.invalidateQueries({ queryKey: ["collection-tracker"] });
@@ -520,25 +528,38 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
                 </Button>
               ))}
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1">
-                <Wallet className="h-3 w-3" /> Received Into
-              </Label>
-              <Select
-                value={paidAccountId ?? "__cash__"}
-                onValueChange={(v) => setPaidAccountId(v === "__cash__" ? null : v)}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__cash__">Cash in Hand</SelectItem>
-                  {bankAccounts.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.bank_name} — {b.account_number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PaymentModeSelect
+              value={payPaymentMode}
+              onChange={(v) => {
+                setPayPaymentMode(v);
+                if (v === "cash") setPaidAccountId(null);
+              }}
+              label="Payment Mode"
+            />
+            {payPaymentMode !== "cash" && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Wallet className="h-3 w-3" />{" "}
+                  {paymentModeRequiresBankAccount(payPaymentMode) ? "Received Into (required)" : "Settlement Account (optional)"}
+                </Label>
+                <Select
+                  value={paidAccountId ?? "__cash__"}
+                  onValueChange={(v) => setPaidAccountId(v === "__cash__" ? null : v)}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {!paymentModeRequiresBankAccount(payPaymentMode) && (
+                      <SelectItem value="__cash__">MFS / Cash Wallet</SelectItem>
+                    )}
+                    {bankAccounts.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.bank_name} — {b.account_number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Note (optional)</Label>
               <Textarea placeholder="Collection note..." value={payNote} onChange={(e) => setPayNote(e.target.value)} rows={2} />
@@ -550,11 +571,16 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
               disabled={!payAmount || Number(payAmount) <= 0 || recordPayment.isPending}
               onClick={() => {
                 if (!payDialog.customer) return;
+                if (paymentModeRequiresBankAccount(payPaymentMode) && !paidAccountId) {
+                  toast.error("Select a bank account for this payment mode");
+                  return;
+                }
                 recordPayment.mutate({
                   customerId: payDialog.customer.id,
                   amount: Number(payAmount),
                   note: payNote,
                   paid_account_id: paidAccountId,
+                  payment_mode: payPaymentMode,
                 });
               }}
             >
@@ -575,6 +601,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
                 dealerAddress={dealerInfo?.address ?? null} customerName={receiptData.customerName}
                 customerPhone={receiptData.customerPhone} amount={receiptData.amount} note={receiptData.note}
                 date={receiptData.date} receiptNo={receiptData.receiptNo} remainingDue={receiptData.remainingDue}
+                paymentMethod={receiptData.paymentMethod}
               />
             </div>
           )}

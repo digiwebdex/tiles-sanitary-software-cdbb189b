@@ -15,8 +15,10 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import {
   getCustomerAggById,
+  getCustomerOutstandingMapFromReadModel,
   getOldestUnpaidSaleDateByCustomer,
   sumCustomerOutstandingFromSales,
+  sumInventoryValuationWac,
   sumSupplierPayable,
 } from '../services/reportQueryService';
 
@@ -107,22 +109,8 @@ router.get('/', async (req: Request, res: Response) => {
       sumSupplierPayable(dealerId),
     ]);
 
-    // Total stock value: sum(box_qty or piece_qty * cost_price)
-    const stockValRow = await db.raw(
-      `
-      SELECT COALESCE(SUM(
-        CASE
-          WHEN p.unit_type = 'box_sft' THEN COALESCE(s.box_qty, 0) * COALESCE(p.cost_price, 0)
-          ELSE COALESCE(s.piece_qty, 0) * COALESCE(p.cost_price, 0)
-        END
-      ), 0) AS v
-      FROM products p
-      LEFT JOIN stock s ON s.product_id = p.id AND s.dealer_id = p.dealer_id
-      WHERE p.dealer_id = ?
-      `,
-      [dealerId],
-    );
-    const totalStockValue = round2(stockValRow.rows?.[0]?.v ?? 0);
+    // Total stock value at WAC (P4-03)
+    const totalStockValue = await sumInventoryValuationWac(dealerId);
 
     // Low-stock items (qty <= reorder_level), top 10
     const lowStockRows = await db.raw(
@@ -280,17 +268,25 @@ router.get('/onboarding-counts', async (req: Request, res: Response) => {
   if (!dealerId) return;
 
   try {
-    const [products, customers, suppliers, sales] = await Promise.all([
+    const [products, customers, suppliers, sales, purchases, collections, supplierPayments, salesReturns] = await Promise.all([
       db('products').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
       db('customers').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
       db('suppliers').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
       db('sales').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
+      db('purchases').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
+      db('customer_ledger').where({ dealer_id: dealerId, type: 'payment' }).count<{ count: string }[]>('* as count').first(),
+      db('supplier_ledger').where({ dealer_id: dealerId, type: 'payment' }).count<{ count: string }[]>('* as count').first(),
+      db('sales_returns').where({ dealer_id: dealerId }).count<{ count: string }[]>('* as count').first(),
     ]);
     res.json({
       products: Number(products?.count ?? 0),
       customers: Number(customers?.count ?? 0),
       suppliers: Number(suppliers?.count ?? 0),
       sales: Number(sales?.count ?? 0),
+      purchases: Number(purchases?.count ?? 0),
+      collections: Number(collections?.count ?? 0),
+      supplier_payments: Number(supplierPayments?.count ?? 0),
+      sales_returns: Number(salesReturns?.count ?? 0),
     });
   } catch (err: any) {
     console.error('[dashboard/onboarding-counts]', err.message);
@@ -391,19 +387,18 @@ router.get('/top-overdue', async (req: Request, res: Response) => {
   if (!dealerId) return;
 
   try {
-    const [custs, aggMap, oldestMap] = await Promise.all([
+    const [custs, outstandingMap, oldestMap] = await Promise.all([
       db('customers')
         .where({ dealer_id: dealerId, status: 'active' })
         .select('id', 'name', 'phone', 'max_overdue_days'),
-      getCustomerAggById(dealerId),
+      getCustomerOutstandingMapFromReadModel(dealerId),
       getOldestUnpaidSaleDateByCustomer(dealerId),
     ]);
 
     const today = new Date();
     const out = (custs as any[])
       .map((c) => {
-        const a = aggMap.get(c.id);
-        const outstanding = round2(a?.outstanding ?? 0);
+        const outstanding = round2(outstandingMap.get(c.id) ?? 0);
         const oldestSaleDate = oldestMap.get(c.id) ?? null;
         const daysOverdue = oldestSaleDate
           ? Math.floor((today.getTime() - new Date(oldestSaleDate).getTime()) / 86400000)
@@ -452,14 +447,13 @@ router.get('/customer-due-balances', async (req: Request, res: Response) => {
       return;
     }
 
-    const [aggMap, oldestMap] = await Promise.all([
-      getCustomerAggById(dealerId, ids),
+    const [outstandingMap, oldestMap] = await Promise.all([
+      getCustomerOutstandingMapFromReadModel(dealerId),
       getOldestUnpaidSaleDateByCustomer(dealerId, ids),
     ]);
     const sums: Record<string, { due: number; daysOverdue: number }> = {};
     for (const id of ids) {
-      const a = aggMap.get(id);
-      sums[id] = { due: round2(a?.outstanding ?? 0), daysOverdue: 0 };
+      sums[id] = { due: round2(outstandingMap.get(id) ?? 0), daysOverdue: 0 };
     }
 
     const today = new Date();

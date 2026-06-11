@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { TrendingUp } from "lucide-react";
 import SaleInvoiceBarcode from "./SaleInvoiceBarcode";
 import RateSourceBadge from "@/components/RateSourceBadge";
+import VatTaxInvoiceDocument from "./VatTaxInvoiceDocument";
 
 interface SaleInvoiceDocumentProps {
   sale: any;
@@ -15,7 +16,12 @@ interface SaleInvoiceDocumentProps {
   paidAmount: number;
   dueAmount: number;
   isDealerAdmin: boolean;
-  dealerInfo?: { name: string; phone: string | null; address: string | null } | null;
+  dealerInfo?: {
+    name: string;
+    phone: string | null;
+    address: string | null;
+    tax_id?: string | null;
+  } | null;
   salesReturns?: any[];
   /** Optional Project link details (Project / Site-wise Sales). */
   project?: { project_name: string; project_code: string } | null;
@@ -41,9 +47,82 @@ const SaleInvoiceDocument = ({
   const paymentStatus =
     dueAmount <= 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Pending";
 
+  const vatAmount = Number(sale?.vat_amount ?? 0);
+  const sdAmount = Number(sale?.sd_amount ?? 0);
+  const showVat = vatAmount > 0 || sdAmount > 0;
+
   const businessName = dealerInfo?.name ?? "Your Business Name";
   // When a site address is present, use it as the delivery address override.
   const billingAddress = site?.address ?? customer?.address ?? null;
+
+  if (showVat) {
+    return (
+      <div className="text-sm text-foreground">
+        <VatTaxInvoiceDocument
+          sale={sale}
+          items={items}
+          customer={customer}
+          subtotal={subtotal}
+          totalAmount={totalAmount}
+          discountAmount={discountAmount}
+          paidAmount={paidAmount}
+          dueAmount={dueAmount}
+          dealerInfo={dealerInfo}
+          project={project}
+          site={site}
+        />
+        {salesReturns.length > 0 && (
+          <div className="px-6 mb-4 mt-4 border-t pt-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+              Returns & Refunds
+            </p>
+            <div className="rounded-md border text-xs">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="px-2 py-1.5 text-left font-semibold">Product</th>
+                    <th className="px-2 py-1.5 text-center font-semibold">Qty</th>
+                    <th className="px-2 py-1.5 text-right font-semibold">Refund</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesReturns.map((r: any) => (
+                    <tr key={r.id} className="border-t">
+                      <td className="px-2 py-1.5">{r.products?.name ?? "—"}</td>
+                      <td className="px-2 py-1.5 text-center">{r.qty}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-destructive">
+                        {formatCurrency(r.refund_amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {isDealerAdmin && (
+          <div className="no-print mx-6 mb-4 rounded border border-blue-200 bg-blue-50 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="h-4 w-4 text-blue-700" />
+              <p className="text-xs font-bold uppercase tracking-wider text-blue-700">
+                Profit Breakdown (Owner Only — Not Printed)
+              </p>
+            </div>
+            <div className="grid grid-cols-4 gap-3 text-center text-sm">
+              <ProfitCard label="COGS" value={formatCurrency(Number((sale as any).cogs) || 0)} color="text-destructive" />
+              <ProfitCard label="Gross Profit" value={formatCurrency(Number((sale as any).gross_profit) || 0)} color={Number((sale as any).gross_profit) >= 0 ? "text-green-700" : "text-destructive"} />
+              <ProfitCard label="Net Profit" value={formatCurrency(Number((sale as any).net_profit) || 0)} color={Number((sale as any).net_profit) >= 0 ? "text-green-700" : "text-destructive"} />
+              <ProfitCard
+                label="Margin %"
+                value={Number(sale.total_amount) > 0 ? `${((Number((sale as any).net_profit) / Number(sale.total_amount)) * 100).toFixed(1)}%` : "—"}
+                color={Number(sale.total_amount) > 0 && Number((sale as any).net_profit) >= 0 ? "text-green-700" : "text-destructive"}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="text-sm text-foreground">
