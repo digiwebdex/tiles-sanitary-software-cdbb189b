@@ -7,7 +7,10 @@
  */
 import type { Knex } from 'knex';
 import { db } from '../db/connection';
-import { attachPurchasePaymentSummaries } from '../lib/purchasePaymentSummary';
+import {
+  attachPurchasePaymentSummaries,
+  sumPurchaseLedgerPayments,
+} from '../lib/purchasePaymentSummary';
 import {
   computeCustomerBalance,
   computeSupplierBalance,
@@ -563,14 +566,321 @@ export async function getCustomerAggById(
   return result;
 }
 
+/** Matches `mv_customer_outstanding` open-invoice filter (excludes reversed). */
+export function applyOpenArSalesFilter(q: Knex.QueryBuilder): Knex.QueryBuilder {
+  return q
+    .where('due_amount', '>', 0)
+    .whereRaw("COALESCE(document_status, 'posted') <> 'reversed'");
+}
+
+export function agingDaysFromSaleDate(
+  saleDate: string | Date,
+  today: Date = new Date(),
+): number {
+  const sale = new Date(saleDate);
+  return Math.max(0, Math.floor((today.getTime() - sale.getTime()) / 86_400_000));
+}
+
+export interface DueAgingBuckets {
+  current: number;
+  d30: number;
+  d60: number;
+  d90: number;
+  d90plus: number;
+  total: number;
+}
+
+export function emptyDueAgingBuckets(): DueAgingBuckets {
+  return { current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0, total: 0 };
+}
+
+/** Allocate one open invoice due into aging bucket columns. */
+export function addDueToAgingBuckets(
+  buckets: DueAgingBuckets,
+  dueAmount: number,
+  days: number,
+): void {
+  const due = round2(num(dueAmount));
+  if (due <= 0) return;
+  if (days <= 0) buckets.current += due;
+  else if (days <= 30) buckets.d30 += due;
+  else if (days <= 60) buckets.d60 += due;
+  else if (days <= 90) buckets.d90 += due;
+  else buckets.d90plus += due;
+  buckets.total += due;
+}
+
+export interface DueAgingInvoiceRow {
+  id: string;
+  invoice_number: string | null;
+  sale_date: string;
+  due_amount: number;
+  days: number;
+}
+
+export interface DueAgingCustomerRow {
+  id: string;
+  name: string;
+  phone: string | null;
+  type: string;
+  current: number;
+  d30: number;
+  d60: number;
+  d90: number;
+  d90plus: number;
+  total: number;
+  invoices: DueAgingInvoiceRow[];
+}
+
+export interface OpenSaleDueRow {
+  id: string;
+  customer_id: string;
+  sale_date: string | Date;
+  due_amount: number;
+  total_amount: number;
+  invoice_number: string | null;
+  project_id?: string | null;
+  paid_amount?: number;
+}
+
+/** Open AR invoice lines (same filter as mv_customer_outstanding). */
+export async function fetchOpenSalesDueRows(
+  dealerId: string,
+  opts: { customerIds?: string[]; projectScoped?: boolean } = {},
+): Promise<OpenSaleDueRow[]> {
+  let q = applyOpenArSalesFilter(
+    db('sales').where({ dealer_id: dealerId }),
+  ).select(
+    'id',
+    'customer_id',
+    'sale_date',
+    'due_amount',
+    'total_amount',
+    'invoice_number',
+    'project_id',
+    'paid_amount',
+  );
+  if (opts.customerIds?.length) q = q.whereIn('customer_id', opts.customerIds);
+  if (opts.projectScoped) q = q.whereNotNull('project_id');
+  return q as Promise<OpenSaleDueRow[]>;
+}
+
+/** Due Aging report — invoice buckets + per-customer totals aligned with read model. */
+export async function buildDueAgingReportRows(dealerId: string): Promise<DueAgingCustomerRow[]> {
+  const [customers, sales, readRows] = await Promise.all([
+    db('customers')
+      .where({ dealer_id: dealerId, status: 'active' })
+      .orderBy('name', 'asc')
+      .select('id', 'name', 'phone', 'type'),
+    fetchOpenSalesDueRows(dealerId),
+    fetchCustomerOutstandingReadRows(dealerId),
+  ]);
+
+  const outstandingByCustomer = new Map(
+    readRows.map((r) => [r.customer_id, r.outstanding]),
+  );
+  const today = new Date();
+
+  const customerMap = new Map<string, DueAgingCustomerRow & { invoices: DueAgingInvoiceRow[] }>();
+  for (const c of customers as Array<{
+    id: string;
+    name: string;
+    phone: string | null;
+    type: string;
+  }>) {
+    customerMap.set(c.id, {
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      type: c.type,
+      ...emptyDueAgingBuckets(),
+      invoices: [],
+    });
+  }
+
+  for (const s of sales) {
+    const cust = customerMap.get(s.customer_id);
+    if (!cust) continue;
+    const due = num(s.due_amount);
+    const days = agingDaysFromSaleDate(s.sale_date, today);
+    addDueToAgingBuckets(cust, due, days);
+    cust.invoices.push({
+      id: s.id,
+      invoice_number: s.invoice_number,
+      sale_date:
+        typeof s.sale_date === 'string'
+          ? s.sale_date.slice(0, 10)
+          : new Date(s.sale_date).toISOString().split('T')[0],
+      due_amount: round2(due),
+      days,
+    });
+  }
+
+  return Array.from(customerMap.values())
+    .filter((v) => (outstandingByCustomer.get(v.id) ?? v.total) > 0.01)
+    .map((v) => {
+      const readTotal = outstandingByCustomer.get(v.id);
+      const total = readTotal != null ? readTotal : round2(v.total);
+      return {
+        ...v,
+        total,
+        invoices: v.invoices.sort((a, b) => b.days - a.days),
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+export interface SaleOverdueCheckResult {
+  outstanding: number;
+  daysOverdue: number;
+  maxOverdueDays: number;
+  creditLimit: number;
+  isOverdueViolated: boolean;
+  isCreditExceeded: boolean;
+}
+
+/** Credit / overdue gate for a single customer (AR from read model). */
+export async function buildSaleOverdueCheckResult(
+  dealerId: string,
+  customerId: string,
+): Promise<SaleOverdueCheckResult | null> {
+  const [customer, readRow] = await Promise.all([
+    db('customers')
+      .where({ id: customerId, dealer_id: dealerId })
+      .select('credit_limit', 'max_overdue_days')
+      .first(),
+    db('mv_customer_outstanding')
+      .where({ dealer_id: dealerId, customer_id: customerId })
+      .first('outstanding', 'oldest_unpaid_date'),
+  ]);
+  if (!customer) return null;
+
+  const outstanding = readRow ? round2(num(readRow.outstanding)) : 0;
+  const oldestDate = readRow?.oldest_unpaid_date
+    ? String(readRow.oldest_unpaid_date).slice(0, 10)
+    : null;
+  const daysOverdue = oldestDate ? agingDaysFromSaleDate(oldestDate) : 0;
+  const maxOverdueDays = Number(customer.max_overdue_days ?? 0);
+  const creditLimit = Number(customer.credit_limit ?? 0);
+
+  return {
+    outstanding,
+    daysOverdue,
+    maxOverdueDays,
+    creditLimit,
+    isOverdueViolated: maxOverdueDays > 0 && daysOverdue > maxOverdueDays,
+    isCreditExceeded: creditLimit > 0 && outstanding > creditLimit,
+  };
+}
+
+export interface ProjectOutstandingRow {
+  project_id: string;
+  project_name: string;
+  project_code: string;
+  customer_name: string;
+  billed: number;
+  paid: number;
+  due: number;
+  overdue: number;
+}
+
+/** All non-reversed sales tied to a project (for project AR rollups). */
+export async function fetchProjectSalesRows(dealerId: string): Promise<OpenSaleDueRow[]> {
+  return db('sales')
+    .where({ dealer_id: dealerId })
+    .whereNotNull('project_id')
+    .whereRaw("COALESCE(document_status, 'posted') <> 'reversed'")
+    .select(
+      'id',
+      'customer_id',
+      'sale_date',
+      'due_amount',
+      'total_amount',
+      'invoice_number',
+      'project_id',
+      'paid_amount',
+    ) as Promise<OpenSaleDueRow[]>;
+}
+
+/** Project outstanding — billed/paid/due from sales headers (project-scoped). */
+export async function buildProjectOutstandingRows(
+  dealerId: string,
+  projects: Map<
+    string,
+    {
+      project_name: string;
+      project_code: string;
+      customer_name: string | null;
+      max_overdue_days?: number | null;
+    }
+  >,
+  today: string = new Date().toISOString().split('T')[0],
+): Promise<ProjectOutstandingRow[]> {
+  const sales = await fetchProjectSalesRows(dealerId);
+
+  const agg = new Map<string, { billed: number; paid: number; due: number; overdue: number }>();
+  for (const r of sales) {
+    if (!r.project_id) continue;
+    const cur = agg.get(r.project_id) ?? { billed: 0, paid: 0, due: 0, overdue: 0 };
+    const due = num(r.due_amount);
+    cur.billed += num(r.total_amount);
+    cur.paid += num(r.paid_amount);
+    cur.due += due;
+    if (due > 0 && r.sale_date) {
+      const p = projects.get(r.project_id);
+      const maxDays = p?.max_overdue_days ?? 0;
+      const dStr =
+        typeof r.sale_date === 'string'
+          ? r.sale_date.slice(0, 10)
+          : new Date(r.sale_date).toISOString().split('T')[0];
+      const days = Math.floor(
+        (new Date(today + 'T00:00:00').getTime() - new Date(dStr + 'T00:00:00').getTime()) /
+          86_400_000,
+      );
+      if (days > (maxDays ?? 0)) cur.overdue += due;
+    }
+    agg.set(r.project_id, cur);
+  }
+
+  const rows: ProjectOutstandingRow[] = [];
+  for (const [pid, v] of agg.entries()) {
+    const p = projects.get(pid);
+    if (!p) continue;
+    rows.push({
+      project_id: pid,
+      project_name: p.project_name,
+      project_code: p.project_code,
+      customer_name: p.customer_name ?? '—',
+      billed: round2(v.billed),
+      paid: round2(v.paid),
+      due: round2(v.due),
+      overdue: round2(v.overdue),
+    });
+  }
+  return rows.sort((a, b) => b.due - a.due);
+}
+
+/** Purchases report paid amounts — shared supplier_ledger rollup (P4 Tier B). */
+export async function getPurchasePaidAmountMap(
+  dealerId: string,
+  purchaseIds: string[],
+): Promise<Record<string, number>> {
+  const paidMap = await sumPurchaseLedgerPayments(dealerId, purchaseIds);
+  const result: Record<string, number> = {};
+  for (const [id, amt] of paidMap.entries()) {
+    result[id] = amt;
+  }
+  return result;
+}
+
 /** Oldest unpaid sale date per customer (for aging badges). */
 export async function getOldestUnpaidSaleDateByCustomer(
   dealerId: string,
   customerIds?: string[],
 ): Promise<Map<string, string>> {
-  let q = db('sales')
-    .where({ dealer_id: dealerId })
-    .where('due_amount', '>', 0)
+  let q = applyOpenArSalesFilter(
+    db('sales').where({ dealer_id: dealerId }),
+  )
     .orderBy('sale_date', 'asc')
     .select('customer_id', 'sale_date');
   if (customerIds?.length) q = q.whereIn('customer_id', customerIds);

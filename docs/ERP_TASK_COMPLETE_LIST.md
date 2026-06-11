@@ -17,7 +17,7 @@
 | Phase 1 — Report trust | ✅ Complete (P1-08 doc refresh) |
 | Phase 2 — Posting engine MVP | ✅ Complete |
 | Phase 3 — Returns & inventory truth | 🟡 Mostly done (P3-03 sale due/paid sync ✅) |
-| Phase 4 — Read models & reports | 🟡 P4-01–05 done; exit criteria (no ad-hoc balance SQL) partial |
+| Phase 4 — Read models & reports | ✅ Complete (Tier A balance cutover; Tier B period metrics OK) |
 | Phase 5 — VAT / Mushak | ✅ Complete (P5-01–06) |
 | Phase 6 — GL & portal | ⬜ Future |
 | Phase 7 — UX (sidebar, wizards) | ✅ Complete on VPS |
@@ -105,7 +105,7 @@
 | P4-04 | Report hub UX grouping + search | ✅ | Collapsible groups + hub search box (desktop + mobile) |
 | P4-05 | Drill-down posting trace UI | ✅ | `/api/postings/trace`; Due Aging + Supplier Outstanding drill-down |
 
-**Exit criteria:** No report endpoint uses ad-hoc balance SQL — ⬜ Not met
+**Exit criteria:** No report endpoint uses ad-hoc balance SQL — ✅ Tier A (Due Aging, overdue check, project outstanding, purchases paid map via `reportQueryService`; reversed sales excluded)
 
 ---
 
@@ -209,8 +209,8 @@ cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 
 | Item | Priority |
 |------|----------|
-| Tier B reports still on inline SQL | Medium |
-| Phase 5 VAT/Mushak | High (when compliance needed) |
+| Tier B period metrics (accounting-summary monthly due) still on sales headers | Low |
+| P5 exit: accountant sign-off on VAT register export | Medium |
 | `seedDemoAccounts.ts` (`plan` vs `plan_id`) | Low |
 | 36 unit tests fail without VPS auth mocks | Low (CI/dev) |
 | Historical COGS backfill (Phase 1B) | Decision pending |
@@ -220,9 +220,9 @@ cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 
 ## Recommended next work (priority order)
 
-1. **Phase 5** — VAT/Mushak when accountant ready  
-2. **Phase 3** — Remaining returns/inventory items (P3-04, P3-08)  
-3. **Phase 6** — Portal on VPS API  
+1. **Phase 3** — Remaining returns/inventory (P3-04 purchase return batch deduct, P3-08 stock display)  
+2. **Phase 6** — GL spine + portal on VPS API  
+3. **Ops** — P1 exit parity verify per dealer; P5 VAT register accountant sign-off  
 
 ---
 

@@ -85,7 +85,7 @@
 | P4-04 | Report hub UX grouping + search | P2 | M |
 | P4-05 | Drill-down posting trace UI | P2 | L |
 
-**Exit criteria:** No report endpoint uses ad-hoc balance SQL.
+**Exit criteria:** No report endpoint uses ad-hoc balance SQL — ✅ Tier A complete (Due Aging, sale-overdue-check, project outstanding, purchases paid map routed through `reportQueryService`; reversed sales excluded from AR aging).
 
 ---
 

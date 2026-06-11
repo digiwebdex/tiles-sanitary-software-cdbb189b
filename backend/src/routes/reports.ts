@@ -28,9 +28,12 @@ import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
 import {
   buildCustomerDueReportRows,
+  buildDueAgingReportRows,
+  buildSaleOverdueCheckResult,
   buildSupplierOutstandingSummaryRows,
   buildSupplierPayableReportRowsFromReadModel,
   fetchCustomerLedgerEntries,
+  getPurchasePaidAmountMap,
   groupCustomerLedger,
 } from '../services/reportQueryService';
 const router = Router();
@@ -927,49 +930,12 @@ router.get('/sale-overdue-check', async (req, res) => {
     return;
   }
   try {
-    const [customer, ledger, oldestSale] = await Promise.all([
-      db('customers')
-        .where({ id: customerId, dealer_id: dealerId })
-        .select('credit_limit', 'max_overdue_days')
-        .first(),
-      db('customer_ledger')
-        .where({ customer_id: customerId, dealer_id: dealerId })
-        .select('amount', 'type'),
-      db('sales')
-        .where({ customer_id: customerId, dealer_id: dealerId })
-        .andWhere('due_amount', '>', 0)
-        .orderBy('sale_date', 'asc')
-        .select('sale_date')
-        .first(),
-    ]);
-    if (!customer) {
+    const result = await buildSaleOverdueCheckResult(dealerId, customerId);
+    if (!result) {
       res.status(404).json({ error: 'Customer not found' });
       return;
     }
-    let outstanding = 0;
-    for (const row of ledger as any[]) {
-      const amt = Number(row.amount);
-      if (row.type === 'sale') outstanding += amt;
-      else if (row.type === 'payment' || row.type === 'refund') outstanding -= amt;
-      else if (row.type === 'adjustment') outstanding += amt;
-    }
-    const oldestDate = (oldestSale as any)?.sale_date ?? null;
-    const daysOverdue = oldestDate
-      ? Math.max(
-          0,
-          Math.floor((Date.now() - new Date(oldestDate).getTime()) / 86400000),
-        )
-      : 0;
-    const maxOverdueDays = Number(customer.max_overdue_days ?? 0);
-    const creditLimit = Number(customer.credit_limit ?? 0);
-    res.json({
-      outstanding: round2(outstanding),
-      daysOverdue,
-      maxOverdueDays,
-      creditLimit,
-      isOverdueViolated: maxOverdueDays > 0 && daysOverdue > maxOverdueDays,
-      isCreditExceeded: creditLimit > 0 && outstanding > creditLimit,
-    });
+    res.json(result);
   } catch (err: any) {
     console.error('[reports.sale-overdue-check]', err.message);
     res.status(500).json({ error: 'Failed to load overdue check' });
@@ -2201,15 +2167,7 @@ router.get('/page/purchases', async (req, res) => {
         });
       }
 
-      const ledger = await db('supplier_ledger')
-        .whereIn('purchase_id', purchaseIds)
-        .where('type', 'payment')
-        .select('purchase_id', 'amount');
-      for (const e of ledger as any[]) {
-        const pid = e.purchase_id;
-        if (!paidMap[pid]) paidMap[pid] = 0;
-        paidMap[pid] += toNum(e.amount);
-      }
+      Object.assign(paidMap, await getPurchasePaidAmountMap(dealerId, purchaseIds));
     }
 
     const rows = (purchases as any[]).map((p) => ({
@@ -2406,52 +2364,7 @@ router.get('/page/due-aging', async (req, res) => {
   if (!requireFinancialRole(req, res)) return;
 
   try {
-    const [customers, sales] = await Promise.all([
-      db('customers')
-        .where({ dealer_id: dealerId, status: 'active' })
-        .orderBy('name', 'asc')
-        .select('id', 'name', 'phone', 'type'),
-      db('sales')
-        .where({ dealer_id: dealerId })
-        .andWhere('due_amount', '>', 0)
-        .select('id', 'customer_id', 'sale_date', 'due_amount', 'total_amount', 'invoice_number'),
-    ]);
-
-    const today = new Date();
-    const msPerDay = 86_400_000;
-
-    const customerMap = new Map<string, any>();
-    for (const c of customers as any[]) {
-      customerMap.set(c.id, {
-        id: c.id, name: c.name, phone: c.phone, type: c.type,
-        current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0, total: 0, invoices: [],
-      });
-    }
-    for (const s of sales as any[]) {
-      const cust = customerMap.get(s.customer_id);
-      if (!cust) continue;
-      const due = toNum(s.due_amount);
-      const days = Math.max(0, Math.floor((today.getTime() - new Date(s.sale_date).getTime()) / msPerDay));
-      if (days <= 0) cust.current += due;
-      else if (days <= 30) cust.d30 += due;
-      else if (days <= 60) cust.d60 += due;
-      else if (days <= 90) cust.d90 += due;
-      else cust.d90plus += due;
-      cust.total += due;
-      cust.invoices.push({
-        id: s.id,
-        invoice_number: s.invoice_number,
-        sale_date: typeof s.sale_date === 'string' ? s.sale_date : new Date(s.sale_date).toISOString().split('T')[0],
-        due_amount: due,
-        days,
-      });
-    }
-
-    const rows = Array.from(customerMap.values())
-      .filter((v) => v.total > 0)
-      .map((v) => ({ ...v, invoices: v.invoices.sort((a: any, b: any) => b.days - a.days) }))
-      .sort((a, b) => b.total - a.total);
-
+    const rows = await buildDueAgingReportRows(dealerId);
     res.json({ rows });
   } catch (err: any) {
     console.error('[reports.page.due-aging]', err.message);

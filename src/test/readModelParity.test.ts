@@ -4,6 +4,8 @@ import {
   computeSupplierOutstanding,
 } from '../../backend/src/lib/ledgerBalance';
 import {
+  addDueToAgingBuckets,
+  emptyDueAgingBuckets,
   groupCustomerLedger,
   groupSupplierLedger,
   type CustomerLedgerEntry,
@@ -38,6 +40,32 @@ describe('Phase 4 read model parity (fixtures)', () => {
     const grouped = groupSupplierLedger(supplierLedger);
     const viewOutstanding = computeSupplierOutstanding(grouped.get(S1)!);
     expect(viewOutstanding).toBe(30000);
+  });
+
+  it('due aging invoice rollup matches mv_customer_outstanding when headers sync', () => {
+    const openInvoices = [
+      { due_amount: 4000, sale_date: '2026-05-01', document_status: 'posted' },
+      { due_amount: 3000, sale_date: '2026-04-01', document_status: 'posted' },
+      { due_amount: 500, document_status: 'reversed' },
+    ];
+    const viewTotal = openInvoices
+      .filter((s) => s.document_status !== 'reversed' && s.due_amount > 0.01)
+      .reduce((sum, s) => sum + s.due_amount, 0);
+
+    const buckets = emptyDueAgingBuckets();
+    const today = new Date('2026-06-09T12:00:00Z');
+    for (const inv of openInvoices) {
+      if (inv.document_status === 'reversed' || inv.due_amount <= 0.01) continue;
+      const days = Math.max(
+        0,
+        Math.floor(
+          (today.getTime() - new Date(inv.sale_date ?? today).getTime()) / 86_400_000,
+        ),
+      );
+      addDueToAgingBuckets(buckets, inv.due_amount, days);
+    }
+    expect(buckets.total).toBe(viewTotal);
+    expect(buckets.total).toBe(7000);
   });
 
   it('ledger AR can diverge from sales-header AR when headers are stale', () => {
