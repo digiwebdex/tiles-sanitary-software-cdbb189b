@@ -90,6 +90,9 @@ function computeAccessLevel(
     // Suspended → blocked immediately
     if (sub.status === "suspended") return "blocked";
 
+    // Open-ended active subscription (null end_date) → full access
+    if (!endDate && sub.status === "active") return "full";
+
     // Date is the source of truth: if today <= end_date → full access
     // (regardless of DB status field, which may lag behind)
     if (endDate && today <= endDate) return "full";

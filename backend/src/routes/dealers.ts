@@ -853,13 +853,17 @@ router.post('/', async (req: Request, res: Response) => {
 
       let sub: any = null;
       if (subscription && subscription.plan_id) {
+        const { defaultSubscriptionEndDate } = await import('../lib/subscriptionEndDate');
         const today = new Date().toISOString().slice(0, 10);
+        const endDate =
+          subscription.end_date ||
+          (await defaultSubscriptionEndDate(subscription.plan_id, trx));
         const [s] = await trx('subscriptions')
           .insert({
             dealer_id: dealer.id,
             plan_id: subscription.plan_id,
             start_date: subscription.start_date || today,
-            end_date: subscription.end_date || null,
+            end_date: endDate,
             status: 'active',
           })
           .returning('*');

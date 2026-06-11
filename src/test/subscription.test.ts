@@ -49,7 +49,8 @@ type AccessLevel = "full" | "grace" | "readonly" | "blocked";
  *  - today <= end_date      → full   (end_date is source of truth)
  *  - end_date < today <= end_date + 3 days → grace
  *  - beyond grace           → readonly
- *  - no end_date            → readonly (no valid date to check)
+ *  - active + no end_date   → full (open-ended subscription)
+ *  - expired + no end_date  → readonly
  *  - no subscription        → blocked
  */
 function computeAccessLevel(sub: Subscription | null): AccessLevel {
@@ -60,6 +61,8 @@ function computeAccessLevel(sub: Subscription | null): AccessLevel {
   today.setHours(0, 0, 0, 0);
 
   const endDate = parseLocalDate(sub.end_date);
+
+  if (!endDate && sub.status === "active") return "full";
 
   if (endDate && today <= endDate) return "full";
 
@@ -224,8 +227,13 @@ describe("computeAccessLevel — beyond grace (readonly)", () => {
     expect(computeAccessLevel(sub)).toBe("readonly");
   });
 
-  it("returns 'readonly' when end_date is null (cannot determine validity)", () => {
+  it("returns 'full' when status is active and end_date is null (open-ended)", () => {
     const sub: Subscription = { ...baseSub, status: "active", end_date: null };
+    expect(computeAccessLevel(sub)).toBe("full");
+  });
+
+  it("returns 'readonly' when status is expired and end_date is null", () => {
+    const sub: Subscription = { ...baseSub, status: "expired", end_date: null };
     expect(computeAccessLevel(sub)).toBe("readonly");
   });
 });

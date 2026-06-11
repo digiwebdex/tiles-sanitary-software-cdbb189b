@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
+import { defaultSubscriptionEndDate } from '../lib/subscriptionEndDate';
 
 const router = Router();
 
@@ -165,15 +166,9 @@ router.post('/', async (req: Request, res: Response) => {
     const body = createSchema.parse(req.body || {});
     const planId = await ensurePlan(body.plan_id);
 
-    // Default end_date based on plan trial_days if not provided
     let endDate = body.end_date;
     if (!endDate) {
-      const plan = await db('plans').where({ id: planId }).first();
-      const trialDays = Number(plan?.trial_days ?? 0);
-      const days = trialDays > 0 ? trialDays : 30;
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      endDate = d.toISOString().slice(0, 10);
+      endDate = await defaultSubscriptionEndDate(planId);
     }
 
     const startDate = body.start_date || new Date().toISOString().slice(0, 10);

@@ -4,6 +4,16 @@
 
 ---
 
+## [2026-06-11] — Fix new-dealer Read-Only + challans migration
+
+### Fixed
+- **New dealer Read-Only bug** — `active` subscription with `end_date = null` no longer locks the UI in readonly mode (`AuthContext.computeAccessLevel`).
+- **`POST /api/dealers`** — assigns default `end_date` from plan (trial days or 365 days for paid plans) when omitted.
+- **Challans list 500** — migration `065` adds `project_id` / `site_id` on `challans` and `deliveries` (was missing on VPS).
+- **Data backfill** — migration `065` sets `end_date` on active subscriptions that had `NULL`.
+
+---
+
 ## [2026-06-09] — Phase 4 report cutover (Tier A balance SQL)
 
 ### Changed
