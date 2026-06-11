@@ -113,6 +113,7 @@ import {
   HighReturnSuppliersReport,
   SupplierPriceTrendReport,
 } from "./SupplierPerformanceReports";
+import { VatRegisterHub } from "./VatRegisterReports";
 import {
   ReorderSuggestionReport,
   StockoutRiskReport,
@@ -133,7 +134,7 @@ import {
   ShoppingCart, DollarSign, Users, History, BookOpen, Clock, TrendingUp,
   ChevronDown, GitBranch, Shield, Lock, ShieldCheck, FileBarChart, UserCheck,
   FileSignature, Coins, Pencil, Folder, MapPin, Banknote, MonitorSpeaker, Send, PackageCheck as PackageCheck2,
-  Truck, Wallet, Brain, Archive, TrendingDown, Search,
+  Truck, Wallet, Brain, Archive, TrendingDown, Search, FileSpreadsheet,
 } from "lucide-react";
 
 interface ReportsPageContentProps {
@@ -150,7 +151,7 @@ const months = [
 
 // Reports that require admin-only access
 const ADMIN_ONLY_REPORTS = new Set([
-  "profit-analysis", "accounting", "supplier-outstanding", "purchases",
+  "profit-analysis", "accounting", "supplier-outstanding", "purchases", "vat-registers",
 ]);
 
 const reportGroups = [
@@ -335,6 +336,13 @@ const reportGroups = [
       { key: "accounting", label: "Expenses Report", icon: DollarSign },
     ],
   },
+  {
+    label: "VAT / Mushak",
+    icon: FileSpreadsheet,
+    items: [
+      { key: "vat-registers", label: "VAT Registers (6.3 / 6.1)", icon: FileSpreadsheet },
+    ],
+  },
 ];
 
 // Flat list for mobile tab bar
@@ -375,6 +383,7 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
       case "sales-report": return <DetailedSalesReport dealerId={dealerId} />;
       case "sales-by-salesman": return <SalesBySalesmanReport dealerId={dealerId} />;
       case "purchases": return <PurchasesReport dealerId={dealerId} />;
+      case "vat-registers": return <VatRegisterHub dealerId={dealerId} />;
       case "payments": return <PaymentsReport dealerId={dealerId} />;
       case "retailer": return <RetailerSalesReport dealerId={dealerId} />;
       case "product-history": return <ProductHistoryReport dealerId={dealerId} />;

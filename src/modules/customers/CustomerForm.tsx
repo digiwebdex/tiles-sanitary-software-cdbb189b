@@ -32,6 +32,7 @@ const schema = z.object({
   credit_limit:     z.coerce.number().min(0, "Credit limit cannot be negative").default(0),
   max_overdue_days: z.coerce.number().int().min(0, "Must be 0 or more").default(0),
   price_tier_id:    z.string().nullable().default(null),
+  tax_id:           z.string().max(50).default(""),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -67,6 +68,7 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
       credit_limit:    customer?.credit_limit ?? 0,
       max_overdue_days: customer?.max_overdue_days ?? 0,
       price_tier_id:   customer?.price_tier_id ?? null,
+      tax_id:          customer?.tax_id ?? "",
     },
   });
 
@@ -84,6 +86,7 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
         credit_limit: values.credit_limit,
         max_overdue_days: values.max_overdue_days,
         price_tier_id: values.price_tier_id,
+        tax_id: values.tax_id,
       };
       if (isEdit) {
         await customerService.update(customer!.id, payload);
@@ -166,6 +169,18 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
             <FormItem>
               <FormLabel>Reference Name</FormLabel>
               <FormControl><Input placeholder="Who referred this customer?" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="tax_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>BIN / TIN (VAT)</FormLabel>
+              <FormControl><Input placeholder="Customer tax ID for Mushak" {...field} /></FormControl>
               <FormMessage />
             </FormItem>
           )}

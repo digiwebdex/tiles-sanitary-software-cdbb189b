@@ -1,6 +1,6 @@
 # TilesERP — Complete Task List & Status
 
-> **Last updated:** 2026-06-11  
+> **Last updated:** 2026-06-09  
 > **Production VPS:** `/var/www/tilessaas` · deploy after merge to `main`  
 > **Domain:** https://app.sanitileserp.com  
 > **Baseline docs:** `PHASED_IMPLEMENTATION_BACKLOG.md`, `RESTRUCTURE_BLUEPRINT.md`
@@ -18,7 +18,7 @@
 | Phase 2 — Posting engine MVP | ✅ Complete |
 | Phase 3 — Returns & inventory truth | 🟡 Mostly done (P3-03 sale due/paid sync ✅) |
 | Phase 4 — Read models & reports | 🟡 P4-01–05 done; exit criteria (no ad-hoc balance SQL) partial |
-| Phase 5 — VAT / Mushak | ⬜ Not started |
+| Phase 5 — VAT / Mushak | 🟡 P5-01–04 foundation done; P5-05–06 partial |
 | Phase 6 — GL & portal | ⬜ Future |
 | Phase 7 — UX (sidebar, wizards) | ✅ Complete on VPS |
 | Whole program “definition of done” | ⬜ Not complete |
@@ -113,14 +113,14 @@
 
 | ID | Task | Status |
 |----|------|--------|
-| P5-01 | BIN/TIN on dealers/customers/suppliers | ⬜ |
-| P5-02 | Tax columns on sales/purchases | ⬜ |
-| P5-03 | `tax_posting_lines` + engine hooks | ⬜ |
-| P5-04 | Mushak 6.3 / 6.1 register reports | ⬜ |
-| P5-05 | Tax invoice print template (Bangla) | ⬜ |
-| P5-06 | bKash/Nagad payment mode on postings | ⬜ |
+| P5-01 | BIN/TIN on dealers/customers/suppliers | ✅ | Dealer `tax_id` (super-admin); customer `tax_id`; supplier `gstin` as BIN/TIN |
+| P5-02 | Tax columns on sales/purchases | ✅ | Migration 063; `computeVatBreakdown` on create/edit |
+| P5-03 | `tax_posting_lines` + engine hooks | ✅ | `taxPostingService`; lines on sale/purchase post |
+| P5-04 | Mushak 6.3 / 6.1 register reports | ✅ | `/api/reports/vat/*`; Reports hub + Excel export |
+| P5-05 | Tax invoice print template (Bangla) | 🟡 | VAT lines + Bangla header on invoice when VAT > 0 |
+| P5-06 | bKash/Nagad payment mode on postings | 🟡 | `payment_mode` on receipts; dedicated posting labels TBD |
 
-**Exit criteria:** Monthly VAT register export — ⬜
+**Exit criteria:** Monthly VAT register export — 🟡 (enable VAT in Settings, export from Reports)
 
 ---
 
@@ -158,7 +158,7 @@
 | Batch-aware returns for tiles | ✅ |
 | Warehouse transfers move stock | ✅ |
 | Approvals enforced server-side | ✅ P2-10 |
-| Mushak registers exportable | ⬜ Phase 5 |
+| Mushak registers exportable | 🟡 Phase 5 (API + Reports hub) |
 | `CURRENT_SYSTEM_AUDIT.md` gaps closed | 🟡 |
 
 ---

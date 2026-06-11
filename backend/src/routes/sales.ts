@@ -18,6 +18,8 @@ import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
 import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
 import { postCustomerReceipt, recordCustomerPayment } from '../lib/customerPayment';
+import { computeVatBreakdown, normalizeDealerVatSettings } from '../lib/vatMath';
+import { insertTaxPostingLine } from '../services/taxPostingService';
 import {
   isPostingEngineEnabled,
   mirrorToPostingTables,
@@ -420,7 +422,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       sale.customer_id
         ? db('customers')
             .where({ id: sale.customer_id })
-            .first('id', 'name', 'type', 'phone', 'address')
+            .first('id', 'name', 'type', 'phone', 'address', 'tax_id')
         : Promise.resolve(null),
       db('sale_items as si')
         .leftJoin('products as p', 'p.id', 'si.product_id')
@@ -598,12 +600,15 @@ router.post('/', async (req: Request, res: Response) => {
       customerTierName = (tierRow as any)?.name ?? null;
     }
 
-    // ── 2. Determine backorder mode ──
+    // ── 2. Dealer settings (backorder + VAT) ──
+    const dealerRow = await db('dealers')
+      .where({ id: dealerId })
+      .first('allow_backorder', 'vat_enabled', 'default_vat_rate');
     let backorderEnabled = !!input.allow_backorder;
     if (!backorderEnabled) {
-      const dealer = await db('dealers').where({ id: dealerId }).first('allow_backorder');
-      backorderEnabled = (dealer as any)?.allow_backorder === true;
+      backorderEnabled = (dealerRow as any)?.allow_backorder === true;
     }
+    const vatSettings = normalizeDealerVatSettings(dealerRow);
 
     // ── 3. Pre-fetch products + stock ──
     const productIds = Array.from(new Set(input.items.map((i) => i.product_id)));
@@ -742,9 +747,11 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     const subtotal = itemsCalc.reduce((s, i) => s + i.total, 0);
-    const totalAmount = subtotal - input.discount;
+    const taxableBase = Math.max(0, subtotal - input.discount);
+    const vatBreakdown = computeVatBreakdown(taxableBase, vatSettings);
+    const totalAmount = vatBreakdown.total_with_tax;
     const dueAmount = totalAmount - input.paid_amount;
-    const grossProfit = totalAmount - totalCogs;
+    const grossProfit = taxableBase - totalCogs;
     const isChallanMode = input.sale_type === 'challan_mode';
 
     // ── 5. Generate invoice number (RPC, runs its own tx) ──
@@ -785,6 +792,10 @@ router.post('/', async (req: Request, res: Response) => {
           invoice_number: invoiceNumber,
           sale_date: input.sale_date,
           total_amount: totalAmount,
+          taxable_amount: vatBreakdown.taxable_amount,
+          vat_rate: vatBreakdown.vat_rate,
+          vat_amount: vatBreakdown.vat_amount,
+          sd_amount: vatBreakdown.sd_amount,
           discount: input.discount,
           discount_reference: input.discount_reference?.trim() || null,
           client_reference: input.client_reference?.trim() || null,
@@ -1089,6 +1100,41 @@ router.post('/', async (req: Request, res: Response) => {
           await trx('sales')
             .where({ id: newSaleId })
             .update({ posting_batch_id: posting.batchId });
+
+          const customerTaxRow = await trx('customers')
+            .where({ id: customerId })
+            .first('tax_id');
+          await insertTaxPostingLine(trx, {
+            dealerId,
+            postingBatchId: posting.batchId,
+            documentType: 'sale',
+            documentId: newSaleId,
+            entryDate: input.sale_date,
+            taxableAmount: vatBreakdown.taxable_amount,
+            taxRate: vatBreakdown.vat_rate,
+            taxAmount: vatBreakdown.vat_amount,
+            sdAmount: vatBreakdown.sd_amount,
+            partyId: customerId,
+            partyTaxId: (customerTaxRow as any)?.tax_id ?? null,
+            mushakForm: '6.3',
+          });
+        } else if (vatBreakdown.vat_amount > 0 || vatBreakdown.sd_amount > 0) {
+          const customerTaxRow = await trx('customers')
+            .where({ id: customerId })
+            .first('tax_id');
+          await insertTaxPostingLine(trx, {
+            dealerId,
+            documentType: 'sale',
+            documentId: newSaleId,
+            entryDate: input.sale_date,
+            taxableAmount: vatBreakdown.taxable_amount,
+            taxRate: vatBreakdown.vat_rate,
+            taxAmount: vatBreakdown.vat_amount,
+            sdAmount: vatBreakdown.sd_amount,
+            partyId: customerId,
+            partyTaxId: (customerTaxRow as any)?.tax_id ?? null,
+            mushakForm: '6.3',
+          });
         }
       }
 
@@ -1261,6 +1307,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       customerId = created.id;
     }
 
+    const dealerRow = await db('dealers')
+      .where({ id: dealerId })
+      .first('vat_enabled', 'default_vat_rate');
+    const vatSettings = normalizeDealerVatSettings(dealerRow);
+
     // ── Pre-tx: products + stock for new items (avg cost) ──
     const productIds = Array.from(new Set(input.items.map((i) => i.product_id)));
     const [products, stocks] = await Promise.all([
@@ -1340,9 +1391,11 @@ router.put('/:id', async (req: Request, res: Response) => {
     });
 
     const subtotal = itemsCalc.reduce((s, i) => s + i.total, 0);
-    const totalAmount = subtotal - input.discount;
+    const taxableBase = Math.max(0, subtotal - input.discount);
+    const vatBreakdown = computeVatBreakdown(taxableBase, vatSettings);
+    const totalAmount = vatBreakdown.total_with_tax;
     const dueAmount = totalAmount - input.paid_amount;
-    const grossProfit = totalAmount - totalCogs;
+    const grossProfit = taxableBase - totalCogs;
 
     // ── Atomic transaction ──
     await db.transaction(async (trx) => {
@@ -1435,6 +1488,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       await trx('bank_ledger')
         .where({ reference_id: saleId, dealer_id: dealerId })
         .delete();
+      await trx('tax_posting_lines')
+        .where({ dealer_id: dealerId, document_type: 'sale', document_id: saleId })
+        .delete();
 
       // 3. Delete old sale_items (also cleans sale_item_batches if any
       // remain, via FK cascade — but restore_sale_batches already cleaned).
@@ -1447,6 +1503,10 @@ router.put('/:id', async (req: Request, res: Response) => {
           customer_id: customerId,
           sale_date: input.sale_date,
           total_amount: totalAmount,
+          taxable_amount: vatBreakdown.taxable_amount,
+          vat_rate: vatBreakdown.vat_rate,
+          vat_amount: vatBreakdown.vat_amount,
+          sd_amount: vatBreakdown.sd_amount,
           discount: input.discount,
           discount_reference: input.discount_reference?.trim() || null,
           client_reference: input.client_reference?.trim() || null,
@@ -1609,6 +1669,25 @@ router.put('/:id', async (req: Request, res: Response) => {
           entryDate: input.sale_date,
           paidAccountId: input.paid_account_id ?? null,
           payment_mode: input.payment_mode ?? undefined,
+        });
+      }
+
+      if (vatBreakdown.vat_amount > 0 || vatBreakdown.sd_amount > 0) {
+        const customerTaxRow = await trx('customers')
+          .where({ id: customerId })
+          .first('tax_id');
+        await insertTaxPostingLine(trx, {
+          dealerId,
+          documentType: 'sale',
+          documentId: saleId,
+          entryDate: input.sale_date,
+          taxableAmount: vatBreakdown.taxable_amount,
+          taxRate: vatBreakdown.vat_rate,
+          taxAmount: vatBreakdown.vat_amount,
+          sdAmount: vatBreakdown.sd_amount,
+          partyId: customerId,
+          partyTaxId: (customerTaxRow as any)?.tax_id ?? null,
+          mushakForm: '6.3',
         });
       }
 

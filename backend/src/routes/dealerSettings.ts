@@ -24,6 +24,9 @@ const SELECT_FIELDS = [
   'allow_backorder',
   'default_wastage_pct',
   'dual_unit_enabled',
+  'vat_enabled',
+  'default_vat_rate',
+  'tax_id',
 ] as const;
 
 function resolveDealer(req: Request, res: Response): string | null {
@@ -64,6 +67,8 @@ const patchSchema = z.object({
   allow_backorder: z.boolean().optional(),
   default_wastage_pct: z.coerce.number().min(0).max(25).optional(),
   dual_unit_enabled: z.boolean().optional(),
+  vat_enabled: z.boolean().optional(),
+  default_vat_rate: z.coerce.number().min(0).max(100).optional(),
 });
 
 router.get('/', async (req: Request, res: Response) => {
@@ -83,6 +88,9 @@ router.get('/', async (req: Request, res: Response) => {
         allow_backorder: row.allow_backorder === true,
         dual_unit_enabled: row.dual_unit_enabled === true,
         default_wastage_pct: Number(row.default_wastage_pct ?? 10),
+        vat_enabled: row.vat_enabled === true,
+        default_vat_rate: Number(row.default_vat_rate ?? 15),
+        tax_id: row.tax_id ?? null,
         enable_reservations: false,
       },
     });
@@ -114,6 +122,12 @@ router.patch('/', async (req: Request, res: Response) => {
     if (parsed.data.dual_unit_enabled !== undefined) {
       patch.dual_unit_enabled = parsed.data.dual_unit_enabled;
     }
+    if (parsed.data.vat_enabled !== undefined) {
+      patch.vat_enabled = parsed.data.vat_enabled;
+    }
+    if (parsed.data.default_vat_rate !== undefined) {
+      patch.default_vat_rate = parsed.data.default_vat_rate;
+    }
 
     if (Object.keys(patch).length <= 1) {
       res.status(400).json({ error: 'No settings to update' });
@@ -137,6 +151,9 @@ router.patch('/', async (req: Request, res: Response) => {
         allow_backorder: row.allow_backorder === true,
         dual_unit_enabled: row.dual_unit_enabled === true,
         default_wastage_pct: Number(row.default_wastage_pct ?? 10),
+        vat_enabled: row.vat_enabled === true,
+        default_vat_rate: Number(row.default_vat_rate ?? 15),
+        tax_id: row.tax_id ?? null,
         enable_reservations: false,
       },
     });

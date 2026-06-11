@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Settings, AlertTriangle, Package, ShieldCheck, Calculator, Tags, ArrowRight } from "lucide-react";
+import { Settings, AlertTriangle, Package, ShieldCheck, Calculator, Tags, ArrowRight, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ApprovalSettingsCard } from "@/components/approval/ApprovalSettingsCard";
@@ -24,6 +24,9 @@ type DealerSettingsRow = {
   allow_backorder: boolean;
   default_wastage_pct: number;
   dual_unit_enabled: boolean;
+  vat_enabled: boolean;
+  default_vat_rate: number;
+  tax_id: string | null;
 };
 
 async function fetchDealerSettings(dealerId: string): Promise<DealerSettingsRow> {
@@ -38,7 +41,7 @@ async function fetchDealerSettings(dealerId: string): Promise<DealerSettingsRow>
 
 async function patchDealerSettings(
   dealerId: string,
-  patch: Partial<Pick<DealerSettingsRow, "allow_backorder" | "default_wastage_pct" | "dual_unit_enabled">>,
+  patch: Partial<Pick<DealerSettingsRow, "allow_backorder" | "default_wastage_pct" | "dual_unit_enabled" | "vat_enabled" | "default_vat_rate">>,
 ): Promise<DealerSettingsRow> {
   const res = await vpsAuthedFetch(`/api/dealer-settings`, {
     method: "PATCH",
@@ -66,11 +69,17 @@ const SettingsPage = () => {
   });
 
   const [wastageInput, setWastageInput] = useState<string>("10");
+  const [vatRateInput, setVatRateInput] = useState<string>("15");
   useEffect(() => {
     if (dealer?.default_wastage_pct != null) {
       setWastageInput(String(dealer.default_wastage_pct));
     }
   }, [dealer?.default_wastage_pct]);
+  useEffect(() => {
+    if (dealer?.default_vat_rate != null) {
+      setVatRateInput(String(dealer.default_vat_rate));
+    }
+  }, [dealer?.default_vat_rate]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["dealer-settings"] });
@@ -105,6 +114,29 @@ const SettingsPage = () => {
     onSuccess: (_, enabled) => {
       invalidate();
       toast.success(enabled ? "Dual-unit (Box + Pc) mode enabled" : "Dual-unit mode disabled");
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const toggleVat = useMutation({
+    mutationFn: (enabled: boolean) => patchDealerSettings(dealerId, { vat_enabled: enabled }),
+    onSuccess: (_, enabled) => {
+      invalidate();
+      toast.success(enabled ? "VAT enabled on new sales & purchases" : "VAT disabled");
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const saveVatRate = useMutation({
+    mutationFn: (rate: number) => {
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+        throw new Error("VAT rate must be between 0 and 100");
+      }
+      return patchDealerSettings(dealerId, { default_vat_rate: rate });
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("Default VAT rate saved");
     },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -201,6 +233,66 @@ const SettingsPage = () => {
                     Allows billing even when stock is insufficient.
                   </p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* VAT / Mushak */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4" />
+                VAT / Mushak (Bangladesh)
+              </CardTitle>
+              <CardDescription>
+                Enable VAT on new sales and purchases. Dealer BIN is set by super-admin; customer and supplier BIN/TIN are on their profiles.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {dealer?.tax_id && (
+                <p className="text-xs text-muted-foreground">
+                  Dealer BIN: <span className="font-mono text-foreground">{dealer.tax_id}</span>
+                </p>
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="vat-enabled" className="text-sm font-medium">
+                    Enable VAT on documents
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Adds VAT at the default rate to taxable amount on new sales and purchases. Existing documents are unchanged.
+                  </p>
+                </div>
+                <Switch
+                  id="vat-enabled"
+                  checked={dealer?.vat_enabled === true}
+                  onCheckedChange={(checked) => toggleVat.mutate(checked)}
+                  disabled={toggleVat.isPending}
+                />
+              </div>
+              <div className="flex items-end gap-3">
+                <div>
+                  <Label htmlFor="default-vat-rate" className="text-sm font-medium">
+                    Default VAT rate (%)
+                  </Label>
+                  <Input
+                    id="default-vat-rate"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={vatRateInput}
+                    onChange={(e) => setVatRateInput(e.target.value)}
+                    className="mt-1 max-w-[140px]"
+                    disabled={!dealer?.vat_enabled}
+                  />
+                </div>
+                <Button
+                  onClick={() => saveVatRate.mutate(Number(vatRateInput))}
+                  disabled={saveVatRate.isPending || !dealer?.vat_enabled}
+                >
+                  Save rate
+                </Button>
               </div>
             </CardContent>
           </Card>

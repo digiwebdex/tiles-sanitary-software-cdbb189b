@@ -23,6 +23,7 @@ export interface Customer {
   credit_limit: number;
   max_overdue_days: number;
   price_tier_id: string | null;
+  tax_id: string | null;
 }
 
 export interface CustomerWithBalance extends Customer {
@@ -41,6 +42,7 @@ export interface CustomerFormData {
   credit_limit: number;
   max_overdue_days: number;
   price_tier_id: string | null;
+  tax_id: string;
 }
 
 const PAGE_SIZE = 25;
@@ -69,6 +71,7 @@ function buildWritePayload(form: Partial<CustomerFormData>): Record<string, unkn
   if (form.credit_limit !== undefined) payload.credit_limit = form.credit_limit;
   if (form.max_overdue_days !== undefined) payload.max_overdue_days = form.max_overdue_days;
   if (form.price_tier_id !== undefined) payload.price_tier_id = form.price_tier_id;
+  if (form.tax_id !== undefined) payload.tax_id = form.tax_id.trim() || null;
   return payload;
 }
 

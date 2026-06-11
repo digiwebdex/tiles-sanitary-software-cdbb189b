@@ -43,6 +43,8 @@ import {
   sumPurchaseLedgerPayments,
 } from '../lib/purchasePaymentSummary';
 import { recordSupplierPayment } from '../lib/supplierPayment';
+import { computeVatBreakdown, normalizeDealerVatSettings } from '../lib/vatMath';
+import { insertTaxPostingLine } from '../services/taxPostingService';
 import { requireRole } from '../middleware/roles';
 import {
   isPostingEngineEnabled,
@@ -627,13 +629,20 @@ router.post('/', async (req: Request, res: Response) => {
     });
     const totalAmount = itemsCalc.reduce((s, x) => s + x.landed, 0);
 
+    const dealerRow = await db('dealers')
+      .where({ id: dealerId })
+      .first('vat_enabled', 'default_vat_rate');
+    const vatSettings = normalizeDealerVatSettings(dealerRow);
+
     // Phase 3U-31: voucher discount + paid_on_create normalization
     const voucherDiscount = Math.max(
       0,
       Math.min(input.voucher_discount ?? 0, totalAmount),
     );
     const netPayable = Math.max(0, totalAmount - voucherDiscount);
-    const paidOnCreate = Math.max(0, Math.min(input.paid_on_create ?? 0, netPayable));
+    const vatBreakdown = computeVatBreakdown(netPayable, vatSettings);
+    const grossPayable = vatBreakdown.total_with_tax;
+    const paidOnCreate = Math.max(0, Math.min(input.paid_on_create ?? 0, grossPayable));
     const paidAccountId = input.paid_account_id ?? null;
 
     // Validate paid_account_id belongs to dealer (if provided)
@@ -699,7 +708,11 @@ router.post('/', async (req: Request, res: Response) => {
           supplier_id: input.supplier_id,
           invoice_number: invoiceNumber,
           purchase_date: input.purchase_date,
-          total_amount: totalAmount,
+          total_amount: vatSettings.vat_enabled ? grossPayable : totalAmount,
+          taxable_amount: vatBreakdown.taxable_amount,
+          vat_rate: vatBreakdown.vat_rate,
+          vat_amount: vatBreakdown.vat_amount,
+          sd_amount: vatBreakdown.sd_amount,
           voucher_discount: voucherDiscount,
           paid_on_create: paidOnCreate,
           paid_account_id: paidAccountId,
@@ -996,7 +1009,7 @@ router.post('/', async (req: Request, res: Response) => {
         supplier_id: input.supplier_id,
         purchase_id: purchaseRowId,
         type: 'purchase',
-        amount: -netPayable,
+        amount: -grossPayable,
         description: supplierDesc,
         entry_date: input.purchase_date,
       });
@@ -1063,7 +1076,7 @@ router.post('/', async (req: Request, res: Response) => {
               purchaseId: purchaseRowId,
               supplierId: input.supplier_id,
               entryDate: input.purchase_date,
-              netPayable,
+              netPayable: grossPayable,
               paidOnCreate,
               paidAccountId,
               description: supplierDesc,
@@ -1074,6 +1087,41 @@ router.post('/', async (req: Request, res: Response) => {
         await trx('purchases')
           .where({ id: purchaseRowId })
           .update({ posting_batch_id: posting.batchId });
+
+        const supplierTaxRow = await trx('suppliers')
+          .where({ id: input.supplier_id })
+          .first('gstin');
+        await insertTaxPostingLine(trx, {
+          dealerId,
+          postingBatchId: posting.batchId,
+          documentType: 'purchase',
+          documentId: purchaseRowId,
+          entryDate: input.purchase_date,
+          taxableAmount: vatBreakdown.taxable_amount,
+          taxRate: vatBreakdown.vat_rate,
+          taxAmount: vatBreakdown.vat_amount,
+          sdAmount: vatBreakdown.sd_amount,
+          partyId: input.supplier_id,
+          partyTaxId: (supplierTaxRow as any)?.gstin ?? null,
+          mushakForm: '6.1',
+        });
+      } else if (vatBreakdown.vat_amount > 0 || vatBreakdown.sd_amount > 0) {
+        const supplierTaxRow = await trx('suppliers')
+          .where({ id: input.supplier_id })
+          .first('gstin');
+        await insertTaxPostingLine(trx, {
+          dealerId,
+          documentType: 'purchase',
+          documentId: purchaseRowId,
+          entryDate: input.purchase_date,
+          taxableAmount: vatBreakdown.taxable_amount,
+          taxRate: vatBreakdown.vat_rate,
+          taxAmount: vatBreakdown.vat_amount,
+          sdAmount: vatBreakdown.sd_amount,
+          partyId: input.supplier_id,
+          partyTaxId: (supplierTaxRow as any)?.gstin ?? null,
+          mushakForm: '6.1',
+        });
       }
 
       // ── Audit log ──

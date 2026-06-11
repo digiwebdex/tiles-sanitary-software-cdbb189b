@@ -41,6 +41,12 @@ const SaleInvoiceDocument = ({
   const paymentStatus =
     dueAmount <= 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Pending";
 
+  const vatAmount = Number(sale?.vat_amount ?? 0);
+  const taxableAmount = Number(sale?.taxable_amount ?? 0);
+  const sdAmount = Number(sale?.sd_amount ?? 0);
+  const vatRate = Number(sale?.vat_rate ?? 0);
+  const showVat = vatAmount > 0 || sdAmount > 0;
+
   const businessName = dealerInfo?.name ?? "Your Business Name";
   // When a site address is present, use it as the delivery address override.
   const billingAddress = site?.address ?? customer?.address ?? null;
@@ -57,7 +63,9 @@ const SaleInvoiceDocument = ({
           </div>
           <div>
             <h1 className="text-lg font-bold text-foreground">{businessName}</h1>
-            <p className="text-xs text-muted-foreground">Tile & Sanitary Dealer</p>
+            <p className="text-xs text-muted-foreground">
+              {showVat ? "মূল্য সংযোজন কর চালান · VAT Tax Invoice" : "Tile & Sanitary Dealer"}
+            </p>
           </div>
         </div>
       </div>
@@ -114,6 +122,11 @@ const SaleInvoiceDocument = ({
           {billingAddress && (
             <p className="text-xs text-muted-foreground mt-0.5">
               {site?.address ? "Delivery: " : ""}{billingAddress}
+            </p>
+          )}
+          {customer?.tax_id && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              BIN/TIN: <span className="font-mono">{customer.tax_id}</span>
             </p>
           )}
           {customer?.phone && (
@@ -255,6 +268,13 @@ const SaleInvoiceDocument = ({
           <Row label={`Total(${CURRENCY_CODE})`} value={formatCurrency(subtotal)} />
           {discountAmount > 0 && (
             <Row label={`Order Discount (${CURRENCY_CODE})`} value={`(${formatCurrency(discountAmount)})`} className="text-destructive" />
+          )}
+          {showVat && (
+            <>
+              <Row label="Taxable value" value={formatCurrency(taxableAmount)} />
+              <Row label={`VAT @ ${vatRate}%`} value={formatCurrency(vatAmount)} />
+              {sdAmount > 0 && <Row label="Supplementary Duty (SD)" value={formatCurrency(sdAmount)} />}
+            </>
           )}
           <Separator className="my-1" />
           <Row label={`Amount(${CURRENCY_CODE})`} value={formatCurrency(totalAmount)} bold />
