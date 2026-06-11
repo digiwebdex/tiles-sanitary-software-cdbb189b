@@ -3,15 +3,17 @@
  *
  *   GET  /api/payables/outstanding?dealerId=
  *   POST /api/payables/payment?dealerId=
+ *
+ * P4-02: supplier totals from `mv_supplier_payable`; bill rows for FIFO allocation UI.
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
 import { recordSupplierPaymentFifo } from '../lib/supplierPayment';
-import { attachPurchasePaymentSummaries } from '../lib/purchasePaymentSummary';
+import { db } from '../db/connection';
+import { listPayablesOutstanding } from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -42,26 +44,8 @@ router.get('/outstanding', async (req: Request, res: Response) => {
   if (!dealerId) return;
 
   try {
-    const purchases = await db('purchases')
-      .where({ dealer_id: dealerId })
-      .orderBy('purchase_date', 'asc')
-      .select('*');
-
-    const enriched = await attachPurchasePaymentSummaries(dealerId, purchases);
-    const unpaid = enriched.filter((p) => p.due_amount > 0.01);
-
-    const supIds = Array.from(new Set(unpaid.map((p) => p.supplier_id).filter(Boolean)));
-    const suppliers = supIds.length
-      ? await db('suppliers').whereIn('id', supIds).select('id', 'name', 'phone')
-      : [];
-    const supMap = new Map(suppliers.map((s: { id: string; name: string; phone: string | null }) => [s.id, s]));
-
-    const rows = unpaid.map((p) => ({
-      ...p,
-      suppliers: p.supplier_id ? supMap.get(p.supplier_id) ?? null : null,
-    }));
-
-    res.json({ rows });
+    const result = await listPayablesOutstanding(dealerId);
+    res.json(result);
   } catch (err: any) {
     console.error('[payables/outstanding]', err.message);
     res.status(500).json({ error: 'Failed to load supplier payables' });

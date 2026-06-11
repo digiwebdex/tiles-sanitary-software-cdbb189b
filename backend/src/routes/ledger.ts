@@ -6,7 +6,8 @@
  * Endpoints (per kind = customers | suppliers | cash | expenses):
  *   GET  /api/ledger/:kind?dealerId=&customerId=&supplierId=&page=&pageSize=
  *   GET  /api/ledger/:kind/monthly-summary?dealerId=&year=
- *   GET  /api/ledger/:kind/due-balance?dealerId=&customerId=        (customers only)
+ *   GET  /api/ledger/customers/due-balance/:customerId
+ *   GET  /api/ledger/suppliers/due-balance/:supplierId
  *   POST /api/ledger/:kind                                          { dealerId, data }
  *
  * All scoped to dealer_id; super_admin must pass an explicit dealerId.
@@ -17,7 +18,10 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
-import { getCustomerOutstandingFromReadModel } from '../services/reportQueryService';
+import {
+  getCustomerOutstandingFromReadModel,
+  getSupplierOutstandingFromReadModel,
+} from '../services/reportQueryService';
 
 const router = Router();
 
@@ -135,10 +139,24 @@ router.get('/customers/due-balance/:customerId', async (req: Request, res: Respo
     const { customerId } = req.params;
 
     const balance = await getCustomerOutstandingFromReadModel(dealerId, customerId);
-    res.json({ balance });
+    res.json({ balance, source: 'read_model' });
   } catch (err: any) {
     console.error('[ledger/due]', err.message);
     res.status(500).json({ error: 'Failed to compute due balance' });
+  }
+});
+
+router.get('/suppliers/due-balance/:supplierId', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealerScope(req, res);
+    if (!dealerId) return;
+    const { supplierId } = req.params;
+
+    const balance = await getSupplierOutstandingFromReadModel(dealerId, supplierId);
+    res.json({ balance, source: 'read_model' });
+  } catch (err: any) {
+    console.error('[ledger/supplier-due]', err.message);
+    res.status(500).json({ error: 'Failed to compute supplier payable balance' });
   }
 });
 

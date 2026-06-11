@@ -23,12 +23,23 @@ export interface PayablePurchaseRow {
   suppliers: { id: string; name: string; phone?: string | null } | null;
 }
 
+export interface PayablesOutstandingSummary {
+  source: "read_model";
+  totalOutstanding: number;
+  billLevelTotal: number;
+  suppliers: Array<{ supplierId: string; name: string; outstanding: number }>;
+}
+
+export interface PayablesOutstandingResponse {
+  rows: PayablePurchaseRow[];
+  summary: PayablesOutstandingSummary;
+}
+
 export const payablesService = {
-  async listOutstanding(dealerId: string): Promise<PayablePurchaseRow[]> {
-    const body = await vpsRequest<{ rows: PayablePurchaseRow[] }>(
+  async listOutstanding(dealerId: string): Promise<PayablesOutstandingResponse> {
+    return vpsRequest<PayablesOutstandingResponse>(
       `/api/payables/outstanding?dealerId=${encodeURIComponent(dealerId)}`,
     );
-    return body.rows ?? [];
   },
 
   /** Pay supplier — allocates to oldest due purchase bills first (FIFO). */

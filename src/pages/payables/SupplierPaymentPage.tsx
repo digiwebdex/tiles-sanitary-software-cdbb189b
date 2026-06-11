@@ -34,11 +34,14 @@ const SupplierPaymentPage = () => {
   const [note, setNote] = useState("");
   const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
 
-  const { data: rows = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["payables-outstanding", dealerId],
     queryFn: () => payablesService.listOutstanding(dealerId),
     enabled: !!dealerId,
   });
+
+  const rows = data?.rows ?? [];
+  const summary = data?.summary;
 
   const { data: bankAccounts = [] } = useQuery({
     queryKey: ["bank-accounts", dealerId],
@@ -47,6 +50,14 @@ const SupplierPaymentPage = () => {
   });
 
   const suppliers = useMemo(() => {
+    const fromSummary = (summary?.suppliers ?? []).map((s) => ({
+      id: s.supplierId,
+      name: s.name,
+      totalDue: s.outstanding,
+    }));
+    if (fromSummary.length > 0) {
+      return fromSummary.sort((a, b) => a.name.localeCompare(b.name));
+    }
     const map = new Map<string, { id: string; name: string; totalDue: number }>();
     for (const row of rows) {
       if (!row.supplier_id) continue;
@@ -59,7 +70,7 @@ const SupplierPaymentPage = () => {
       map.set(row.supplier_id, cur);
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows]);
+  }, [rows, summary]);
 
   const supplierBills = useMemo(
     () => rows.filter((r) => r.supplier_id === supplierId),

@@ -4,6 +4,7 @@ import {
   computePurchaseNetPayable,
   sumPurchaseLedgerPayments,
 } from './purchasePaymentSummary';
+import { getSupplierOutstandingFromReadModel } from '../services/reportQueryService';
 
 export interface RecordSupplierPaymentInput {
   dealerId: string;
@@ -179,9 +180,11 @@ export async function recordSupplierPaymentFifo(
     input.purchaseId,
   );
 
-  const totalDue = purchasesToPay.reduce((sum, p) => sum + p.due_amount, 0);
-  if (input.amount > totalDue + 0.01) {
-    throw new Error(`Payment exceeds supplier outstanding (max ${totalDue.toFixed(2)})`);
+  const billDue = purchasesToPay.reduce((sum, p) => sum + p.due_amount, 0);
+  const readModelDue = await getSupplierOutstandingFromReadModel(input.dealerId, input.supplierId);
+  const maxPayable = input.purchaseId ? billDue : readModelDue;
+  if (input.amount > maxPayable + 0.01) {
+    throw new Error(`Payment exceeds supplier outstanding (max ${maxPayable.toFixed(2)})`);
   }
 
   let remaining = input.amount;

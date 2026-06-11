@@ -7,6 +7,7 @@
  */
 import type { Knex } from 'knex';
 import { db } from '../db/connection';
+import { attachPurchasePaymentSummaries } from '../lib/purchasePaymentSummary';
 import {
   computeCustomerBalance,
   computeSupplierBalance,
@@ -284,21 +285,33 @@ export async function sumInventoryValuationWac(dealerId: string): Promise<number
 export async function buildSupplierPayableReportRowsFromReadModel(
   dealerId: string,
 ): Promise<SupplierPayableReportRow[]> {
-  const [readRows, suppliers] = await Promise.all([
+  const [readRows, suppliers, ledger] = await Promise.all([
     fetchSupplierPayableReadRows(dealerId),
     db('suppliers').where({ dealer_id: dealerId }).select('id', 'name'),
+    fetchSupplierLedgerEntries(dealerId),
   ]);
   const sm = new Map(
     (suppliers as Array<{ id: string; name: string }>).map((s) => [s.id, s.name]),
   );
+  const bySupplier = groupSupplierLedger(ledger);
+
   return readRows
-    .map((r) => ({
-      supplierId: r.supplier_id,
-      supplierName: sm.get(r.supplier_id) ?? '—',
-      totalDebit: r.outstanding,
-      totalCredit: 0,
-      balance: r.outstanding,
-    }))
+    .map((r) => {
+      const entryRows = bySupplier.get(r.supplier_id) ?? [];
+      const totalDebit = entryRows
+        .filter((row) => row.type === 'purchase')
+        .reduce((sum, row) => sum + Math.abs(num(row.amount)), 0);
+      const totalCredit = entryRows
+        .filter((row) => row.type === 'payment' || row.type === 'refund')
+        .reduce((sum, row) => sum + num(row.amount), 0);
+      return {
+        supplierId: r.supplier_id,
+        supplierName: sm.get(r.supplier_id) ?? '—',
+        totalDebit: round2(totalDebit),
+        totalCredit: round2(totalCredit),
+        balance: r.outstanding,
+      };
+    })
     .filter((r) => r.balance > 0)
     .sort((a, b) => b.balance - a.balance);
 }
@@ -343,6 +356,174 @@ export async function getCustomerOutstandingMapFromReadModel(
 ): Promise<Map<string, number>> {
   const rows = await fetchCustomerOutstandingReadRows(dealerId);
   return new Map(rows.map((r) => [r.customer_id, r.outstanding]));
+}
+
+/** Map supplier_id → outstanding from read model (P4-02). */
+export async function getSupplierOutstandingMapFromReadModel(
+  dealerId: string,
+): Promise<Map<string, number>> {
+  const rows = await fetchSupplierPayableReadRows(dealerId);
+  return new Map(rows.map((r) => [r.supplier_id, r.outstanding]));
+}
+
+/** Single supplier AP from read model (P4-02). */
+export async function getSupplierOutstandingFromReadModel(
+  dealerId: string,
+  supplierId: string,
+): Promise<number> {
+  const row = await db('mv_supplier_payable')
+    .where({ dealer_id: dealerId, supplier_id: supplierId })
+    .first('outstanding');
+  return row ? round2(num(row.outstanding)) : 0;
+}
+
+export interface SupplierOutstandingSummaryRow {
+  supplierId: string;
+  name: string;
+  phone: string;
+  totalPurchase: number;
+  totalPaid: number;
+  outstanding: number;
+  payments: number;
+}
+
+/** Supplier Outstanding report rows — outstanding from read model; purchase/payment stats from ledger. */
+export async function buildSupplierOutstandingSummaryRows(
+  dealerId: string,
+): Promise<SupplierOutstandingSummaryRow[]> {
+  const [readRows, suppliers, ledger] = await Promise.all([
+    fetchSupplierPayableReadRows(dealerId),
+    db('suppliers')
+      .where({ dealer_id: dealerId })
+      .select('id', 'name', 'phone', 'status'),
+    fetchSupplierLedgerEntries(dealerId),
+  ]);
+  const suppMap = new Map<string, { name: string; phone: string }>(
+    (suppliers as Array<{ id: string; name: string; phone: string | null }>).map((s) => [
+      s.id,
+      { name: s.name, phone: s.phone ?? '—' },
+    ]),
+  );
+  const bySupplier = groupSupplierLedger(ledger);
+
+  return readRows
+    .map((r) => {
+      const s = suppMap.get(r.supplier_id);
+      const entryRows = bySupplier.get(r.supplier_id) ?? [];
+      const totalPurchase = entryRows
+        .filter((row) => row.type === 'purchase')
+        .reduce((sum, row) => sum + Math.abs(num(row.amount)), 0);
+      const totalPaid = entryRows
+        .filter((row) => row.type === 'payment')
+        .reduce((sum, row) => sum + num(row.amount), 0);
+      const paymentCount = entryRows.filter((row) => row.type === 'payment').length;
+      return {
+        supplierId: r.supplier_id,
+        name: s?.name ?? '—',
+        phone: s?.phone ?? '—',
+        totalPurchase: round2(totalPurchase),
+        totalPaid: round2(totalPaid),
+        outstanding: r.outstanding,
+        payments: paymentCount,
+      };
+    })
+    .filter((r) => r.outstanding > 0)
+    .sort((a, b) => b.outstanding - a.outstanding);
+}
+
+export interface PayablesOutstandingBillRow {
+  id: string;
+  invoice_number: string | null;
+  purchase_date: string;
+  supplier_id: string;
+  total_amount: number;
+  net_payable: number;
+  paid_amount: number;
+  due_amount: number;
+  payment_status: string;
+  suppliers: { id: string; name: string; phone: string | null } | null;
+}
+
+export interface PayablesOutstandingResult {
+  rows: PayablesOutstandingBillRow[];
+  summary: {
+    source: 'read_model';
+    totalOutstanding: number;
+    billLevelTotal: number;
+    suppliers: Array<{ supplierId: string; name: string; outstanding: number }>;
+  };
+}
+
+/** Payables page — bills for FIFO UI; totals and supplier caps from read model (P4-02). */
+export async function listPayablesOutstanding(
+  dealerId: string,
+): Promise<PayablesOutstandingResult> {
+  const readRows = await fetchSupplierPayableReadRows(dealerId);
+  const supplierIds = readRows.map((r) => r.supplier_id);
+
+  if (!supplierIds.length) {
+    return {
+      rows: [],
+      summary: {
+        source: 'read_model',
+        totalOutstanding: 0,
+        billLevelTotal: 0,
+        suppliers: [],
+      },
+    };
+  }
+
+  const [purchases, suppliers] = await Promise.all([
+    db('purchases')
+      .where({ dealer_id: dealerId })
+      .whereIn('supplier_id', supplierIds)
+      .orderBy('purchase_date', 'asc')
+      .select('*'),
+    db('suppliers').whereIn('id', supplierIds).select('id', 'name', 'phone'),
+  ]);
+
+  const supMap = new Map(
+    (suppliers as Array<{ id: string; name: string; phone: string | null }>).map((s) => [s.id, s]),
+  );
+
+  const enriched = await attachPurchasePaymentSummaries(dealerId, purchases as any[]);
+  const unpaid = enriched.filter((p) => p.due_amount > 0.01);
+
+  const rows: PayablesOutstandingBillRow[] = unpaid.map((p) => ({
+    id: p.id,
+    invoice_number: (p as any).invoice_number ?? null,
+    purchase_date: String((p as any).purchase_date).slice(0, 10),
+    supplier_id: (p as any).supplier_id,
+    total_amount: num((p as any).total_amount),
+    net_payable: p.net_payable,
+    paid_amount: p.paid_amount,
+    due_amount: p.due_amount,
+    payment_status: p.payment_status,
+    suppliers: (p as any).supplier_id
+      ? {
+          id: (p as any).supplier_id,
+          name: supMap.get((p as any).supplier_id)?.name ?? '—',
+          phone: supMap.get((p as any).supplier_id)?.phone ?? null,
+        }
+      : null,
+  }));
+
+  const billLevelTotal = round2(rows.reduce((s, r) => s + r.due_amount, 0));
+  const totalOutstanding = await sumSupplierPayableFromReadModel(dealerId);
+
+  return {
+    rows,
+    summary: {
+      source: 'read_model',
+      totalOutstanding,
+      billLevelTotal,
+      suppliers: readRows.map((r) => ({
+        supplierId: r.supplier_id,
+        name: supMap.get(r.supplier_id)?.name ?? '—',
+        outstanding: r.outstanding,
+      })),
+    },
+  };
 }
 
 /** Single customer AR from read model (P4-02). */

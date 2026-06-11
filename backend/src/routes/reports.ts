@@ -27,12 +27,10 @@ import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
 import {
   buildCustomerDueReportRows,
+  buildSupplierOutstandingSummaryRows,
   buildSupplierPayableReportRowsFromReadModel,
   fetchCustomerLedgerEntries,
-  fetchSupplierLedgerEntries,
-  fetchSupplierPayableReadRows,
   groupCustomerLedger,
-  groupSupplierLedger,
 } from '../services/reportQueryService';
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -910,38 +908,7 @@ router.get('/supplier-outstanding', async (req, res) => {
   if (!dealerId) return;
   if (!requireFinancialRole(req, res)) return;
   try {
-    const [readRows, suppliers, ledger] = await Promise.all([
-      fetchSupplierPayableReadRows(dealerId),
-      db('suppliers')
-        .where({ dealer_id: dealerId })
-        .select('id', 'name', 'phone', 'status'),
-      fetchSupplierLedgerEntries(dealerId),
-    ]);
-    const suppMap = new Map<string, any>((suppliers as any[]).map((s) => [s.id, s]));
-    const bySupplier = groupSupplierLedger(ledger);
-    const rows = readRows
-      .map((r) => {
-        const s = suppMap.get(r.supplier_id);
-        const entryRows = bySupplier.get(r.supplier_id) ?? [];
-        const totalPurchase = entryRows
-          .filter((row) => row.type === 'purchase')
-          .reduce((sum, row) => sum + Math.abs(Number(row.amount)), 0);
-        const totalPaid = entryRows
-          .filter((row) => row.type === 'payment')
-          .reduce((sum, row) => sum + Number(row.amount), 0);
-        const paymentCount = entryRows.filter((row) => row.type === 'payment').length;
-        return {
-          supplierId: r.supplier_id,
-          name: s?.name ?? '—',
-          phone: s?.phone ?? '—',
-          totalPurchase: round2(totalPurchase),
-          totalPaid: round2(totalPaid),
-          outstanding: r.outstanding,
-          payments: paymentCount,
-        };
-      })
-      .filter((r) => r.outstanding > 0)
-      .sort((a, b) => b.outstanding - a.outstanding);
+    const rows = await buildSupplierOutstandingSummaryRows(dealerId);
     res.json({ rows });
   } catch (err: any) {
     console.error('[reports.supplier-outstanding]', err.message);
