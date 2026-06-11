@@ -4,6 +4,14 @@
 
 ---
 
+## [2026-06-11] — User Guide refresh (বাংলা A–Z)
+
+### Changed
+- `public/dealer-guide.html` — VAT/Mushak, payment modes (bKash/Nagad/SSLCommerz), Supplier Payables, Due Aging, Read-Only troubleshooting, grouped sidebar, Mushak-6.3 invoice, 4-step sales return wizard.
+- `UserGuidePage.tsx` — section list aligned with updated guide.
+
+---
+
 ## [2026-06-11] — Fix new-dealer Read-Only + challans migration
 
 ### Fixed

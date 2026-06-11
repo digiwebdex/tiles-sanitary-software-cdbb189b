@@ -59,14 +59,16 @@
     <a href="#delivery">১১. ডেলিভারি</a>
     <a href="#return">১২. রিটার্ন</a>
     <a href="#collection">১৩. পেমেন্ট কালেকশন</a>
-    <a href="#ledger">১৪. লেজার ও রিপোর্ট</a>
-    <a href="#tips">১৫. দরকারি টিপস</a>
-    <a href="#support">১৬. সাপোর্ট</a>
+    <a href="#payables">১৪. সাপ্লায়ার পেবল</a>
+    <a href="#vat">১৫. ভ্যাট / মুশাক (বাংলাদেশ)</a>
+    <a href="#ledger">১৬. লেজার ও রিপোর্ট</a>
+    <a href="#tips">১৭. দরকারি টিপস</a>
+    <a href="#support">১৮. সাপোর্ট</a>
   </aside>
 
   <main>
     <h1>TilesERP — সম্পূর্ণ ব্যবহার গাইড</h1>
-    <p class="lead">এই গাইডে আপনি একদম শূন্য থেকে শুরু করে — প্রোডাক্ট যোগ, সাপ্লায়ার যোগ, পারচেজ, স্টক, সেল ও ইনভয়েস পর্যন্ত প্রতিটি ধাপ বাংলায় শিখবেন। টাইলস ও স্যানিটারি — দুই ক্যাটাগরির জন্যই উপযোগী।</p>
+    <p class="lead">এই গাইডে আপনি একদম শূন্য থেকে শুরু করে — প্রোডাক্ট যোগ, সাপ্লায়ার যোগ, পারচেজ, স্টক, সেল, ভ্যাট ইনভয়েস, কালেকশন ও রিপোর্ট পর্যন্ত প্রতিটি ধাপ বাংলায় শিখবেন। টাইলস ও স্যানিটারি — দুই ক্যাটাগরির জন্যই উপযোগী। <strong>সর্বশেষ আপডেট: জুন ২০২৬</strong> (ভ্যাট/মুশাক, bKash/Nagad/SSLCommerz, Due Aging রিপোর্ট, সাপ্লায়ার পেবল)।</p>
 
     <!-- 1 -->
     <h2 id="intro">১. শুরু করার আগে</h2>
@@ -79,6 +81,7 @@
         <li><strong>পারচেজ</strong> করে স্টকে মাল ঢোকান</li>
         <li><strong>সেল</strong> করুন ও ইনভয়েস তৈরি করুন</li>
         <li><strong>পেমেন্ট</strong> কালেকশন করুন</li>
+        <li>ভ্যাট চালু থাকলে: <strong>Settings</strong> এ BIN সেট → কাস্টমার/সাপ্লায়ার BIN → মুশাক রিপোর্ট এক্সপোর্ট</li>
       </ol>
       <div class="tip">💡 সরাসরি প্রোডাক্ট তৈরি করে স্টক যোগ করা যায় না — স্টক বাড়াতে হলে অবশ্যই <strong>পারচেজ</strong> করতে হবে। এতে কস্ট, প্রফিট ও লেজার সব ঠিক থাকে।</div>
     </div>
@@ -86,17 +89,19 @@
     <!-- 2 -->
     <h2 id="login">২. লগইন ও ড্যাশবোর্ড</h2>
     <ol>
-      <li>ব্রাউজারে <code>app.sanitileserp.com</code> খুলুন</li>
+      <li>ব্রাউজারে <code>https://app.sanitileserp.com</code> খুলুন</li>
       <li>আপনার ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন</li>
-      <li>ড্যাশবোর্ডে আজকের সেল, ডিউ, স্টক অ্যালার্ট, টপ প্রোডাক্ট ইত্যাদি দেখতে পাবেন</li>
+      <li>ড্যাশবোর্ডে আজকের সেল, কালেকশন, প্রফিট, কাস্টমার ডিউ, সাপ্লায়ার পেবল, স্টক ভ্যালু ইত্যাদি দেখতে পাবেন</li>
+      <li>বাম পাশে মেনু <strong>গ্রুপ আকারে</strong> (Overview, Sales, Purchase, Inventory, Finance, Reports…) — সেকশন ক্লিক করে খুলুন</li>
     </ol>
+    <div class="warn">⚠️ সাইডবারে লাল <strong>Read-Only</strong> ব্যাজ দেখলে লেখা/সেল বন্ধ থাকতে পারে — সাবস্ক্রিপশন মেয়াদ শেষ বা অ্যাকাউন্ট সেটআপ সমস্যা। <strong>অ্যাডমিন / সাপোর্ট</strong> কে জানান। সফটওয়্যার আপডেটের পর একবার <strong>Logout → Login</strong> ও <kbd>Ctrl+Shift+R</kbd> (হার্ড রিফ্রেশ) করুন।</div>
     <div class="tip">কীবোর্ড শর্টকাট: <kbd>F2</kbd> নতুন সেল, <kbd>F5</kbd> রিফ্রেশ, <kbd>F12</kbd> POS, <kbd>Esc</kbd> ক্লোজ।</div>
 
     <!-- 3 -->
     <h2 id="supplier">৩. সাপ্লায়ার যোগ করা</h2>
     <div class="step"><div class="n">1</div><div>সাইডবার থেকে <strong>Suppliers</strong> মেনুতে যান</div></div>
     <div class="step"><div class="n">2</div><div>উপরে <strong>+ New Supplier</strong> বাটনে ক্লিক করুন</div></div>
-    <div class="step"><div class="n">3</div><div>সাপ্লায়ারের নাম, মোবাইল, ঠিকানা, কোম্পানি ইত্যাদি পূরণ করুন</div></div>
+    <div class="step"><div class="n">3</div><div>সাপ্লায়ারের নাম, মোবাইল, ঠিকানা, কোম্পানি ইত্যাদি পূরণ করুন। ভ্যাটের জন্য <strong>BIN / TIN</strong> (ফর্মে GSTIN লেবেল) দিন</div></div>
     <div class="step"><div class="n">4</div><div><strong>Opening Balance</strong> বক্সে আগের বকেয়া থাকলে দিন — সিস্টেম অটো লেজারে এন্ট্রি করবে</div></div>
     <div class="step"><div class="n">5</div><div><strong>Save</strong> করুন</div></div>
     <div class="ok">✅ সেভ করলে সাপ্লায়ার লিস্টে চলে আসবে এবং পারচেজ করার সময় সাজেস্ট করবে।</div>
@@ -107,14 +112,14 @@
       <li><strong>Customers</strong> মেনুতে যান</li>
       <li><strong>+ New Customer</strong> ক্লিক করুন</li>
       <li>নাম, মোবাইল, ঠিকানা, ক্যাটাগরি (Retailer / Customer / Project) দিন</li>
-      <li>চাইলে <strong>Credit Limit</strong> ও <strong>Overdue Days</strong> সেট করুন — সিস্টেম সীমা ছাড়ালে অ্যালার্ট দেবে</li>
+      <li>চাইলে <strong>Credit Limit</strong>, <strong>Max Overdue Days</strong> ও <strong>BIN / TIN (tax_id)</strong> সেট করুন — সীমা ছাড়ালে POS/সেলে অ্যালার্ট দেবে</li>
       <li>Opening Balance থাকলে দিন → <strong>Save</strong></li>
     </ol>
 
     <!-- 5 -->
     <h2 id="product">৫. প্রোডাক্ট যোগ করা</h2>
     <div class="step"><div class="n">1</div><div><strong>Products → + New Product</strong></div></div>
-    <div class="step"><div class="n">2</div><div><strong>Category</strong> বাছুন: <span class="pill">Tiles</span> অথবা <span class="pill">Sanitary</span></div></div>
+    <div class="step"><div class="n">2</div><div><strong>Category</strong> বাছুন: <span class="pill">tiles</span>, <span class="pill">sanitary</span>, <span class="pill">tile</span> বা <span class="pill">accessory</span> — সঠিক ক্যাটাগরি না দিলে সেভ হবে না</div></div>
     <div class="step"><div class="n">3</div><div>SKU / কোড, নাম, ব্র্যান্ড, সাইজ, কালার ইত্যাদি দিন</div></div>
     <div class="step"><div class="n">4</div><div><strong>Unit Type</strong> বাছুন — এটি সবচেয়ে গুরুত্বপূর্ণ। নিচের সেকশন দেখুন</div></div>
     <div class="step"><div class="n">5</div><div>MRP / ডিফল্ট সেল রেট ও Reorder Level দিন → <strong>Save</strong></div></div>
@@ -162,7 +167,7 @@
       </ul>
     </div></div>
     <div class="step"><div class="n">5</div><div><strong>Landed Cost</strong> (পরিবহন, লোডিং, কাস্টমস) যোগ করুন — সিস্টেম প্রতি পিচ/SFT এ ভাগ করে কস্ট আপডেট করবে</div></div>
-    <div class="step"><div class="n">6</div><div>Discount ও Paid Amount দিন (নগদ বা বাকি)</div></div>
+    <div class="step"><div class="n">6</div><div>Discount ও <strong>Paid on Create</strong> দিন (নগদ/ব্যাংক) — বাকি থাকলে সাপ্লায়ার পেবলে দেখা যাবে</div></div>
     <div class="step"><div class="n">7</div><div><strong>Save Purchase</strong> ক্লিক করুন</div></div>
     <div class="ok">✅ পারচেজ সেভ হলেই:
       <ul>
@@ -204,17 +209,18 @@
       </ul>
     </div></div>
     <div class="step"><div class="n">5</div><div>রেট দিন — Default রেট অটো আসবে। Pricing Tier থাকলে সেটাও সাজেস্ট করবে। ইচ্ছামত পরিবর্তন করতে পারবেন (manual override)</div></div>
-    <div class="step"><div class="n">6</div><div>Discount, Paid Amount, Notes দিন</div></div>
+    <div class="step"><div class="n">6</div><div>Discount, <strong>Paid Amount</strong>, <strong>Payment Mode</strong> (Cash / Bank / bKash / Nagad / SSLCommerz), Notes দিন</div></div>
     <div class="step"><div class="n">7</div><div><strong>Save Sale</strong> ক্লিক করুন</div></div>
 
-    <div class="warn">⚠️ স্টকের চেয়ে বেশি বিক্রি করতে চাইলে <strong>Backorder</strong> অপশন এনাবল থাকলে সিস্টেম মঞ্জুর করবে, নাহলে এরর দেবে।</div>
+    <div class="warn">⚠️ স্টকের চেয়ে বেশি বিক্রি করতে চাইলে <strong>Settings → Allow Backorder</strong> চালু থাকলে সিস্টেম মঞ্জুর করবে, নাহলে এরর দেবে।</div>
+    <div class="tip">পোস্টেড সেল <strong>এডিট করা যায় না</strong> — ভুল হলে <strong>Reverse</strong> বা <strong>Sales Return</strong> ব্যবহার করুন।</div>
 
     <h3>POS সেল (দ্রুত বিক্রি)</h3>
     <ol>
-      <li><kbd>F12</kbd> চাপুন অথবা <strong>POS</strong> মেনুতে যান</li>
+      <li><kbd>F12</kbd> চাপুন অথবা <strong>Sales → POS</strong> মেনুতে যান</li>
       <li>বারকোড স্ক্যান করুন বা প্রোডাক্ট সার্চ করুন</li>
-      <li>পরিমাণ ও রেট কনফার্ম করে <strong>Pay</strong> চাপুন</li>
-      <li>রিসিট অটো প্রিন্ট হবে</li>
+      <li>পরিমাণ ও রেট কনফার্ম করুন, <strong>Payment Mode</strong> বাছুন</li>
+      <li><strong>Pay</strong> চাপুন → রিসিট প্রিন্ট</li>
     </ol>
 
     <!-- 10 -->
@@ -222,8 +228,10 @@
     <ul>
       <li>সেল সেভ করার পর অটো ইনভয়েস তৈরি হয়</li>
       <li>সেল লিস্ট থেকে <strong>Invoice</strong> বাটনে ক্লিক করে দেখুন/প্রিন্ট করুন</li>
-      <li>চাইলে <strong>Show Price</strong> অন/অফ করে শুধু চালান ফরম্যাটে প্রিন্ট করা যায়</li>
-      <li>WhatsApp / SMS এ ইনভয়েসের লিংক পাঠাতে পারেন</li>
+      <li><strong>ভ্যাট চালু</strong> থাকলে ও সেলে VAT আছে → <strong>মুশাক-৬.৩</strong> বাংলা/ইংরেজি ট্যাক্স ইনভয়েস লেআউট অটো প্রিন্ট হবে (BIN, লাইন ভ্যাট, কথায় টাকা)</li>
+      <li>ভ্যাট ছাড়া সেলে সাধারণ ইনভয়েস লেআউট</li>
+      <li>চালান: <strong>Challans</strong> মেনু — প্রজেক্ট/সাইট লিংক সহ ডেলিভারি চালান</li>
+      <li>WhatsApp / SMS এ ইনভয়েসের লিংক পাঠাতে পারেন (সেটিংস অনুযায়ী)</li>
     </ul>
 
     <h3>চালান মোড (Delivery Order)</h3>
@@ -244,12 +252,12 @@
 
     <!-- 12 -->
     <h2 id="return">১২. রিটার্ন (Sales / Purchase)</h2>
-    <h3>সেলস রিটার্ন</h3>
+    <h3>সেলস রিটার্ন (৪-ধাপ উইজার্ড)</h3>
     <ol>
-      <li><strong>Sales Returns → + New</strong></li>
-      <li>মূল ইনভয়েস বাছুন</li>
-      <li>কোন আইটেম কত ফেরত — <strong>Restocked</strong> (আবার স্টকে) বা <strong>Broken</strong> (নষ্ট)</li>
-      <li>Save → কাস্টমার লেজার অটো আপডেট</li>
+      <li><strong>Sales Returns → + New</strong> (উইজার্ড খুলবে)</li>
+      <li>মূল ইনভয়েস বাছুন → ফেরত আইটেম ও পরিমাণ</li>
+      <li><strong>Restocked</strong> (স্টকে ফেরত) বা <strong>Broken</strong> (নষ্ট) চিহ্নিত করুন</li>
+      <li>Save → কাস্টমার ডিউ/পেইড ও লেজার অটো আপডেট</li>
     </ol>
     <h3>পারচেজ রিটার্ন</h3>
     <ol>
@@ -261,45 +269,85 @@
 
     <!-- 13 -->
     <h2 id="collection">১৩. পেমেন্ট কালেকশন</h2>
+    <p>কাস্টমারের টাকা আদায়ের <strong>দুই সঠিক উপায়</strong>:</p>
+    <table>
+      <thead><tr><th>কোথায়</th><th>কখন ব্যবহার</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Invoice → Payment</strong></td><td>নির্দিষ্ট একটা ইনভয়েসের টাকা</td></tr>
+        <tr><td><strong>Collections → Record Payment</strong></td><td>কাস্টমার কোন ইনভয়েস বলেনি — সিস্টেম <strong>পুরনো বকেয়া আগে (FIFO)</strong> কাটবে</td></tr>
+      </tbody>
+    </table>
     <ol>
-      <li><strong>Collections</strong> মেনুতে যান</li>
-      <li>কাস্টমার বাছুন → বর্তমান ডিউ দেখাবে</li>
-      <li>Amount, Payment Method (Cash / Bank / bKash / Nagad), Reference দিন</li>
-      <li><strong>Save</strong> → রিসিট অটো জেনারেট হবে</li>
+      <li><strong>Sales → Collections</strong> মেনুতে যান</li>
+      <li>কাস্টমার বাছুন → বর্তমান <strong>Outstanding</strong> ও এজিং বাকেট দেখাবে</li>
+      <li>Amount, <strong>Payment Mode</strong> (Cash / Bank / bKash / Nagad / SSLCommerz), Note দিন</li>
+      <li><strong>Save</strong> → রিসিট প্রিন্ট; <strong>Cashbook</strong> এ চ্যানেল দেখা যাবে</li>
     </ol>
+    <div class="ok">✅ পেমেন্টের পর ইনভয়েসের <strong>Due</strong> কমতে হবে। Dashboard ডিউ = Collections ডিউ = Due Aging মোট — তিনটা মিলতে হবে।</div>
     <div class="tip">Follow-up প্যানেলে কোন কাস্টমার কবে পরিশোধ করবে বলেছে — সব নোট রাখা যায়।</div>
 
     <!-- 14 -->
-    <h2 id="ledger">১৪. লেজার ও রিপোর্ট</h2>
-    <ul>
-      <li><strong>Ledger</strong> — কাস্টমার / সাপ্লায়ার / ক্যাশ / ব্যাংক / এক্সপেন্স আলাদা আলাদা</li>
-      <li><strong>Reports</strong> মেনুতে আছে:
-        <ul>
-          <li>Sales Report, Purchase Report</li>
-          <li>Stock Valuation, Stock Aging</li>
-          <li>Profit & Loss, Customer Due Aging</li>
-          <li>Pricing Tier, Project, Supplier Performance</li>
-          <li>Backorder, Reservation, Display Sample</li>
-        </ul>
-      </li>
-      <li>প্রতিটি রিপোর্ট Excel এ এক্সপোর্ট করা যায়</li>
-    </ul>
+    <h2 id="payables">১৪. সাপ্লায়ার পেবল (বকেয়া পরিশোধ)</h2>
+    <ol>
+      <li><strong>Purchase → Supplier Payables</strong> — কোন সাপ্লায়ারে কত বকেয়া</li>
+      <li><strong>Purchase → Pay Supplier</strong> — বিল বাছে বা FIFO তে টাকা দিন</li>
+      <li>Payment Mode: Cash / Bank / bKash / Nagad ইত্যাদি</li>
+      <li>পরিশোধের পর সাপ্লায়ার লেজার ও Dashboard <strong>Supplier Payable</strong> আপডেট হবে</li>
+    </ol>
 
     <!-- 15 -->
-    <h2 id="tips">১৫. দরকারি টিপস</h2>
+    <h2 id="vat">১৫. ভ্যাট / মুশাক (বাংলাদেশ)</h2>
     <div class="card">
+      <h3>সেটআপ (একবার)</h3>
+      <ol>
+        <li><strong>Settings → VAT / Mushak</strong> — <strong>Enable VAT</strong> চালু করুন, ডিফল্ট রেট (যেমন ১৫%)</li>
+        <li>ডিলার <strong>BIN</strong> — সাধারণত সুপার-অ্যাডমিন সেট করে; Settings এ দেখা যায়</li>
+        <li>প্রতি <strong>Customer</strong> ও <strong>Supplier</strong> প্রোফাইলে BIN/TIN দিন</li>
+      </ol>
+      <h3>দৈনন্দিন</h3>
       <ul>
-        <li>প্রতিদিনের কাজ শেষে <strong>Cash Closing</strong> করুন</li>
-        <li>রেগুলার <strong>Backup</strong> চালু রাখুন (Settings → Data Backup)</li>
-        <li>সেলসম্যান অ্যাকাউন্ট আলাদা করুন — তারা শুধু বিক্রি করতে পারবে, প্রফিট দেখতে পারবে না</li>
-        <li>প্রতিটি প্রোডাক্টের <strong>Reorder Level</strong> ঠিকমত সেট করুন — স্টক শেষ হওয়ার আগেই অ্যালার্ট পাবেন</li>
-        <li>বড় কাস্টমারের জন্য <strong>Pricing Tier</strong> বানান — তাদের রেট অটো সাজেস্ট হবে</li>
-        <li>সব এন্ট্রি অডিট লগে থাকে — কে কখন কী করেছে যাচাই করা যায়</li>
+        <li>নতুন সেল/ক্রয়ে ভ্যাট অটো হিসাব → ইনভয়েসে মুশাক-৬.৩ প্রিন্ট</li>
+        <li><strong>Reports → VAT / Mushak</strong> — Sales Register (৬.৩), Purchase Register (৬.১), Excel এক্সপোর্ট</li>
       </ul>
+      <div class="tip">পুরনো সেল (ভ্যাট চালু করার আগে) সাধারণ ইনভয়েস দেখাবে — শুধু নতুন লেনদেনে পূর্ণ VAT ফিল্ড।</div>
     </div>
 
     <!-- 16 -->
-    <h2 id="support">১৬. সাপোর্ট</h2>
+    <h2 id="ledger">১৬. লেজার ও রিপোর্ট</h2>
+    <ul>
+      <li><strong>Finance → Ledger</strong> — কাস্টমার / সাপ্লায়ার লেনদেন</li>
+      <li><strong>Finance → Cashbook</strong> — নগদ প্রবাহ (পেমেন্ট মোড সহ)</li>
+      <li><strong>Finance → Financial Statements</strong> — P&amp;L, Balance Sheet, Trial Balance</li>
+      <li><strong>Reports</strong> হাব (গ্রুপ আকারে):
+        <ul>
+          <li><strong>Due Aging</strong> — কাস্টমার বকেয়ার বয়স (৩০/৬০/৯০ দিন)</li>
+          <li>Sales, Purchase, Stock, Profit Analysis</li>
+          <li>Supplier Payable, Supplier Outstanding</li>
+          <li><strong>VAT / Mushak</strong> রেজিস্টার</li>
+          <li>Project, Credit Report, Batch, Reservation</li>
+        </ul>
+      </li>
+      <li>Due Aging / Collections থেকে <strong>Posting Trace</strong> দিয়ে লেনদেনের বিস্তারিত দেখা যায়</li>
+      <li>বেশিরভাগ রিপোর্ট <strong>Excel</strong> এ এক্সপোর্ট</li>
+    </ul>
+
+    <!-- 17 -->
+    <h2 id="tips">১৭. দরকারি টিপস</h2>
+    <div class="card">
+      <ul>
+        <li>প্রতিদিনের কাজ শেষে <strong>Finance → Day-End Closing</strong> করুন</li>
+        <li>রেগুলার <strong>Backup</strong> চালু রাখুন (সুপার-অ্যাডমিন প্যানেল)</li>
+        <li>সেলসম্যান অ্যাকাউন্ট আলাদা করুন — তারা কস্ট/মার্জিন দেখতে পারবে না</li>
+        <li>প্রতিটি প্রোডাক্টের <strong>Reorder Level</strong> সেট করুন — Low Stock অ্যালার্ট</li>
+        <li>বড় কাস্টমারের জন্য <strong>Pricing Tier</strong> — অটো রেট সাজেস্ট</li>
+        <li>ভ্যাট মাস শেষে <strong>VAT Register</strong> এক্সপোর্ট করে হিসাবরক্ষকের কাছে দিন</li>
+        <li>সব এন্ট্রি অডিট লগে থাকে — কে কখন কী করেছে যাচাই করা যায়</li>
+        <li>সফটওয়্যার আপডেটের পর: Logout → Login → <kbd>Ctrl+Shift+R</kbd></li>
+      </ul>
+    </div>
+
+    <!-- 18 -->
+    <h2 id="support">১৮. সাপোর্ট</h2>
     <div class="card">
       <p>যেকোনো সমস্যায় যোগাযোগ করুন:</p>
       <p>📞 <strong>01674533303</strong><br/>🌐 <strong>sanitileserp.com</strong></p>
