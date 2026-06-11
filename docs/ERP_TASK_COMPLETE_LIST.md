@@ -14,7 +14,7 @@
 | Area | Status |
 |------|--------|
 | Phase 0 — Consolidation | ✅ Complete |
-| Phase 1 — Report trust | 🟡 Mostly done (P1-03 supplier refunds in payments report) |
+| Phase 1 — Report trust | ✅ Complete (P1-08 doc refresh) |
 | Phase 2 — Posting engine MVP | ✅ Complete |
 | Phase 3 — Returns & inventory truth | 🟡 Mostly done (P3-03 sale due/paid sync ✅) |
 | Phase 4 — Read models & reports | 🟡 P4-01–05 done; exit criteria (no ad-hoc balance SQL) partial |
@@ -52,7 +52,7 @@
 | P1-05 | Supplier FIFO payment API | ✅ | Payables / supplier payment page |
 | P1-06 | Extract `ReportQueryService` | ✅ | `reportQueryService.ts` |
 | P1-07 | Report parity test suite | ✅ | `reportParity.test.ts`, `readModelParity.test.ts` |
-| P1-08 | Update `FINANCIAL_REPORTING.md` | 🟡 | Doc exists; may need Phase 4 refresh |
+| P1-08 | Update `FINANCIAL_REPORTING.md` | ✅ | Phase 4 read models, WAC, bank routing, cashbook |
 
 **Exit criteria:** Dashboard due = Collections = Due aging — 🟡 (read models help; verify per dealer)
 
@@ -220,9 +220,9 @@ cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 
 ## Recommended next work (priority order)
 
-1. **P1-08** — Refresh `FINANCIAL_REPORTING.md`  
-5. **Phase 5** — VAT/Mushak when accountant ready  
-6. **Phase 6** — Portal on VPS API  
+1. **Phase 5** — VAT/Mushak when accountant ready  
+2. **Phase 3** — Remaining returns/inventory items (P3-04, P3-08)  
+3. **Phase 6** — Portal on VPS API  
 
 ---
 
