@@ -48,6 +48,24 @@ describe('LedgerPostingEngine', () => {
       });
     });
 
+    it('tags bKash receipts with receipt_bkash line type and metadata', () => {
+      const lines = buildSaleLedgerLines({
+        saleId: 'sale-bkash',
+        customerId: 'cust-1',
+        entryDate: '2026-06-02',
+        totalAmount: 5000,
+        paidAmount: 5000,
+        paymentMode: 'bkash',
+      });
+
+      expect(lines[2]).toMatchObject({
+        lineDomain: 'cash',
+        lineType: 'receipt_bkash',
+        amount: 5000,
+        metadata: { payment_mode: 'bkash', payment_channel: 'bKash' },
+      });
+    });
+
     it('uses bank domain when paid_account_id is set', () => {
       const lines = buildPurchaseLedgerLines({
         purchaseId: 'pur-3',

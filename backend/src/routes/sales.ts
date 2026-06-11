@@ -19,6 +19,7 @@ import { formatBoxPiece } from '../lib/units';
 import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
 import { postCustomerReceipt, recordCustomerPayment } from '../lib/customerPayment';
 import { computeVatBreakdown, normalizeDealerVatSettings } from '../lib/vatMath';
+import { normalizePaymentMode, paymentModeRequiresBankAccount } from '../lib/paymentModes';
 import { insertTaxPostingLine } from '../services/taxPostingService';
 import {
   isPostingEngineEnabled,
@@ -753,6 +754,15 @@ router.post('/', async (req: Request, res: Response) => {
     const dueAmount = totalAmount - input.paid_amount;
     const grossProfit = taxableBase - totalCogs;
     const isChallanMode = input.sale_type === 'challan_mode';
+    const salePaymentMode = normalizePaymentMode(input.payment_mode);
+    if (
+      input.paid_amount > 0 &&
+      paymentModeRequiresBankAccount(salePaymentMode) &&
+      !input.paid_account_id
+    ) {
+      res.status(400).json({ error: 'Bank account is required for bank, cheque, or card payments' });
+      return;
+    }
 
     // ── 5. Generate invoice number (RPC, runs its own tx) ──
     const invoiceRes = await db.raw<{ rows: { generate_next_invoice_no: string }[] }>(
@@ -814,7 +824,7 @@ router.post('/', async (req: Request, res: Response) => {
           total_sft: totalSft,
           total_piece: totalPiece,
           notes: input.notes?.trim() || null,
-          payment_mode: input.payment_mode || null,
+          payment_mode: salePaymentMode || input.payment_mode?.trim() || null,
           created_by: userId,
           sale_type: input.sale_type,
           sale_status: isChallanMode ? 'draft' : 'invoiced',
@@ -1092,6 +1102,7 @@ router.post('/', async (req: Request, res: Response) => {
                 totalAmount,
                 paidAmount: input.paid_amount,
                 paidAccountId: input.paid_account_id ?? null,
+                paymentMode: normalizePaymentMode(input.payment_mode),
                 description: saleDesc,
                 paymentDescription: paymentDesc,
               }),

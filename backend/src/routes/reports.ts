@@ -23,6 +23,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
+import { normalizePaymentMode, paymentModeLabel } from '../lib/paymentModes';
 import { tenantGuard } from '../middleware/tenant';
 import { hasRole } from '../middleware/roles';
 import {
@@ -2272,7 +2273,7 @@ router.get('/page/payments', async (req, res) => {
     const saleIds = (customerRows as any[]).map((r) => r.sale_id).filter(Boolean);
     const purchaseIds = (supplierRows as any[]).map((r) => r.purchase_id).filter(Boolean);
 
-    const [sales, purchases, bankEntries] = await Promise.all([
+    const [sales, purchases, bankEntries, cashEntries] = await Promise.all([
       saleIds.length
         ? db('sales').where({ dealer_id: dealerId }).whereIn('id', saleIds).select('id', 'invoice_number')
         : Promise.resolve([]),
@@ -2281,8 +2282,12 @@ router.get('/page/payments', async (req, res) => {
         : Promise.resolve([]),
       db('bank_ledger')
         .where({ dealer_id: dealerId })
-        .whereIn('reference_type', ['customer_payment', 'purchases'])
-        .select('reference_type', 'reference_id', 'amount', 'bank_account_id'),
+        .whereIn('reference_type', ['customer_payment', 'purchases', 'sales'])
+        .select('reference_type', 'reference_id', 'amount', 'bank_account_id', 'payment_mode'),
+      db('cash_ledger')
+        .where({ dealer_id: dealerId })
+        .whereIn('reference_type', ['customer_payment', 'sales'])
+        .select('reference_type', 'reference_id', 'amount', 'payment_mode'),
     ]);
 
     const saleMap: Record<string, string> = {};
@@ -2292,8 +2297,31 @@ router.get('/page/payments', async (req, res) => {
     for (const p of purchases as any[]) purchaseMap[p.id] = p.invoice_number ?? '';
 
     const bankRefSet = new Set<string>();
+    const paidViaByRef = new Map<string, string>();
     for (const b of bankEntries as any[]) {
-      bankRefSet.add(`${b.reference_type}:${b.reference_id}`);
+      const key = `${b.reference_type}:${b.reference_id}`;
+      bankRefSet.add(key);
+      const mode = normalizePaymentMode(b.payment_mode);
+      if (mode) paidViaByRef.set(key, paymentModeLabel(mode));
+    }
+    for (const c of cashEntries as any[]) {
+      const key = `${c.reference_type}:${c.reference_id}`;
+      const mode = normalizePaymentMode(c.payment_mode);
+      if (mode) paidViaByRef.set(key, paymentModeLabel(mode));
+    }
+
+    function resolvePaidVia(refType: string, refId: string | null): string {
+      if (!refId) return 'Cash';
+      const key = `${refType}:${refId}`;
+      if (paidViaByRef.has(key)) return paidViaByRef.get(key)!;
+      const salesKey = `sales:${refId}`;
+      const payKey = `customer_payment:${refId}`;
+      if (paidViaByRef.has(salesKey)) return paidViaByRef.get(salesKey)!;
+      if (paidViaByRef.has(payKey)) return paidViaByRef.get(payKey)!;
+      if (bankRefSet.has(key) || bankRefSet.has(salesKey) || bankRefSet.has(payKey)) {
+        return 'Bank';
+      }
+      return 'Cash';
     }
 
     type UnifiedRow = {
@@ -2314,7 +2342,6 @@ router.get('/page/payments', async (req, res) => {
     for (const r of customerRows as any[]) {
       const isReturn = r.type === 'refund' || r.sales_return_id;
       const saleRef = r.sale_id ? (saleMap[r.sale_id] || String(r.sale_id).substring(0, 12)) : '';
-      const refKey = r.sale_id ? `customer_payment:${r.sale_id}` : '';
       unified.push({
         id: `c-${r.id}`,
         created_at: r.created_at,
@@ -2322,7 +2349,7 @@ router.get('/page/payments', async (req, res) => {
         saleRef: saleRef ? `SALE${saleRef}` : '—',
         purchaseRef: '—',
         partyName: r.party_name ?? 'Customer',
-        paidVia: refKey && bankRefSet.has(refKey) ? 'Bank' : 'Cash',
+        paidVia: resolvePaidVia('customer_payment', r.sale_id ?? null),
         amount: toNum(r.amount),
         type: isReturn ? 'Return Paid' : 'Received from Customer',
         direction: isReturn ? 'out' : 'in',
@@ -2334,7 +2361,6 @@ router.get('/page/payments', async (req, res) => {
       const purchaseRef = r.purchase_id
         ? (purchaseMap[r.purchase_id] || String(r.purchase_id).substring(0, 12))
         : '';
-      const refKey = r.purchase_id ? `purchases:${r.purchase_id}` : '';
       unified.push({
         id: `s-${r.id}`,
         created_at: r.created_at,
@@ -2342,7 +2368,7 @@ router.get('/page/payments', async (req, res) => {
         saleRef: '—',
         purchaseRef: purchaseRef || '—',
         partyName: r.party_name ?? 'Supplier',
-        paidVia: refKey && bankRefSet.has(refKey) ? 'Bank' : 'Cash',
+        paidVia: resolvePaidVia('purchases', r.purchase_id ?? null),
         amount: toNum(r.amount),
         type: isRefund ? 'Refund from Supplier' : 'Paid to Supplier',
         direction: isRefund ? 'in' : 'out',

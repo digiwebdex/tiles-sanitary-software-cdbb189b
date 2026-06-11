@@ -54,7 +54,7 @@ router.get('/', async (req, res) => {
     if (to) q.where('entry_date', '<=', to);
     cashRows = await q.select(
       'id', 'entry_date', 'type', 'amount', 'description',
-      'reference_type', 'reference_id', 'created_at',
+      'reference_type', 'reference_id', 'created_at', 'payment_mode',
       db.raw("'cash' as account_kind"),
       db.raw('NULL::uuid as bank_account_id'),
     );
@@ -75,7 +75,7 @@ router.get('/', async (req, res) => {
     if (to) q.where('entry_date', '<=', to);
     bankRows = await q.select(
       'id', 'entry_date', 'type', 'amount', 'description',
-      'reference_type', 'reference_id', 'created_at', 'bank_account_id',
+      'reference_type', 'reference_id', 'created_at', 'bank_account_id', 'payment_mode',
       db.raw("'bank' as account_kind"),
     );
     if (from) {

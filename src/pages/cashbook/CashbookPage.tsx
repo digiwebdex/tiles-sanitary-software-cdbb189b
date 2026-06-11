@@ -11,6 +11,7 @@ import { useDealerId } from "@/hooks/useDealerId";
 import { cashbookService } from "@/services/cashbookService";
 import { bankAccountService } from "@/services/bankAccountService";
 import { formatCurrency } from "@/lib/utils";
+import { paymentModeLabel } from "@/lib/paymentModes";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Download, BookOpen } from "lucide-react";
 
@@ -35,12 +36,13 @@ const CashbookPage = () => {
     exportToExcel(
       data.rows.map(r => ({
         Date: r.entry_date, Account: r.account_kind, Type: r.type,
+        Channel: r.payment_mode ? paymentModeLabel(r.payment_mode) : "",
         Description: r.description, In: r.amount > 0 ? r.amount : 0, Out: r.amount < 0 ? Math.abs(r.amount) : 0,
         Balance: r.running_balance,
       })),
       [
         { key: "Date", header: "Date" }, { key: "Account", header: "Account" }, { key: "Type", header: "Type" },
-        { key: "Description", header: "Description" },
+        { key: "Channel", header: "Channel" }, { key: "Description", header: "Description" },
         { key: "In", header: "In", format: "currency" }, { key: "Out", header: "Out", format: "currency" },
         { key: "Balance", header: "Balance", format: "currency" },
       ],
@@ -99,7 +101,7 @@ const CashbookPage = () => {
             <Table>
               <TableHeader><TableRow>
                 <TableHead>Date</TableHead><TableHead>Account</TableHead><TableHead>Type</TableHead>
-                <TableHead>Description</TableHead><TableHead className="text-right">In</TableHead>
+                <TableHead>Channel</TableHead><TableHead>Description</TableHead><TableHead className="text-right">In</TableHead>
                 <TableHead className="text-right">Out</TableHead><TableHead className="text-right">Balance</TableHead>
               </TableRow></TableHeader>
               <TableBody>
@@ -108,13 +110,14 @@ const CashbookPage = () => {
                     <TableCell>{new Date(r.entry_date).toLocaleDateString()}</TableCell>
                     <TableCell><Badge variant={r.account_kind === "cash" ? "default" : "secondary"}>{r.account_kind}</Badge></TableCell>
                     <TableCell className="text-xs">{r.type}</TableCell>
+                    <TableCell className="text-xs">{r.payment_mode ? paymentModeLabel(r.payment_mode) : "—"}</TableCell>
                     <TableCell>{r.description || "—"}</TableCell>
                     <TableCell className="text-right text-emerald-500 font-mono">{r.amount > 0 ? formatCurrency(r.amount) : ""}</TableCell>
                     <TableCell className="text-right text-red-500 font-mono">{r.amount < 0 ? formatCurrency(Math.abs(r.amount)) : ""}</TableCell>
                     <TableCell className="text-right font-mono font-medium">{formatCurrency(r.running_balance)}</TableCell>
                   </TableRow>
                 ))}
-                {!data?.rows.length && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No transactions</TableCell></TableRow>}
+                {!data?.rows.length && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">No transactions</TableCell></TableRow>}
               </TableBody>
             </Table>
           )}

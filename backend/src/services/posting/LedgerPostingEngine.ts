@@ -1,4 +1,9 @@
 import type { PostingLineInput } from './types';
+import {
+  paymentModeLabel,
+  receiptPostingLineType,
+  type PaymentModeId,
+} from '../../lib/paymentModes';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -13,16 +18,25 @@ function buildCashOrBankLine(input: {
   lineType: string;
   amount: number;
   entryDate: string;
+  paymentMode?: PaymentModeId | null;
   metadata?: Record<string, unknown>;
 }): PostingLineInput {
   const domain = cashOrBankDomain(input.paidAccountId);
+  const baseType = input.lineType as 'receipt' | 'payment';
+  const lineType = receiptPostingLineType(baseType, input.paymentMode);
   return {
     lineDomain: domain,
-    lineType: input.lineType,
+    lineType,
     amount: round2(input.amount),
     entryDate: input.entryDate,
     metadata: {
       ...(input.paidAccountId ? { bank_account_id: input.paidAccountId } : {}),
+      ...(input.paymentMode
+        ? {
+            payment_mode: input.paymentMode,
+            payment_channel: paymentModeLabel(input.paymentMode),
+          }
+        : {}),
       ...input.metadata,
     },
   };
@@ -37,6 +51,7 @@ export interface PurchaseLedgerPostContext {
   netPayable: number;
   paidOnCreate?: number;
   paidAccountId?: string | null;
+  paymentMode?: PaymentModeId | null;
   description?: string;
   paymentDescription?: string;
 }
@@ -49,6 +64,7 @@ export interface SaleLedgerPostContext {
   totalAmount: number;
   paidAmount?: number;
   paidAccountId?: string | null;
+  paymentMode?: PaymentModeId | null;
   description?: string;
   paymentDescription?: string;
 }
@@ -58,6 +74,7 @@ export interface CustomerPaymentLedgerContext {
   customerId: string;
   entryDate: string;
   paidAccountId?: string | null;
+  paymentMode?: PaymentModeId | null;
   allocations: Array<{ saleId: string; amount: number; description?: string }>;
   totalApplied: number;
 }
@@ -108,6 +125,7 @@ export function buildPurchaseLedgerLines(ctx: PurchaseLedgerPostContext): Postin
         lineType: 'payment',
         amount: -paid,
         entryDate: ctx.entryDate,
+        paymentMode: ctx.paymentMode,
         metadata: {
           reference_type: 'purchases',
           reference_id: ctx.purchaseId,
@@ -157,6 +175,7 @@ export function buildSaleLedgerLines(ctx: SaleLedgerPostContext): PostingLineInp
         lineType: 'receipt',
         amount: paid,
         entryDate: ctx.entryDate,
+        paymentMode: ctx.paymentMode,
         metadata: {
           reference_type: 'sales',
           reference_id: ctx.saleId,
@@ -196,6 +215,7 @@ export function buildCustomerPaymentLines(ctx: CustomerPaymentLedgerContext): Po
         lineType: 'receipt',
         amount: ctx.totalApplied,
         entryDate: ctx.entryDate,
+        paymentMode: ctx.paymentMode,
         metadata: {
           reference_type: 'customer_payment',
           reference_id: ctx.allocations[0]?.saleId ?? null,

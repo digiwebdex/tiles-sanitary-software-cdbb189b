@@ -11,6 +11,7 @@ export interface CashbookRow {
   created_at: string;
   account_kind: "cash" | "bank";
   bank_account_id: string | null;
+  payment_mode: string | null;
   running_balance: number;
 }
 

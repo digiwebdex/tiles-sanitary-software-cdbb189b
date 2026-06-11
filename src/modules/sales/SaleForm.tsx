@@ -21,6 +21,8 @@ import { Plus, Trash2, Search, Barcode, AlertTriangle, PackageX, Layers, Lock, C
 import { formatCurrency, CURRENCY_CODE } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Separator } from "@/components/ui/separator";
+import { PaymentModeSelect } from "@/components/PaymentModeSelect";
+import { paymentModeRequiresBankAccount } from "@/lib/paymentModes";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -1356,10 +1358,19 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                     name="payment_mode"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Payment Mode (optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g. cash, bKash, cheque" {...field} />
-                        </FormControl>
+                        <PaymentModeSelect
+                          value={field.value || "cash"}
+                          onChange={(v) => {
+                            field.onChange(v);
+                            if (v === "cash") {
+                              form.setValue("paid_account_id", null, { shouldDirty: true });
+                            }
+                          }}
+                          label="Payment Mode"
+                        />
+                        {paymentModeRequiresBankAccount(field.value) && !form.watch("paid_account_id") && (
+                          <p className="text-xs text-destructive">Select a bank account for this payment mode.</p>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}

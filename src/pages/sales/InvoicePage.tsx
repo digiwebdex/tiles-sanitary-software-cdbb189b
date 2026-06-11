@@ -23,6 +23,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
 import { useDealerId } from "@/hooks/useDealerId";
 import SaleInvoiceDocument from "@/components/sale/SaleInvoiceDocument";
+import { PaymentModeSelect } from "@/components/PaymentModeSelect";
+import { paymentModeRequiresBankAccount } from "@/lib/paymentModes";
 import SaleCommissionPanel from "@/components/sale/SaleCommissionPanel";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
@@ -39,6 +41,7 @@ const InvoicePage = () => {
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
+  const [payPaymentMode, setPayPaymentMode] = useState("cash");
 
   const { data: sale, isLoading } = useQuery({
     queryKey: ["sale", id],
@@ -79,15 +82,18 @@ const InvoicePage = () => {
       amount,
       note,
       paid_account_id,
+      payment_mode,
     }: {
       amount: number;
       note: string;
       paid_account_id?: string | null;
+      payment_mode: string;
     }) => {
       return salesService.recordPayment(id!, {
         amount,
         note: note || undefined,
         paid_account_id: paid_account_id ?? null,
+        payment_mode: payment_mode || undefined,
       });
     },
     onSuccess: () => {
@@ -99,6 +105,7 @@ const InvoicePage = () => {
       setPayAmount("");
       setPayNote("");
       setPaidAccountId(null);
+      setPayPaymentMode("cash");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -127,7 +134,16 @@ const InvoicePage = () => {
       toast.error(`Amount cannot exceed due balance of ৳${dueAmount.toLocaleString()}`);
       return;
     }
-    paymentMutation.mutate({ amount: amt, note: payNote, paid_account_id: paidAccountId });
+    if (paymentModeRequiresBankAccount(payPaymentMode) && !paidAccountId) {
+      toast.error("Select a bank account for this payment mode");
+      return;
+    }
+    paymentMutation.mutate({
+      amount: amt,
+      note: payNote,
+      paid_account_id: paidAccountId,
+      payment_mode: payPaymentMode,
+    });
   };
 
   return (
@@ -309,26 +325,37 @@ const InvoicePage = () => {
               </div>
             </div>
 
-            {/* Received into */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1">
-                <Wallet className="h-3 w-3" /> Received Into
-              </Label>
-              <Select
-                value={paidAccountId ?? "__cash__"}
-                onValueChange={(v) => setPaidAccountId(v === "__cash__" ? null : v)}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__cash__">Cash in Hand</SelectItem>
-                  {bankAccounts.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.bank_name} — {b.account_number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PaymentModeSelect
+              value={payPaymentMode}
+              onChange={(v) => {
+                setPayPaymentMode(v);
+                if (v === "cash") setPaidAccountId(null);
+              }}
+            />
+            {payPaymentMode !== "cash" && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Wallet className="h-3 w-3" />{" "}
+                  {paymentModeRequiresBankAccount(payPaymentMode) ? "Received Into (required)" : "Settlement Account (optional)"}
+                </Label>
+                <Select
+                  value={paidAccountId ?? "__cash__"}
+                  onValueChange={(v) => setPaidAccountId(v === "__cash__" ? null : v)}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {!paymentModeRequiresBankAccount(payPaymentMode) && (
+                      <SelectItem value="__cash__">MFS / Cash Wallet</SelectItem>
+                    )}
+                    {bankAccounts.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.bank_name} — {b.account_number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Note */}
             <div className="space-y-2">

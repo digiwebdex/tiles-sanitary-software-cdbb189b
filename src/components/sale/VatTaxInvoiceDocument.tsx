@@ -5,6 +5,7 @@ import { formatCurrency, CURRENCY_CODE } from "@/lib/utils";
 import { formatStockUnit } from "@/lib/units";
 import { amountInWordsBdt } from "@/lib/amountInWords";
 import SaleInvoiceBarcode from "./SaleInvoiceBarcode";
+import { paymentModeLabel } from "@/lib/paymentModes";
 
 export interface VatInvoiceDealerInfo {
   name: string;
@@ -105,7 +106,8 @@ const VatTaxInvoiceDocument = ({
           </p>
           {sale.payment_mode && (
             <p>
-              <span className="font-semibold">Payment mode:</span> {sale.payment_mode}
+              <span className="font-semibold bangla-text">পেমেন্ট মাধ্যম / Payment mode:</span>{" "}
+              {paymentModeLabel(sale.payment_mode)}
             </p>
           )}
         </div>

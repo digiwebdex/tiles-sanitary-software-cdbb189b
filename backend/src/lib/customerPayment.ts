@@ -1,4 +1,10 @@
 import type { Knex } from 'knex';
+import {
+  formatReceiptDescription,
+  normalizePaymentMode,
+  paymentModeRequiresBankAccount,
+  type PaymentModeId,
+} from './paymentModes';
 
 export interface RecordCustomerPaymentInput {
   dealerId: string;
@@ -56,6 +62,10 @@ export async function recordCustomerPayment(
   if (!customer) throw new Error('Customer not found');
 
   const paidAccountId = input.paid_account_id ?? null;
+  const paymentMode = normalizePaymentMode(input.payment_mode);
+  if (paymentModeRequiresBankAccount(paymentMode) && !paidAccountId) {
+    throw new Error('Bank account is required for bank, cheque, or card payments');
+  }
 
   let salesToPay: SaleRow[];
 
@@ -143,7 +153,10 @@ export async function recordCustomerPayment(
   }
 
   const totalApplied = round2(input.amount - remaining);
-  const receiptDescription = `Payment from ${customer.name}: ${input.note?.trim() || 'Collection'}`;
+  const receiptDescription = formatReceiptDescription(
+    `Payment from ${customer.name}: ${input.note?.trim() || 'Collection'}`,
+    paymentMode,
+  );
   const referenceId = allocations[0]?.saleId ?? null;
 
   await postCustomerReceipt(trx, {
@@ -154,7 +167,7 @@ export async function recordCustomerPayment(
     referenceId,
     entryDate,
     paidAccountId,
-    payment_mode: input.payment_mode,
+    payment_mode: paymentMode,
   });
 
   return { allocations, totalApplied };
@@ -171,11 +184,15 @@ export async function postCustomerReceipt(
     referenceId: string | null;
     entryDate: string;
     paidAccountId?: string | null;
-    payment_mode?: string;
+    payment_mode?: string | PaymentModeId | null;
   },
 ): Promise<void> {
   if (!(input.amount > 0)) return;
 
+  const mode =
+    typeof input.payment_mode === 'string'
+      ? normalizePaymentMode(input.payment_mode)
+      : input.payment_mode ?? null;
   const paidAccountId = input.paidAccountId ?? null;
   if (paidAccountId) {
     const acct = await trx('bank_accounts')
@@ -192,6 +209,7 @@ export async function postCustomerReceipt(
       reference_id: input.referenceId,
       entry_date: input.entryDate,
       created_by: null,
+      ...(mode ? { payment_mode: mode } : {}),
     });
     return;
   }
@@ -204,7 +222,7 @@ export async function postCustomerReceipt(
     reference_type: input.referenceType,
     reference_id: input.referenceId,
     entry_date: input.entryDate,
-    ...(input.payment_mode ? { payment_mode: input.payment_mode } : {}),
+    ...(mode ? { payment_mode: mode } : {}),
   });
 }
 

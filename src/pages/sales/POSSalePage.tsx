@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { salesService } from "@/services/salesService";
 import { bankAccountService } from "@/services/bankAccountService";
 import { PayFromAccountSelect } from "@/components/PayFromAccountSelect";
+import { PaymentModeSelect } from "@/components/PaymentModeSelect";
+import { paymentModeRequiresBankAccount } from "@/lib/paymentModes";
 import { pricingTierService, type RateSource } from "@/services/pricingTierService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -227,6 +229,11 @@ const POSSalePage = () => {
       return;
     }
 
+    if (paymentModeRequiresBankAccount(paymentMode) && !paidAccountId) {
+      toast({ title: "Select a bank account for this payment mode", variant: "destructive" });
+      return;
+    }
+
     setProcessing(true);
     try {
       await salesService.create({
@@ -240,7 +247,7 @@ const POSSalePage = () => {
         client_reference: "",
         fitter_reference: "",
         payment_mode: paymentMode,
-        paid_account_id: paymentMode === "cash" ? null : paidAccountId,
+        paid_account_id: paymentMode === "cash" ? null : paidAccountId ?? null,
         notes: "POS Sale",
         created_by: user?.id,
         items: cart.map((c) => ({
@@ -330,22 +337,17 @@ const POSSalePage = () => {
         <div className="lg:w-80 xl:w-96 shrink-0 border-t lg:border-t-0 lg:border-l bg-card flex flex-col overflow-hidden">
           <div className="px-3 py-2 border-b flex items-center justify-between">
             <span className="text-sm font-semibold">Cart ({cart.length})</span>
-            <Select
-              value={paymentMode}
-              onValueChange={(v) => {
-                setPaymentMode(v);
-                if (v === "cash") setPaidAccountId(null);
-              }}
-            >
-              <SelectTrigger className="w-32 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="bank">Bank</SelectItem>
-                <SelectItem value="mobile_banking">mBanking</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="w-40">
+              <PaymentModeSelect
+                value={paymentMode}
+                onChange={(v) => {
+                  setPaymentMode(v);
+                  if (v === "cash") setPaidAccountId(null);
+                }}
+                label=""
+                triggerClassName="h-8 text-xs"
+              />
+            </div>
           </div>
 
           {paymentMode !== "cash" && (
@@ -354,7 +356,7 @@ const POSSalePage = () => {
                 value={paidAccountId}
                 onChange={setPaidAccountId}
                 bankAccounts={bankAccounts}
-                label="Deposit To"
+                label={paymentModeRequiresBankAccount(paymentMode) ? "Deposit To (required)" : "Settlement Account (optional)"}
                 triggerClassName="h-8 text-xs"
               />
             </div>
