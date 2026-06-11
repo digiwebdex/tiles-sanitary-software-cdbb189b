@@ -13,6 +13,10 @@ export interface DealerInfo {
   allow_backorder: boolean;
   /** Phase 1 dual-unit: when true, Purchase/Sale/Return forms split Qty into Box + Pc. */
   dual_unit_enabled: boolean;
+  /** Phase 5 — dealer BIN for Mushak tax invoice */
+  tax_id: string | null;
+  vat_enabled: boolean;
+  default_vat_rate: number;
 }
 
 /**
@@ -42,6 +46,9 @@ export function useDealerInfo() {
         default_wastage_pct: Number(row.default_wastage_pct ?? 10),
         allow_backorder: Boolean(row.allow_backorder),
         dual_unit_enabled: Boolean(row.dual_unit_enabled),
+        tax_id: (row.tax_id as string | null) ?? null,
+        vat_enabled: row.vat_enabled === true,
+        default_vat_rate: Number(row.default_vat_rate ?? 15),
       };
     },
     enabled: !!dealerId,

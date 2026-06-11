@@ -147,6 +147,9 @@ const InvoicePage = () => {
           }
           .no-print { display: none !important; }
           @page { size: A4; margin: 10mm; }
+          .vat-tax-invoice { box-shadow: none !important; border: none !important; }
+          .vat-tax-invoice table { page-break-inside: auto; }
+          .vat-tax-invoice tr { page-break-inside: avoid; }
         }
       `}</style>
 

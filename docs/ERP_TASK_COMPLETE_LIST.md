@@ -18,7 +18,7 @@
 | Phase 2 — Posting engine MVP | ✅ Complete |
 | Phase 3 — Returns & inventory truth | 🟡 Mostly done (P3-03 sale due/paid sync ✅) |
 | Phase 4 — Read models & reports | 🟡 P4-01–05 done; exit criteria (no ad-hoc balance SQL) partial |
-| Phase 5 — VAT / Mushak | 🟡 P5-01–04 foundation done; P5-05–06 partial |
+| Phase 5 — VAT / Mushak | 🟡 P5-01–05 done; P5-06 partial |
 | Phase 6 — GL & portal | ⬜ Future |
 | Phase 7 — UX (sidebar, wizards) | ✅ Complete on VPS |
 | Whole program “definition of done” | ⬜ Not complete |
@@ -117,7 +117,7 @@
 | P5-02 | Tax columns on sales/purchases | ✅ | Migration 063; `computeVatBreakdown` on create/edit |
 | P5-03 | `tax_posting_lines` + engine hooks | ✅ | `taxPostingService`; lines on sale/purchase post |
 | P5-04 | Mushak 6.3 / 6.1 register reports | ✅ | `/api/reports/vat/*`; Reports hub + Excel export |
-| P5-05 | Tax invoice print template (Bangla) | 🟡 | VAT lines + Bangla header on invoice when VAT > 0 |
+| P5-05 | Tax invoice print template (Bangla) | ✅ | `VatTaxInvoiceDocument` Mushak-6.3 bilingual layout, amount in words, signatures |
 | P5-06 | bKash/Nagad payment mode on postings | 🟡 | `payment_mode` on receipts; dedicated posting labels TBD |
 
 **Exit criteria:** Monthly VAT register export — 🟡 (enable VAT in Settings, export from Reports)
