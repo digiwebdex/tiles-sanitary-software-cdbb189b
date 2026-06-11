@@ -42,6 +42,7 @@ import {
   DeliveryStatusReport,
   StockMovementReport,
 } from "./AdditionalReports";
+import { PostingTraceDialog, type PostingTraceTarget } from "@/components/PostingTraceDialog";
 import {
   BackorderReport,
   PendingFulfillmentReport,
@@ -132,7 +133,7 @@ import {
   ShoppingCart, DollarSign, Users, History, BookOpen, Clock, TrendingUp,
   ChevronDown, GitBranch, Shield, Lock, ShieldCheck, FileBarChart, UserCheck,
   FileSignature, Coins, Pencil, Folder, MapPin, Banknote, MonitorSpeaker, Send, PackageCheck as PackageCheck2,
-  Truck, Wallet, Brain, Archive, TrendingDown,
+  Truck, Wallet, Brain, Archive, TrendingDown, Search,
 } from "lucide-react";
 
 interface ReportsPageContentProps {
@@ -1934,6 +1935,8 @@ function PaymentsReport({ dealerId }: { dealerId: string }) {
 // ─── Due Aging Report ─────────────────────────────────────
 function DueAgingReport({ dealerId }: { dealerId: string }) {
   const [search, setSearch] = useState("");
+  const [traceTarget, setTraceTarget] = useState<PostingTraceTarget | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["report-due-aging", dealerId],
@@ -1973,6 +1976,11 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
     }),
     { current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0, total: 0 }
   );
+
+  const openTrace = (customerId: string, name: string) => {
+    setTraceTarget({ lineDomain: "customer", partyId: customerId, partyName: name });
+    setTraceOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -2016,13 +2024,14 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
                   <TableHead className="text-right">61-90 Days</TableHead>
                   <TableHead className="text-right text-destructive">90+ Days</TableHead>
                   <TableHead className="text-right font-bold">Total Due</TableHead>
+                  <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No overdue invoices found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No overdue invoices found</TableCell></TableRow>
                 ) : (
                   <>
                     {rows.map((r) => (
@@ -2040,6 +2049,17 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
                         <TableCell className="text-right font-medium">{r.d90 > 0 ? `৳${Math.round(r.d90).toLocaleString()}` : "—"}</TableCell>
                         <TableCell className="text-right font-semibold text-destructive">{r.d90plus > 0 ? `৳${Math.round(r.d90plus).toLocaleString()}` : "—"}</TableCell>
                         <TableCell className="text-right font-bold">৳{Math.round(r.total).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2"
+                            onClick={() => openTrace(r.id, r.name)}
+                            title="View posting trace"
+                          >
+                            <Search className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {/* Totals footer */}
@@ -2051,6 +2071,7 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
                       <TableCell className="text-right">৳{Math.round(totals.d90).toLocaleString()}</TableCell>
                       <TableCell className="text-right text-destructive">৳{Math.round(totals.d90plus).toLocaleString()}</TableCell>
                       <TableCell className="text-right">৳{Math.round(totals.total).toLocaleString()}</TableCell>
+                      <TableCell />
                     </TableRow>
                   </>
                 )}
@@ -2059,6 +2080,12 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
           </div>
         </CardContent>
       </Card>
+      <PostingTraceDialog
+        open={traceOpen}
+        onOpenChange={setTraceOpen}
+        dealerId={dealerId}
+        target={traceTarget}
+      />
     </div>
   );
 }

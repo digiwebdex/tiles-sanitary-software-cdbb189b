@@ -17,7 +17,7 @@
 | Phase 1 — Report trust | 🟡 Mostly done (P1-03 supplier refunds in payments report) |
 | Phase 2 — Posting engine MVP | ✅ Complete |
 | Phase 3 — Returns & inventory truth | 🟡 Mostly done (P3-03 sale due/paid sync ✅) |
-| Phase 4 — Read models & reports | 🟡 P4-01–04 partial; P4-05 pending |
+| Phase 4 — Read models & reports | 🟡 P4-01–05 partial; payables read model pending |
 | Phase 5 — VAT / Mushak | ⬜ Not started |
 | Phase 6 — GL & portal | ⬜ Future |
 | Phase 7 — UX (sidebar, wizards) | ✅ Complete on VPS |
@@ -103,7 +103,7 @@
 | P4-02 | Switch Tier A reports to read models | 🟡 | + credit report, ledger due-balance; payables still purchase-header based |
 | P4-03 | Inventory valuation uses WAC not `cost_price` | ✅ | Financials + dashboard |
 | P4-04 | Report hub UX grouping + search | ✅ | Collapsible groups + hub search box (desktop + mobile) |
-| P4-05 | Drill-down posting trace UI | ⬜ | |
+| P4-05 | Drill-down posting trace UI | ✅ | `/api/postings/trace`; Due Aging + Supplier Outstanding drill-down |
 
 **Exit criteria:** No report endpoint uses ad-hoc balance SQL — ⬜ Not met
 
@@ -209,7 +209,7 @@ cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 
 | Item | Priority |
 |------|----------|
-| Phase 4 P4-04, P4-05 | Medium |
+| Phase 4 P4-02 payables cutover | Medium |
 | Phase 5 VAT/Mushak | High (when compliance needed) |
 | `seedDemoAccounts.ts` (`plan` vs `plan_id`) | Low |
 | 36 unit tests fail without VPS auth mocks | Low (CI/dev) |
@@ -220,8 +220,7 @@ cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 
 ## Recommended next work (priority order)
 
-1. **P4-05** — Posting trace drill-down from AR/AP lines  
-2. Finish **P4-02** cutover (payables outstanding route — purchase bills vs read model)  
+1. Finish **P4-02** cutover (payables outstanding route — purchase bills vs read model)  
 3. **P1-04** — Bank account on all collection + invoice pay flows  
 4. **P1-08** — Refresh `FINANCIAL_REPORTING.md`  
 5. **Phase 5** — VAT/Mushak when accountant ready  
