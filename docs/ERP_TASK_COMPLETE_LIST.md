@@ -1,7 +1,7 @@
 # TilesERP — Complete Task List & Status
 
-> **Last updated:** 2026-06-10  
-> **Production VPS:** `/var/www/tilessaas` · commit `2dec3ed` on `main`  
+> **Last updated:** 2026-06-11  
+> **Production VPS:** `/var/www/tilessaas` · deploy after merge to `main`  
 > **Domain:** https://app.sanitileserp.com  
 > **Baseline docs:** `PHASED_IMPLEMENTATION_BACKLOG.md`, `RESTRUCTURE_BLUEPRINT.md`
 
@@ -14,10 +14,10 @@
 | Area | Status |
 |------|--------|
 | Phase 0 — Consolidation | ✅ Complete |
-| Phase 1 — Report trust | 🟡 Mostly done |
+| Phase 1 — Report trust | 🟡 Mostly done (P1-03 supplier refunds in payments report) |
 | Phase 2 — Posting engine MVP | ✅ Complete |
-| Phase 3 — Returns & inventory truth | 🟡 Mostly done |
-| Phase 4 — Read models & reports | 🟡 P4-01–03 done; P4-04–05 pending |
+| Phase 3 — Returns & inventory truth | 🟡 Mostly done (P3-03 sale due/paid sync ✅) |
+| Phase 4 — Read models & reports | 🟡 P4-01–04 partial; P4-05 pending |
 | Phase 5 — VAT / Mushak | ⬜ Not started |
 | Phase 6 — GL & portal | ⬜ Future |
 | Phase 7 — UX (sidebar, wizards) | ✅ Complete on VPS |
@@ -47,7 +47,7 @@
 |----|------|--------|-------|
 | P1-01 | Fix financials AP formula | ✅ | Uses `sumSupplierPayable` / read model |
 | P1-02 | Fix/deprecate `/reports/customer-due` | ✅ | Returns 410 → Collections |
-| P1-03 | Extend payments report to supplier payments | 🟡 | Payments report exists; full supplier coverage TBD |
+| P1-03 | Extend payments report to supplier payments | ✅ | Customer + supplier payment & refund rows |
 | P1-04 | Bank account on customer collection + invoice pay | 🟡 | Partial in payment flows |
 | P1-05 | Supplier FIFO payment API | ✅ | Payables / supplier payment page |
 | P1-06 | Extract `ReportQueryService` | ✅ | `reportQueryService.ts` |
@@ -83,7 +83,7 @@
 |----|------|--------|-------|
 | P3-01 | Sales return batch restoration UI + API | ✅ | Sales return wizard (Phase 7) |
 | P3-02 | COGS reversal on sales return | ✅ | Migration 059 |
-| P3-03 | Sync sale due/paid on return | 🟡 | Partial |
+| P3-03 | Sync sale due/paid on return | ✅ | `returns.ts` updates `due_amount` / `paid_amount` |
 | P3-04 | Purchase return batch deduct | 🟡 | `purchaseReturnStock.ts` |
 | P3-05 | `stock_movements` + engine writes | ✅ | Migration 060 |
 | P3-06 | Warehouse transfer stock posting | ✅ | `warehouseTransferStock.ts` |
@@ -100,9 +100,9 @@
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
 | P4-01 | `mv_customer_outstanding`, `mv_supplier_payable` | ✅ | Migration 062; wired in API |
-| P4-02 | Switch Tier A reports to read models | 🟡 | Dashboard, collections, financials, supplier reports done; credit/payables/ledger routes remain |
+| P4-02 | Switch Tier A reports to read models | 🟡 | + credit report, ledger due-balance; payables still purchase-header based |
 | P4-03 | Inventory valuation uses WAC not `cost_price` | ✅ | Financials + dashboard |
-| P4-04 | Report hub UX grouping + search | 🟡 | Groups exist; global search not done |
+| P4-04 | Report hub UX grouping + search | ✅ | Collapsible groups + hub search box (desktop + mobile) |
 | P4-05 | Drill-down posting trace UI | ⬜ | |
 
 **Exit criteria:** No report endpoint uses ad-hoc balance SQL — ⬜ Not met
@@ -220,11 +220,12 @@ cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 
 ## Recommended next work (priority order)
 
-1. **P4-04** — Report hub global search + tier badges  
-2. **P4-05** — Posting trace drill-down from AR/AP lines  
-3. Finish **P4-02** cutover (credit report, payables outstanding, ledger due-balance)  
-4. **Phase 5** — VAT/Mushak when accountant ready  
-5. **Phase 6** — Portal on VPS API  
+1. **P4-05** — Posting trace drill-down from AR/AP lines  
+2. Finish **P4-02** cutover (payables outstanding route — purchase bills vs read model)  
+3. **P1-04** — Bank account on all collection + invoice pay flows  
+4. **P1-08** — Refresh `FINANCIAL_REPORTING.md`  
+5. **Phase 5** — VAT/Mushak when accountant ready  
+6. **Phase 6** — Portal on VPS API  
 
 ---
 

@@ -341,6 +341,7 @@ const reportNavItems = reportGroups.flatMap((g) => g.items);
 
 const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
   const [activeReport, setActiveReport] = useState("stock");
+  const [hubSearch, setHubSearch] = useState("");
   const permissions = usePermissions();
 
   // Filter out admin-only reports for non-privileged users
@@ -351,6 +352,14 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
         .filter((g) => g.items.length > 0);
 
   const filteredNavItems = filteredGroups.flatMap((g) => g.items);
+
+  const hubSearchNorm = hubSearch.trim().toLowerCase();
+  const searchMatchedItems = hubSearchNorm
+    ? filteredNavItems.filter((item) => {
+        const groupLabel = filteredGroups.find((g) => g.items.some((i) => i.key === item.key))?.label ?? "";
+        return `${item.label} ${groupLabel}`.toLowerCase().includes(hubSearchNorm);
+      })
+    : [];
 
   const renderReport = () => {
     switch (activeReport) {
@@ -445,9 +454,39 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
     <div className="min-h-[calc(100vh-8rem)] flex flex-col md:flex-row">
       {/* Desktop: Accordion sidebar */}
       <aside className="hidden md:block w-60 shrink-0 border-r bg-card overflow-y-auto">
-        <div className="flex items-center gap-2 px-4 py-3 border-b">
-          <BarChart3 className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-bold text-foreground">Reports</h2>
+        <div className="px-4 py-3 border-b space-y-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-bold text-foreground">Reports</h2>
+          </div>
+          <Input
+            value={hubSearch}
+            onChange={(e) => setHubSearch(e.target.value)}
+            placeholder="Search reports..."
+            className="h-8 text-xs"
+          />
+          {hubSearchNorm && (
+            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+              {searchMatchedItems.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-1">No reports match</p>
+              ) : (
+                searchMatchedItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setActiveReport(item.key);
+                      setHubSearch("");
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted/60"
+                  >
+                    <item.icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    {item.label}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
         <nav className="p-2 space-y-1">
           {filteredGroups.map((group) => {
@@ -490,6 +529,31 @@ const ReportsPageContent = ({ dealerId }: ReportsPageContentProps) => {
           <BarChart3 className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-bold text-foreground">Reports</h2>
         </div>
+        <Input
+          value={hubSearch}
+          onChange={(e) => setHubSearch(e.target.value)}
+          placeholder="Search reports..."
+          className="h-8 text-xs mb-2"
+        />
+        {hubSearchNorm && searchMatchedItems.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1">
+            {searchMatchedItems.slice(0, 8).map((item) => (
+              <Button
+                key={item.key}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setActiveReport(item.key);
+                  setHubSearch("");
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        )}
         <div className="flex overflow-x-auto gap-0 -mb-px">
           {filteredNavItems.map((item) => (
             <button

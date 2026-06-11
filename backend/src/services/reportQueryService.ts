@@ -345,6 +345,29 @@ export async function getCustomerOutstandingMapFromReadModel(
   return new Map(rows.map((r) => [r.customer_id, r.outstanding]));
 }
 
+/** Single customer AR from read model (P4-02). */
+export async function getCustomerOutstandingFromReadModel(
+  dealerId: string,
+  customerId: string,
+): Promise<number> {
+  const row = await db('mv_customer_outstanding')
+    .where({ dealer_id: dealerId, customer_id: customerId })
+    .first('outstanding');
+  return row ? round2(num(row.outstanding)) : 0;
+}
+
+/** Per-customer oldest unpaid date from read model. */
+export async function getCustomerOldestUnpaidMapFromReadModel(
+  dealerId: string,
+): Promise<Map<string, string>> {
+  const rows = await fetchCustomerOutstandingReadRows(dealerId);
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    if (r.oldest_unpaid_date) map.set(r.customer_id, r.oldest_unpaid_date);
+  }
+  return map;
+}
+
 export async function getCustomerAggById(
   dealerId: string,
   customerIds?: string[],

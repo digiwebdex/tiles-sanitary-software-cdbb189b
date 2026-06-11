@@ -2287,7 +2287,8 @@ router.get('/page/payments', async (req, res) => {
         ),
       db('supplier_ledger as sl')
         .leftJoin('suppliers as s', 's.id', 'sl.supplier_id')
-        .where({ 'sl.dealer_id': dealerId, 'sl.type': 'payment' })
+        .where({ 'sl.dealer_id': dealerId })
+        .whereIn('sl.type', ['payment', 'refund'])
         .select(
           'sl.id',
           'sl.created_at',
@@ -2362,6 +2363,7 @@ router.get('/page/payments', async (req, res) => {
     }
 
     for (const r of supplierRows as any[]) {
+      const isRefund = r.type === 'refund';
       const purchaseRef = r.purchase_id
         ? (purchaseMap[r.purchase_id] || String(r.purchase_id).substring(0, 12))
         : '';
@@ -2369,14 +2371,14 @@ router.get('/page/payments', async (req, res) => {
       unified.push({
         id: `s-${r.id}`,
         created_at: r.created_at,
-        paymentRef: r.description || 'Supplier payment',
+        paymentRef: r.description || (isRefund ? 'Supplier refund' : 'Supplier payment'),
         saleRef: '—',
         purchaseRef: purchaseRef || '—',
         partyName: r.party_name ?? 'Supplier',
         paidVia: refKey && bankRefSet.has(refKey) ? 'Bank' : 'Cash',
         amount: toNum(r.amount),
-        type: 'Paid to Supplier',
-        direction: 'out',
+        type: isRefund ? 'Refund from Supplier' : 'Paid to Supplier',
+        direction: isRefund ? 'in' : 'out',
       });
     }
 
