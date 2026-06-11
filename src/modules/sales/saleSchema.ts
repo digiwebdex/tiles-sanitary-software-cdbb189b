@@ -28,6 +28,8 @@ export const saleSchema = z.object({
   client_reference: z.string().trim().max(100).optional().or(z.literal("")),
   fitter_reference: z.string().trim().max(100).optional().or(z.literal("")),
   paid_amount: z.coerce.number().min(0).default(0),
+  payment_mode: z.string().trim().max(50).optional().or(z.literal("")),
+  paid_account_id: z.string().uuid().nullable().optional(),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
   /** Optional project link (Project / Site-wise Sales). */
   project_id: z.string().nullable().optional(),

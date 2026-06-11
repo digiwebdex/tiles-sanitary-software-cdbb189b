@@ -17,7 +17,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { formatBoxPiece } from '../lib/units';
 import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
-import { recordCustomerPayment } from '../lib/customerPayment';
+import { postCustomerReceipt, recordCustomerPayment } from '../lib/customerPayment';
 import {
   isPostingEngineEnabled,
   mirrorToPostingTables,
@@ -499,6 +499,7 @@ const createSaleSchema = z.object({
   fitter_reference: z.string().trim().max(100).optional().nullable(),
   paid_amount: z.coerce.number().min(0).default(0),
   payment_mode: z.string().trim().max(50).optional().nullable(),
+  paid_account_id: z.string().uuid().optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),
   allow_backorder: z.boolean().optional(),
   mixed_batch_acknowledged: z.boolean().optional(),
@@ -1042,14 +1043,15 @@ router.post('/', async (req: Request, res: Response) => {
             entry_date: input.sale_date,
           });
 
-          await trx('cash_ledger').insert({
-            dealer_id: dealerId,
-            type: 'receipt',
+          await postCustomerReceipt(trx, {
+            dealerId,
             amount: input.paid_amount,
             description: `Payment received: ${invoiceNumber}`,
-            reference_type: 'sales',
-            reference_id: newSaleId,
-            entry_date: input.sale_date,
+            referenceType: 'sales',
+            referenceId: newSaleId,
+            entryDate: input.sale_date,
+            paidAccountId: input.paid_account_id ?? null,
+            payment_mode: input.payment_mode ?? undefined,
           });
         }
 
@@ -1078,6 +1080,7 @@ router.post('/', async (req: Request, res: Response) => {
                 entryDate: input.sale_date,
                 totalAmount,
                 paidAmount: input.paid_amount,
+                paidAccountId: input.paid_account_id ?? null,
                 description: saleDesc,
                 paymentDescription: paymentDesc,
               }),
@@ -1429,6 +1432,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       await trx('cash_ledger')
         .where({ reference_id: saleId, dealer_id: dealerId })
         .delete();
+      await trx('bank_ledger')
+        .where({ reference_id: saleId, dealer_id: dealerId })
+        .delete();
 
       // 3. Delete old sale_items (also cleans sale_item_batches if any
       // remain, via FK cascade — but restore_sale_batches already cleaned).
@@ -1594,14 +1600,15 @@ router.put('/:id', async (req: Request, res: Response) => {
           description: `Payment for ${oldSale.invoice_number} (edited)`,
           entry_date: input.sale_date,
         });
-        await trx('cash_ledger').insert({
-          dealer_id: dealerId,
-          type: 'receipt',
+        await postCustomerReceipt(trx, {
+          dealerId,
           amount: input.paid_amount,
           description: `Payment: ${oldSale.invoice_number} (edited)`,
-          reference_type: 'sales',
-          reference_id: saleId,
-          entry_date: input.sale_date,
+          referenceType: 'sales',
+          referenceId: saleId,
+          entryDate: input.sale_date,
+          paidAccountId: input.paid_account_id ?? null,
+          payment_mode: input.payment_mode ?? undefined,
         });
       }
 
@@ -1792,6 +1799,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
         .where({ sale_id: saleId, dealer_id: dealerId })
         .delete();
       await trx('cash_ledger')
+        .where({ reference_id: saleId, dealer_id: dealerId })
+        .delete();
+      await trx('bank_ledger')
         .where({ reference_id: saleId, dealer_id: dealerId })
         .delete();
 

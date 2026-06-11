@@ -48,7 +48,7 @@
 | P1-01 | Fix financials AP formula | ✅ | Uses `sumSupplierPayable` / read model |
 | P1-02 | Fix/deprecate `/reports/customer-due` | ✅ | Returns 410 → Collections |
 | P1-03 | Extend payments report to supplier payments | ✅ | Customer + supplier payment & refund rows |
-| P1-04 | Bank account on customer collection + invoice pay | 🟡 | Partial in payment flows |
+| P1-04 | Bank account on customer collection + invoice pay | ✅ | Collections, invoice pay, sale create/edit, POS |
 | P1-05 | Supplier FIFO payment API | ✅ | Payables / supplier payment page |
 | P1-06 | Extract `ReportQueryService` | ✅ | `reportQueryService.ts` |
 | P1-07 | Report parity test suite | ✅ | `reportParity.test.ts`, `readModelParity.test.ts` |
@@ -220,8 +220,7 @@ cd /var/www/tilessaas && git pull origin main && bash scripts/vps-deploy.sh
 
 ## Recommended next work (priority order)
 
-1. **P1-04** — Bank account on all collection + invoice pay flows  
-4. **P1-08** — Refresh `FINANCIAL_REPORTING.md`  
+1. **P1-08** — Refresh `FINANCIAL_REPORTING.md`  
 5. **Phase 5** — VAT/Mushak when accountant ready  
 6. **Phase 6** — Portal on VPS API  
 

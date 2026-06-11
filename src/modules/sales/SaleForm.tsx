@@ -48,6 +48,8 @@ import {
 } from "@/services/approvalService";
 import { ApprovalRequestDialog } from "@/components/approval/ApprovalRequestDialog";
 import SaleCommissionSection, { type SaleCommissionDraft } from "@/components/sale/SaleCommissionSection";
+import { PayFromAccountSelect } from "@/components/PayFromAccountSelect";
+import { bankAccountService } from "@/services/bankAccountService";
 import { enrichItemsWithSqft } from "@/lib/tileSqftEnrich";
 
 interface StockShortageItem {
@@ -105,6 +107,12 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
     enabled: !!dealerId,
   });
 
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId,
+  });
+
   const form = useForm<SaleFormValues>({
     resolver: zodResolver(saleSchema),
     defaultValues: {
@@ -116,6 +124,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
       client_reference: dv?.client_reference ?? "",
       fitter_reference: dv?.fitter_reference ?? "",
       paid_amount: dv?.paid_amount ?? 0,
+      payment_mode: dv?.payment_mode ?? "",
+      paid_account_id: dv?.paid_account_id ?? null,
       notes: dv?.notes ?? "",
       project_id: dv?.project_id ?? null,
       site_id: dv?.site_id ?? null,
@@ -1332,6 +1342,30 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   )}
                 />
               </div>
+
+              {watchPaid > 0 && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <PayFromAccountSelect
+                    value={form.watch("paid_account_id") ?? null}
+                    onChange={(v) => form.setValue("paid_account_id", v, { shouldDirty: true })}
+                    bankAccounts={bankAccounts}
+                    label="Received Into"
+                  />
+                  <FormField
+                    control={form.control}
+                    name="payment_mode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Payment Mode (optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. cash, bKash, cheque" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
 
               <Separator />
 

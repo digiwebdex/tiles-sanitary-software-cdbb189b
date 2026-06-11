@@ -43,6 +43,8 @@ const CreateSalePage = () => {
         client_reference: values.client_reference || "",
         fitter_reference: values.fitter_reference || "",
         paid_amount: values.paid_amount,
+        payment_mode: values.payment_mode || undefined,
+        paid_account_id: values.paid_account_id ?? null,
         notes: values.notes,
         items: values.items as SaleItemInput[],
         allow_backorder: values.allow_backorder,
