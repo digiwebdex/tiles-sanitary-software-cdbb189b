@@ -23,7 +23,6 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const dealerIdForBadge = profile?.dealer_id ?? "";
 
-  const isReadonly = accessLevel === "readonly";
   const isGrace = accessLevel === "grace";
 
   return (
@@ -42,14 +41,8 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
             <Clock className="mr-1 h-3 w-3" /> Grace Period
           </Badge>
         )}
-        {isReadonly && (
-          <Badge variant="destructive" className="mb-3 justify-center text-xs">
-            Read-Only
-          </Badge>
-        )}
-
         <SidebarNav
-          isReadonly={isReadonly}
+          isReadonly={false}
           isDealerAdmin={isDealerAdmin}
           isSuperAdmin={isSuperAdmin}
         />

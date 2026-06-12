@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import { parseLocalDate } from "@/lib/utils";
+import { computeDealerSubscriptionAccess } from "@/lib/subscriptionAccess";
 import { subLog } from "@/lib/logger";
 import { env } from "@/lib/env";
 import { vpsAuthApi, vpsTokenStore, type VpsUser, resolveVpsUser } from "@/lib/vpsAuthClient";
@@ -58,7 +59,7 @@ export function useAuth() {
  * Rules:
  *  1. super_admin  → always "full", subscription never checked
  *  2. dealer_admin / salesman with no dealer_id → "blocked"
- *  3. dealer_admin / salesman subscription states → full / grace / readonly / blocked
+ *  3. dealer_admin / salesman subscription states → full / grace / blocked
  *  4. Any other authenticated user (edge case) → "full"
  */
 function computeAccessLevel(
@@ -79,33 +80,7 @@ function computeAccessLevel(
 
   // Rule 3: apply subscription logic for dealer roles
   if (isDealerRole) {
-    if (!sub) return "blocked";
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Parse end_date as LOCAL midnight (timezone-safe — avoids UTC off-by-one)
-    const endDate = parseLocalDate(sub.end_date);
-
-    // Suspended → blocked immediately
-    if (sub.status === "suspended") return "blocked";
-
-    // Open-ended active subscription (null end_date) → full access
-    if (!endDate && sub.status === "active") return "full";
-
-    // Date is the source of truth: if today <= end_date → full access
-    // (regardless of DB status field, which may lag behind)
-    if (endDate && today <= endDate) return "full";
-
-    // Grace window: end_date < today <= end_date + 3 days
-    if (endDate) {
-      const graceEnd = new Date(endDate);
-      graceEnd.setDate(graceEnd.getDate() + 3);
-      if (today > endDate && today <= graceEnd) return "grace";
-    }
-
-    // Beyond grace → readonly
-    return "readonly";
+    return computeDealerSubscriptionAccess(sub);
   }
 
   // Rule 4: any other authenticated role gets full access

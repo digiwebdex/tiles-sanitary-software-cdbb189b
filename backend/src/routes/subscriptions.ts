@@ -4,6 +4,10 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 import { defaultSubscriptionEndDate } from '../lib/subscriptionEndDate';
+import {
+  activateSubscriptionFromPayment,
+  sendActivationNotice,
+} from '../lib/activateSubscriptionPayment';
 
 const router = Router();
 
@@ -124,6 +128,7 @@ router.get('/payments', async (req: Request, res: Response) => {
       .leftJoin('dealers as d', 'd.id', 'sp.dealer_id')
       .leftJoin('subscriptions as s', 's.id', 'sp.subscription_id')
       .leftJoin('plans as p', 'p.id', 's.plan_id')
+      .leftJoin('plans as rp', 'rp.id', 'sp.requested_plan_id')
       .leftJoin('users as u', 'u.id', 'sp.collected_by')
       .modify((qb) => {
         if (dealerId) qb.where('sp.dealer_id', dealerId);
@@ -131,8 +136,10 @@ router.get('/payments', async (req: Request, res: Response) => {
       .select(
         'sp.id', 'sp.subscription_id', 'sp.dealer_id', 'sp.amount', 'sp.payment_method',
         'sp.payment_status', 'sp.payment_date', 'sp.note', 'sp.collected_by', 'sp.created_at',
+        'sp.requested_plan_id', 'sp.requested_billing_cycle', 'sp.source',
         'd.name as dealer_name', 'd.email as dealer_email', 'd.phone as dealer_phone', 'd.address as dealer_address',
-        'p.name as plan_name', 's.billing_cycle', 's.start_date', 's.end_date', 'u.name as collected_by_name',
+        'p.name as plan_name', 'rp.name as requested_plan_name',
+        's.billing_cycle', 's.start_date', 's.end_date', 'u.name as collected_by_name',
       )
       .orderBy('sp.payment_date', 'desc')
       .orderBy('sp.created_at', 'desc')
@@ -272,12 +279,6 @@ const recordPaymentSchema = z.object({
   billing_cycle: z.enum(['monthly', 'yearly']).default('monthly'),
 });
 
-function addMonthsIso(baseIso: string, months: number): string {
-  const d = new Date(baseIso + 'T00:00:00');
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().slice(0, 10);
-}
-
 router.post('/payments', async (req: Request, res: Response) => {
   try {
     const body = recordPaymentSchema.parse(req.body || {});
@@ -297,15 +298,7 @@ router.post('/payments', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Yearly discount eligibility.
     let yearlyDiscountApplied = false;
-    if (body.billing_cycle === 'yearly' && body.payment_status === 'paid') {
-      const prev = await db('subscriptions')
-        .where({ dealer_id: body.dealer_id, yearly_discount_applied: true })
-        .first();
-      yearlyDiscountApplied = !prev;
-    }
-
     let paymentRow: any = null;
     let updatedSub: any = null;
 
@@ -325,40 +318,27 @@ router.post('/payments', async (req: Request, res: Response) => {
         .returning('*');
       paymentRow = pay;
 
-      // 4. Full payment → extend subscription + activate dealer/user.
       if (body.payment_status === 'paid') {
-        const sub = await trx('subscriptions')
-          .where({ id: body.subscription_id })
-          .first();
-        if (!sub) throw new Error('Subscription not found');
-
-        const baseIso = toDateOnly(sub.end_date) || toDateOnly(sub.start_date) || new Date().toISOString().slice(0, 10);
-        const newEnd = addMonthsIso(baseIso, body.extend_months);
-
-        const [row] = await trx('subscriptions')
-          .where({ id: body.subscription_id })
-          .update({
-            end_date: newEnd,
-            status: 'active',
-            billing_cycle: body.billing_cycle,
-            yearly_discount_applied: yearlyDiscountApplied,
-          })
-          .returning('*');
-        updatedSub = row;
-
-        await trx('dealers')
-          .where({ id: body.dealer_id })
-          .update({ status: 'active', updated_at: new Date() });
-        const adminProfile = await trx('profiles')
-          .where({ dealer_id: body.dealer_id })
-          .first();
-        if (adminProfile) {
-          await trx('users')
-            .where({ id: adminProfile.id })
-            .update({ status: 'active', updated_at: new Date() });
-        }
+        const result = await activateSubscriptionFromPayment(trx, {
+          subscriptionId: body.subscription_id,
+          dealerId: body.dealer_id,
+          billingCycle: body.billing_cycle,
+          extendMonths: body.extend_months,
+          collectedBy,
+        });
+        updatedSub = result.subscription;
+        yearlyDiscountApplied = result.yearlyDiscountApplied;
       }
     });
+
+    if (body.payment_status === 'paid' && updatedSub) {
+      const plan = await db('plans').where({ id: updatedSub.plan_id }).first();
+      void sendActivationNotice(
+        body.dealer_id,
+        plan?.name || 'Subscription',
+        toDateOnly(updatedSub.end_date) || '',
+      );
+    }
 
     res.status(201).json({
       payment: paymentRow,
@@ -372,6 +352,76 @@ router.post('/payments', async (req: Request, res: Response) => {
     }
     console.error('[subscriptions:payments] failed:', err);
     res.status(500).json({ error: err.message || 'Failed to record payment' });
+  }
+});
+
+/**
+ * PATCH /api/subscriptions/payments/:id/confirm
+ * Confirms a pending dealer renewal request and activates the subscription.
+ */
+router.patch('/payments/:id/confirm', async (req: Request, res: Response) => {
+  try {
+    const paymentId = req.params.id;
+    const collectedBy = (req as any).user?.id || null;
+
+    const payment = await db('subscription_payments').where({ id: paymentId }).first();
+    if (!payment) {
+      res.status(404).json({ error: 'Payment not found' });
+      return;
+    }
+    if (payment.payment_status !== 'pending') {
+      res.status(409).json({ error: 'Only pending payments can be confirmed' });
+      return;
+    }
+
+    const cycle = payment.requested_billing_cycle === 'yearly' ? 'yearly' : 'monthly';
+    const extendMonths = cycle === 'yearly' ? 12 : 1;
+
+    let updatedSub: any = null;
+    let yearlyDiscountApplied = false;
+
+    await db.transaction(async (trx) => {
+      const [pay] = await trx('subscription_payments')
+        .where({ id: paymentId })
+        .update({
+          payment_status: 'paid',
+          collected_by: collectedBy,
+          payment_date: new Date().toISOString().slice(0, 10),
+        })
+        .returning('*');
+
+      const result = await activateSubscriptionFromPayment(trx, {
+        subscriptionId: payment.subscription_id,
+        dealerId: payment.dealer_id,
+        billingCycle: cycle,
+        extendMonths,
+        planId: payment.requested_plan_id,
+        collectedBy,
+      });
+      updatedSub = result.subscription;
+      yearlyDiscountApplied = result.yearlyDiscountApplied;
+
+      if (!pay) throw new Error('Failed to update payment');
+    });
+
+    const plan = await db('plans')
+      .where({ id: payment.requested_plan_id || updatedSub?.plan_id })
+      .first();
+
+    void sendActivationNotice(
+      payment.dealer_id,
+      plan?.name || 'Subscription',
+      toDateOnly(updatedSub?.end_date) || '',
+    );
+
+    res.json({
+      payment: { ...payment, payment_status: 'paid' },
+      subscription: updatedSub,
+      yearly_discount_applied: yearlyDiscountApplied,
+    });
+  } catch (err: any) {
+    console.error('[subscriptions:payments:confirm] failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to confirm payment' });
   }
 });
 

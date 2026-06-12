@@ -5,11 +5,11 @@ import { logAudit } from "@/services/auditService";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  /** Routes allowed in readonly mode (dashboard, reports) */
+  /** @deprecated Legacy prop; expired subscriptions are now blocked, not readonly */
   allowReadonly?: boolean;
 }
 
-const ProtectedRoute = ({ children, allowReadonly = false }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading, accessLevel, profile, isSuperAdmin, roles } = useAuth();
   const location = useLocation();
 
@@ -28,8 +28,7 @@ const ProtectedRoute = ({ children, allowReadonly = false }: ProtectedRouteProps
     if (
       authReady &&
       !isSuperAdmin &&
-      (accessLevel === "readonly" || accessLevel === "blocked") &&
-      !allowReadonly
+      accessLevel === "blocked"
     ) {
       logAudit({
         dealer_id: profile?.dealer_id ?? "",
@@ -44,7 +43,7 @@ const ProtectedRoute = ({ children, allowReadonly = false }: ProtectedRouteProps
         },
       });
     }
-  }, [authReady, accessLevel, allowReadonly, location.pathname, isSuperAdmin]);
+  }, [authReady, accessLevel, location.pathname, isSuperAdmin]);
 
   // 1. Wait until profile, roles, and subscription are all loaded.
   //    Never evaluate access level or redirect until this is done.
@@ -82,10 +81,6 @@ const ProtectedRoute = ({ children, allowReadonly = false }: ProtectedRouteProps
   //    Only redirect after auth is fully ready to avoid false "blocked" state.
   if (authReady && accessLevel === "blocked") {
     return <Navigate to="/subscription-blocked" replace />;
-  }
-
-  if (authReady && accessLevel === "readonly" && !allowReadonly) {
-    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

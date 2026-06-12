@@ -11,7 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { env } from "@/lib/env";
 import { formatCurrency } from "@/lib/utils";
 import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
-import { Banknote, Download, Search, Share2, WalletCards } from "lucide-react";
+import { Banknote, CheckCircle2, Download, Search, Share2, WalletCards } from "lucide-react";
+import { confirmPendingSubscriptionPayment } from "@/services/subscriptionPaymentService";
+import { useQueryClient } from "@tanstack/react-query";
 
 type PaymentRow = {
   id: string;
@@ -31,6 +33,10 @@ type PaymentRow = {
   end_date: string | null;
   note: string | null;
   collected_by_name: string | null;
+  requested_plan_id?: string | null;
+  requested_billing_cycle?: string | null;
+  requested_plan_name?: string | null;
+  source?: string | null;
 };
 
 async function vpsJson<T>(path: string): Promise<T> {
@@ -72,8 +78,10 @@ function invoiceHtml(row: PaymentRow) {
 
 const SADealerPaymentsPage = () => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["sa-payment-history"],
@@ -131,6 +139,29 @@ const SADealerPaymentsPage = () => {
     URL.revokeObjectURL(url);
   };
 
+  const confirmPayment = async (row: PaymentRow) => {
+    if (row.payment_status !== "pending") return;
+    setConfirmingId(row.id);
+    try {
+      const result = await confirmPendingSubscriptionPayment(row.id);
+      toast({
+        title: "Payment confirmed",
+        description: result.subscription?.end_date
+          ? `Account activated until ${result.subscription.end_date}. Dealer notified by SMS and email.`
+          : "Payment confirmed.",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["sa-payment-history"] });
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Could not confirm payment",
+        description: err?.message || "Please try again.",
+      });
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
   const shareInvoice = async (row: PaymentRow) => {
     const text = `${invoiceNo(row)}\nDealer: ${row.dealer_name || "Dealer"}\nAmount: ${formatCurrency(row.amount)}\nStatus: ${row.payment_status}\nDate: ${row.payment_date}`;
     try {
@@ -167,7 +198,7 @@ const SADealerPaymentsPage = () => {
         <CardContent>
           <div className="rounded-md border overflow-x-auto">
             <Table>
-              <TableHeader><TableRow><TableHead>Dealer</TableHead><TableHead>Plan</TableHead><TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Status</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Invoice</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Dealer</TableHead><TableHead>Plan</TableHead><TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Status</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {isLoading ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Loading…</TableCell></TableRow> : filtered.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No payment records</TableCell></TableRow> : filtered.map((p) => (
                   <TableRow key={p.id}>
@@ -177,7 +208,20 @@ const SADealerPaymentsPage = () => {
                     <TableCell className="font-mono">{formatCurrency(p.amount)}</TableCell>
                     <TableCell>{statusBadge(p.payment_status)}</TableCell>
                     <TableCell className="capitalize text-sm">{p.payment_method?.replace("_", " ")}</TableCell>
-                    <TableCell className="text-right space-x-2"><Button size="sm" variant="outline" onClick={() => downloadInvoice(p)}><Download className="mr-1 h-4 w-4" /> Download</Button><Button size="sm" variant="outline" onClick={() => shareInvoice(p)}><Share2 className="mr-1 h-4 w-4" /> Share</Button></TableCell>
+                    <TableCell className="text-right space-x-2">
+                      {p.payment_status === "pending" && p.source === "dealer_request" && (
+                        <Button
+                          size="sm"
+                          onClick={() => confirmPayment(p)}
+                          disabled={confirmingId === p.id}
+                        >
+                          <CheckCircle2 className="mr-1 h-4 w-4" />
+                          {confirmingId === p.id ? "Confirming…" : "Confirm"}
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => downloadInvoice(p)}><Download className="mr-1 h-4 w-4" /> Download</Button>
+                      <Button size="sm" variant="outline" onClick={() => shareInvoice(p)}><Share2 className="mr-1 h-4 w-4" /> Share</Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

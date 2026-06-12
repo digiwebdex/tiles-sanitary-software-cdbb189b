@@ -66,6 +66,15 @@ export async function recordSubscriptionPayment(input: RecordPaymentInput) {
   };
 }
 
+export async function confirmPendingSubscriptionPayment(paymentId: string) {
+  return vpsJson<{
+    payment: { id: string; payment_status: string };
+    subscription: { end_date: string; status: string } | null;
+  }>(`/api/subscriptions/payments/${paymentId}/confirm`, {
+    method: "PATCH",
+  });
+}
+
 /**
  * Check if a dealer is eligible for the 30% yearly discount.
  * Returns true if they have NEVER received a yearly discount before.
