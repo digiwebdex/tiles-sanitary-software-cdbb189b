@@ -25,6 +25,7 @@ export interface DealerSubscription {
   daily_summary_enabled: boolean | null;
   plan_features: string[] | null;
   is_trial: boolean | null;
+  trial_days: number | null;
   sort_order: number | null;
 }
 
@@ -79,6 +80,8 @@ export async function fetchDealerSubscriptionPayments() {
 export async function requestPlanUpgrade(input: {
   plan_id: string;
   billing_cycle: "monthly" | "yearly";
+  payment_method?: "cash" | "bank" | "mobile_banking";
+  transaction_id?: string;
   note?: string;
 }) {
   return vpsJson<{ payment: { id: string } }>("/api/subscription/upgrade-request", {

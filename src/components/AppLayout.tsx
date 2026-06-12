@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Clock } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useDealerId } from "@/hooks/useDealerId";
 import { PendingApprovalsBadge } from "@/components/approval/PendingApprovalsBadge";
 import SAImpersonationBanner from "@/components/SAImpersonationBanner";
@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchCurrentSubscription } from "@/services/dealerSubscriptionService";
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
-  const { profile, accessLevel, isSuperAdmin, isDealerAdmin, signOut } = useAuth();
+  const { profile, isSuperAdmin, isDealerAdmin, signOut } = useAuth();
   const { data: currentSub } = useQuery({
     queryKey: ["current-subscription-badge"],
     queryFn: fetchCurrentSubscription,
@@ -22,9 +22,6 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   });
   const navigate = useNavigate();
   const dealerIdForBadge = profile?.dealer_id ?? "";
-
-  const isReadonly = accessLevel === "readonly";
-  const isGrace = accessLevel === "grace";
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -37,19 +34,8 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           )}
         </div>
 
-        {isGrace && (
-          <Badge variant="outline" className="mb-3 text-yellow-600 border-yellow-400 justify-center text-xs">
-            <Clock className="mr-1 h-3 w-3" /> Grace Period
-          </Badge>
-        )}
-        {isReadonly && (
-          <Badge variant="destructive" className="mb-3 justify-center text-xs">
-            Read-Only
-          </Badge>
-        )}
-
         <SidebarNav
-          isReadonly={isReadonly}
+          isReadonly={false}
           isDealerAdmin={isDealerAdmin}
           isSuperAdmin={isSuperAdmin}
         />

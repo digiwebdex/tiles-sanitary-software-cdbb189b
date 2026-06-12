@@ -2,6 +2,21 @@ import { useState } from "react";
 import { Navigate, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { authBridge } from "@/lib/authBridge";
+import { resolveDealerPostLoginPath } from "@/lib/subscriptionAccess";
+import type { VpsUser } from "@/lib/vpsAuthClient";
+
+function loginTargetForVpsUser(vpsUser: VpsUser | null): string {
+  if (!vpsUser) return "/dashboard";
+  const isSuperAdmin = vpsUser.roles.includes("super_admin");
+  const isDealerRole = vpsUser.roles.some((r) => r === "dealer_admin" || r === "salesman");
+  const sub = vpsUser.subscription
+    ? {
+        status: vpsUser.subscription.status,
+        end_date: vpsUser.subscription.endDate,
+      }
+    : null;
+  return resolveDealerPostLoginPath({ isSuperAdmin, isDealerRole, subscription: sub });
+}
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -28,7 +43,7 @@ const LoginPage = () => {
   // users to the correct area instead of leaving them on /login.
   if (!authLoading && user) {
     const vpsUser = authBridge.getCurrentVpsUser();
-    return <Navigate to={vpsUser?.roles.includes("super_admin") ? "/super-admin" : "/dashboard"} replace />;
+    return <Navigate to={loginTargetForVpsUser(vpsUser)} replace />;
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -107,8 +122,7 @@ const LoginPage = () => {
         // VPS path: route by role immediately after tokens are saved.
         if (authBridge.isVps) {
           const vpsUser = authBridge.getCurrentVpsUser();
-          const target = vpsUser?.roles.includes("super_admin") ? "/super-admin" : "/dashboard";
-          window.setTimeout(() => navigate(target, { replace: true }), 0);
+          window.setTimeout(() => navigate(loginTargetForVpsUser(vpsUser), { replace: true }), 0);
         }
         // Supabase path: onAuthStateChange will trigger AuthContext + redirect.
       }

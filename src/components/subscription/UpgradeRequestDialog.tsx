@@ -4,6 +4,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -24,6 +25,8 @@ interface Props {
 const UpgradeRequestDialog = ({ plan, onClose, onSubmitted }: Props) => {
   const { toast } = useToast();
   const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
+  const [paymentMethod, setPaymentMethod] = useState<"bank" | "mobile_banking" | "cash">("mobile_banking");
+  const [transactionId, setTransactionId] = useState("");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,13 +40,21 @@ const UpgradeRequestDialog = ({ plan, onClose, onSubmitted }: Props) => {
     if (!plan) return;
     setSubmitting(true);
     try {
-      await requestPlanUpgrade({ plan_id: plan.id, billing_cycle: cycle, note });
+      await requestPlanUpgrade({
+        plan_id: plan.id,
+        billing_cycle: cycle,
+        payment_method: paymentMethod,
+        transaction_id: transactionId.trim() || undefined,
+        note,
+      });
       toast({
-        title: "Request submitted",
-        description: "Our team will contact you shortly to confirm payment.",
+        title: "Payment submitted",
+        description: "Super Admin will confirm your payment. You will be notified by SMS and email when your account is active.",
       });
       setNote("");
+      setTransactionId("");
       setCycle("monthly");
+      setPaymentMethod("mobile_banking");
       onSubmitted();
     } catch (err: any) {
       toast({
@@ -60,9 +71,9 @@ const UpgradeRequestDialog = ({ plan, onClose, onSubmitted }: Props) => {
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Request {plan?.name} Plan</DialogTitle>
+          <DialogTitle>Renew — {plan?.name} Plan</DialogTitle>
           <DialogDescription>
-            Submit a request and our team will contact you to complete payment.
+            Pay using the methods shown above, then submit your transaction details. Super Admin will confirm and activate your account.
           </DialogDescription>
         </DialogHeader>
 
@@ -90,6 +101,29 @@ const UpgradeRequestDialog = ({ plan, onClose, onSubmitted }: Props) => {
           </div>
 
           <div className="space-y-2">
+            <Label>Payment Method</Label>
+            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as typeof paymentMethod)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mobile_banking">Mobile Banking (bKash / Nagad / Rocket)</SelectItem>
+                <SelectItem value="bank">Bank Transfer</SelectItem>
+                <SelectItem value="cash">Cash</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Transaction ID</Label>
+            <Input
+              placeholder="e.g. TRX123456789"
+              value={transactionId}
+              onChange={(e) => setTransactionId(e.target.value.slice(0, 80))}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label>Note (optional)</Label>
             <Textarea
               placeholder="Any preferences or questions…"
@@ -105,7 +139,7 @@ const UpgradeRequestDialog = ({ plan, onClose, onSubmitted }: Props) => {
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit Request"}
+            {submitting ? "Submitting…" : "Submit Payment"}
           </Button>
         </DialogFooter>
       </DialogContent>

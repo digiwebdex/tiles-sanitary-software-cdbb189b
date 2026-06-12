@@ -16,6 +16,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
+import { notifyRenewalPaymentSubmitted } from '../lib/subscriptionRenewalNotify';
 
 const router = Router();
 
@@ -87,10 +88,9 @@ router.get('/status', async (req: Request, res: Response) => {
     const daysRemaining: number =
       result.rows?.[0]?.days_remaining ?? -9999;
 
-    let status: 'active' | 'expiring' | 'grace' | 'expired';
+    let status: 'active' | 'expiring' | 'expired';
     if (daysRemaining > EXPIRING_SOON_DAYS) status = 'active';
     else if (daysRemaining >= 0) status = 'expiring';
-    else if (daysRemaining >= -GRACE_DAYS) status = 'grace';
     else status = 'expired';
 
     res.json({
@@ -136,7 +136,7 @@ router.get('/current', async (req: Request, res: Response) => {
         's.start_date', 's.end_date', 's.yearly_discount_applied',
         'p.name as plan_name', 'p.price_monthly', 'p.price_yearly', 'p.max_users',
         'p.sms_enabled', 'p.email_enabled', 'p.daily_summary_enabled',
-        'p.features as plan_features', 'p.is_trial', 'p.sort_order',
+        'p.features as plan_features', 'p.is_trial', 'p.trial_days', 'p.sort_order',
       )
       .first();
 
@@ -198,12 +198,16 @@ router.post('/upgrade-request', async (req: Request, res: Response) => {
     const dealerId = requireDealer(req, res);
     if (!dealerId) return;
 
-    const { plan_id, billing_cycle, note } = req.body ?? {};
+    const { plan_id, billing_cycle, note, payment_method, transaction_id } = req.body ?? {};
     if (!plan_id || typeof plan_id !== 'string') {
       res.status(400).json({ error: 'plan_id is required' });
       return;
     }
     const cycle = billing_cycle === 'yearly' ? 'yearly' : 'monthly';
+    const methodRaw = String(payment_method || 'bank');
+    const paymentMethod =
+      methodRaw === 'cash' || methodRaw === 'mobile_banking' ? methodRaw : 'bank';
+    const txnId = transaction_id ? String(transaction_id).slice(0, 80) : '';
 
     const plan = await db('plans').where({ id: plan_id, is_active: true }).first();
     if (!plan) {
@@ -239,21 +243,39 @@ router.post('/upgrade-request', async (req: Request, res: Response) => {
       ? Number(plan.price_yearly || 0)
       : Number(plan.price_monthly || 0);
 
+    const noteParts = [
+      `Renewal request: ${plan.name} (${cycle})`,
+      txnId ? `Txn: ${txnId}` : null,
+      note ? String(note).slice(0, 300) : null,
+    ].filter(Boolean);
+
     const [row] = await db('subscription_payments')
       .insert({
         dealer_id: dealerId,
         subscription_id: sub.id,
         amount,
-        payment_method: 'bank',
+        payment_method: paymentMethod,
         payment_status: 'pending',
         payment_date: db.fn.now(),
-        note: note ? String(note).slice(0, 500) : `Upgrade request: ${plan.name} (${cycle})`,
+        note: noteParts.join(' | ').slice(0, 500),
         requested_plan_id: plan_id,
         requested_billing_cycle: cycle,
         source: 'dealer_request',
         collected_by: req.user?.userId ?? null,
       })
       .returning('*');
+
+    const dealer = await db('dealers').where({ id: dealerId }).first();
+    void notifyRenewalPaymentSubmitted({
+      dealerName: dealer?.name || 'Dealer',
+      dealerEmail: dealer?.email || req.user?.email || '',
+      dealerPhone: dealer?.phone || '',
+      planName: plan.name,
+      billingCycle: cycle,
+      amount,
+      paymentMethod,
+      transactionRef: txnId || undefined,
+    });
 
     res.json({ payment: row });
   } catch (err: any) {
