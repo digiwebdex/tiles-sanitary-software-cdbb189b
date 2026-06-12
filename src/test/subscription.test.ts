@@ -71,20 +71,20 @@ describe("computeDealerSubscriptionAccess", () => {
     ).toBe("full");
   });
 
-  it("returns grace 1–3 days past end_date", () => {
+  it("returns blocked immediately after end_date (no grace ERP access)", () => {
     expect(
       computeDealerSubscriptionAccess({
         status: "expired",
-        end_date: localDateStr(-2),
+        end_date: localDateStr(-1),
       }),
-    ).toBe("grace");
+    ).toBe("blocked");
   });
 
-  it("returns blocked beyond grace", () => {
+  it("returns blocked well past end_date", () => {
     expect(
       computeDealerSubscriptionAccess({
         status: "expired",
-        end_date: localDateStr(-4),
+        end_date: localDateStr(-30),
       }),
     ).toBe("blocked");
   });
@@ -119,15 +119,14 @@ describe("resolveDealerPostLoginPath", () => {
     ).toBe("/super-admin");
   });
 
-  it("sends expired dealer to renewal page", () => {
-    const sub: Subscription = { status: "expired", end_date: localDateStr(-10) };
+  it("sends expired dealer to subscription renewal page", () => {
     expect(
       resolveDealerPostLoginPath({
         isSuperAdmin: false,
         isDealerRole: true,
-        subscription: sub,
+        subscription: { status: "expired", end_date: localDateStr(-1) },
       }),
-    ).toBe("/subscription-blocked");
+    ).toBe("/subscription");
   });
 
   it("sends active dealer to dashboard", () => {
@@ -144,7 +143,6 @@ describe("resolveDealerPostLoginPath", () => {
 describe("dealerNeedsRenewal", () => {
   it("is true only for blocked access", () => {
     expect(dealerNeedsRenewal("blocked")).toBe(true);
-    expect(dealerNeedsRenewal("grace")).toBe(false);
     expect(dealerNeedsRenewal("full")).toBe(false);
   });
 });

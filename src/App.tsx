@@ -16,8 +16,7 @@ import PrivacyPolicyPage from "./pages/public/PrivacyPolicyPage";
 import TermsPage from "./pages/public/TermsPage";
 import ContactPage from "./pages/public/ContactPage";
 import GetStartedPage from "./pages/public/GetStartedPage";
-import SubscriptionBlockedPage from "./pages/auth/SubscriptionBlockedPage";
-import SubscriptionPage from "./pages/subscription/SubscriptionPage";
+import SubscriptionRoute from "./pages/subscription/SubscriptionRoute";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ProductsPage from "./pages/products/ProductsPage";
@@ -185,7 +184,8 @@ const App = () => (
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/get-started" element={<GetStartedPage />} />
-            <Route path="/subscription-blocked" element={<SubscriptionBlockedPage />} />
+            <Route path="/subscription-blocked" element={<Navigate to="/subscription" replace />} />
+            <Route path="/subscription" element={<SubscriptionRoute />} />
 
             {/* Super Admin Panel — role guard inside layout */}
             <Route path="/super-admin" element={<SuperAdminLayout />}>
@@ -207,7 +207,6 @@ const App = () => (
             <Route path="/reports" element={<ProtectedRoute allowReadonly><AppLayout><ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/credit" element={<ProtectedRoute allowReadonly><AppLayout><CreditReportPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
-            <Route path="/subscription" element={<ProtectedRoute allowReadonly><AppLayout><SubscriptionPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings/pricing-tiers" element={<ProtectedRoute><AppLayout><PricingTiersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings/data-backup" element={<ProtectedRoute><AppLayout><DataBackupPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings/roles" element={<ProtectedRoute><AppLayout><RoleManagementPage /></AppLayout></ProtectedRoute>} />

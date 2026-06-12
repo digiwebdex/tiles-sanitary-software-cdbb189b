@@ -88,10 +88,9 @@ router.get('/status', async (req: Request, res: Response) => {
     const daysRemaining: number =
       result.rows?.[0]?.days_remaining ?? -9999;
 
-    let status: 'active' | 'expiring' | 'grace' | 'expired';
+    let status: 'active' | 'expiring' | 'expired';
     if (daysRemaining > EXPIRING_SOON_DAYS) status = 'active';
     else if (daysRemaining >= 0) status = 'expiring';
-    else if (daysRemaining >= -GRACE_DAYS) status = 'grace';
     else status = 'expired';
 
     res.json({
@@ -137,7 +136,7 @@ router.get('/current', async (req: Request, res: Response) => {
         's.start_date', 's.end_date', 's.yearly_discount_applied',
         'p.name as plan_name', 'p.price_monthly', 'p.price_yearly', 'p.max_users',
         'p.sms_enabled', 'p.email_enabled', 'p.daily_summary_enabled',
-        'p.features as plan_features', 'p.is_trial', 'p.sort_order',
+        'p.features as plan_features', 'p.is_trial', 'p.trial_days', 'p.sort_order',
       )
       .first();
 

@@ -10,7 +10,7 @@ import { useCallback } from "react";
 export function useSubscriptionGuard() {
   const { accessLevel, user, profile } = useAuth();
 
-  const canWrite = accessLevel === "full" || accessLevel === "grace";
+  const canWrite = accessLevel === "full";
 
   const guardWrite = useCallback(
     async (action: string): Promise<boolean> => {

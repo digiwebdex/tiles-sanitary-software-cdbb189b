@@ -25,6 +25,7 @@ export interface DealerSubscription {
   daily_summary_enabled: boolean | null;
   plan_features: string[] | null;
   is_trial: boolean | null;
+  trial_days: number | null;
   sort_order: number | null;
 }
 

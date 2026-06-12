@@ -18,7 +18,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
    *  - loading is complete (profile, roles, subscription all fetched), AND
    *  - the user object is confirmed present
    *
-   * This prevents premature redirects to /subscription-blocked that
+   * This prevents premature redirects to /subscription that
    * happen when accessLevel is evaluated before auth state is fully ready.
    */
   const authReady = !loading && user !== null;
@@ -79,8 +79,13 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
   // 5. dealer_admin / salesman subscription enforcement.
   //    Only redirect after auth is fully ready to avoid false "blocked" state.
-  if (authReady && accessLevel === "blocked") {
-    return <Navigate to="/subscription-blocked" replace />;
+  const renewalPath = "/subscription";
+  if (
+    authReady &&
+    accessLevel === "blocked" &&
+    location.pathname !== renewalPath
+  ) {
+    return <Navigate to={renewalPath} replace />;
   }
 
   return <>{children}</>;

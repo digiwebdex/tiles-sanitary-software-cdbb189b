@@ -7,11 +7,11 @@ export interface SubscriptionLike {
   end_date: string | null;
 }
 
-export type DealerSubscriptionAccess = "full" | "grace" | "blocked";
+export type DealerSubscriptionAccess = "full" | "blocked";
 
 /**
  * Dealer subscription access from end_date + status.
- * Past grace → blocked (renewal required; no ERP access).
+ * Once end_date has passed → blocked immediately (no grace-period ERP access).
  */
 export function computeDealerSubscriptionAccess(
   sub: SubscriptionLike | null,
@@ -26,12 +26,6 @@ export function computeDealerSubscriptionAccess(
 
   if (!endDate && sub.status === "active") return "full";
   if (endDate && today <= endDate) return "full";
-
-  if (endDate) {
-    const graceEnd = new Date(endDate);
-    graceEnd.setDate(graceEnd.getDate() + 3);
-    if (today > endDate && today <= graceEnd) return "grace";
-  }
 
   return "blocked";
 }
@@ -50,7 +44,7 @@ export function resolveDealerPostLoginPath(input: {
     input.isDealerRole &&
     dealerNeedsRenewal(computeDealerSubscriptionAccess(input.subscription))
   ) {
-    return "/subscription-blocked";
+    return "/subscription";
   }
   return "/dashboard";
 }
