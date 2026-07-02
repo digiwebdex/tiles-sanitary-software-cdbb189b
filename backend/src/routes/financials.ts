@@ -92,8 +92,50 @@ router.get('/p-and-l', async (req, res) => {
     async () => {
       const row = await db('sales')
         .where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
         .modify(qb => { if (from) qb.where('sale_date', '>=', from); if (to) qb.where('sale_date', '<=', to); })
         .sum({ total: 'total_amount' })
+        .first();
+      return num(row?.total);
+    },
+  );
+
+  // ── Output tax split (Mushak): VAT + SD are liabilities collected on behalf
+  // of the government, NOT income. Surfaced so profit can be computed on the
+  // ex-tax taxable base and the balance/TB can carry a VAT-payable liability.
+  // For VAT-disabled dealers vat_amount/sd_amount are 0, so these are no-ops. ──
+  const taxable_revenue = await safeSum(
+    { route: 'financials.pnl.taxable_revenue', label: 'Taxable Revenue', warnings, context: ctx },
+    async () => {
+      const row = await db('sales')
+        .where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
+        .modify(qb => { if (from) qb.where('sale_date', '>=', from); if (to) qb.where('sale_date', '<=', to); })
+        .sum({ total: 'taxable_amount' })
+        .first();
+      return num(row?.total);
+    },
+  );
+  const output_vat = await safeSum(
+    { route: 'financials.pnl.output_vat', label: 'Output VAT', warnings, context: ctx },
+    async () => {
+      const row = await db('sales')
+        .where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
+        .modify(qb => { if (from) qb.where('sale_date', '>=', from); if (to) qb.where('sale_date', '<=', to); })
+        .sum({ total: 'vat_amount' })
+        .first();
+      return num(row?.total);
+    },
+  );
+  const output_sd = await safeSum(
+    { route: 'financials.pnl.output_sd', label: 'Output SD', warnings, context: ctx },
+    async () => {
+      const row = await db('sales')
+        .where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
+        .modify(qb => { if (from) qb.where('sale_date', '>=', from); if (to) qb.where('sale_date', '<=', to); })
+        .sum({ total: 'sd_amount' })
         .first();
       return num(row?.total);
     },
@@ -121,6 +163,7 @@ router.get('/p-and-l', async (req, res) => {
     async () => {
       const row = await db('sales')
         .where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
         .modify(qb => { if (from) qb.where('sale_date', '>=', from); if (to) qb.where('sale_date', '<=', to); })
         .sum({ total: 'cogs' })
         .first();
@@ -157,6 +200,7 @@ router.get('/p-and-l', async (req, res) => {
     async () => {
       const row = await db('sales')
         .where({ dealer_id: dealerId, cogs_method: 'legacy_pre_fix' })
+        .whereNot('document_status', 'reversed')
         .modify(qb => { if (from) qb.where('sale_date', '>=', from); if (to) qb.where('sale_date', '<=', to); })
         .count<{ count: string }[]>('id as count')
         .first();
@@ -187,8 +231,19 @@ router.get('/p-and-l', async (req, res) => {
   }));
   const total_expenses = expenses_by_category.reduce((s, r) => s + r.amount, 0);
 
-  const gross_profit = revenue - sales_returns - net_cogs;
+  // Profit must be computed on the ex-tax taxable base — output VAT/SD in
+  // `revenue` (gross) are liabilities, not earnings. `taxable_revenue` already
+  // excludes them. Returns are stored gross (refund_amount); subtracting them
+  // from the net base slightly understates profit by the VAT portion of
+  // returns — conservative, and surfaced in a warning below.
+  const net_output_tax = output_vat + output_sd;
+  const gross_profit = taxable_revenue - sales_returns - net_cogs;
   const net_profit = gross_profit - total_expenses;
+  if (net_output_tax > 0.005) {
+    warnings.push(
+      'Revenue is shown gross (VAT/SD-inclusive); profit is computed on the ex-tax taxable base. Output VAT/SD are liabilities (see output_vat/output_sd), not income. Sales returns are netted at their gross refund amount.',
+    );
+  }
 
   for (const w of detectCogsDataQualityWarnings({
     revenue,
@@ -203,8 +258,14 @@ router.get('/p-and-l', async (req, res) => {
   res.json({
     period: { from, to },
     revenue,
+    // Ex-tax income and the output-tax liabilities collected on top of it.
+    taxable_revenue,
+    output_vat,
+    output_sd,
+    net_output_tax,
     sales_returns,
-    net_revenue: revenue - sales_returns,
+    net_revenue: taxable_revenue - sales_returns,
+    gross_sales: revenue,
     cogs,
     cogs_reversal,
     net_cogs,
@@ -213,7 +274,7 @@ router.get('/p-and-l', async (req, res) => {
     total_expenses,
     net_profit,
     // ── Phase 1 transparency fields (additive, optional) ──
-    data_source: 'sales.cogs + sales_returns.refund_amount + sales_returns.cogs_reversal',
+    data_source: 'sales.taxable_amount (ex-tax) + sales.cogs + sales_returns.refund_amount + sales_returns.cogs_reversal; reversed sales excluded',
     warnings,
   });
 });
@@ -272,6 +333,7 @@ router.get('/balance-sheet', async (req, res) => {
       }
       const row = await db('sales')
         .where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
         .where('sale_date', '<=', asOf)
         .sum({ total: db.raw('GREATEST(0, COALESCE(total_amount,0) - COALESCE(paid_amount,0))') })
         .first();
@@ -423,16 +485,32 @@ router.get('/trial-balance', async (req, res) => {
   if (Math.abs(dc) > 0.005) push('Director Capital', -dc);
 
   // ─ Income accounts (Credit) ─
-  const revTotal = await safeSum(
-    { route: 'financials.tb.revenue', label: 'Sales Revenue', warnings, context: ctx },
-    async () => {
-      const row = await db('sales').where({ dealer_id: dealerId })
+  // Revenue is booked at the ex-tax taxable value; output VAT/SD are split out
+  // as liability credits so they aren't misclassified as income. The three
+  // credits still sum to gross total_amount, so the trial balance stays
+  // balanced against the gross AR/cash debits. Reversed sales are excluded.
+  const taxRow = await safeQuery<{ taxable: unknown; vat: unknown; sd: unknown }[]>(
+    { route: 'financials.tb.revenue_split', label: 'Sales Revenue (ex-tax) + output tax', warnings, context: ctx },
+    async () =>
+      db('sales').where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
         .modify(qb => { if (asOf) qb.where('sale_date', '<=', asOf); })
-        .sum({ total: 'total_amount' }).first();
-      return num(row?.total);
-    },
+        .sum({ taxable: 'taxable_amount' })
+        .sum({ vat: 'vat_amount' })
+        .sum({ sd: 'sd_amount' }) as unknown as Promise<{ taxable: unknown; vat: unknown; sd: unknown }[]>,
+    [],
   );
-  if (revTotal > 0) push('Sales Revenue', -revTotal);
+  const revTaxable = num(taxRow?.[0]?.taxable);
+  const outVat = num(taxRow?.[0]?.vat);
+  const outSd = num(taxRow?.[0]?.sd);
+  if (revTaxable > 0) push('Sales Revenue', -revTaxable);
+  if (outVat > 0.005) push('VAT Payable', -outVat);
+  if (outSd > 0.005) push('SD Payable', -outSd);
+  if (outVat > 0.005 || outSd > 0.005) {
+    warnings.push(
+      'VAT/SD Payable shown here is gross output tax collected on sales. Netting of input VAT (on purchases) and any VAT settlement payments is not yet reflected — treat as the upper bound of the tax liability.',
+    );
+  }
 
   // ── Sales Returns: SUM(refund_amount) — see header comment for details ──
   const srTotal = await safeSum(
@@ -452,6 +530,7 @@ router.get('/trial-balance', async (req, res) => {
     { route: 'financials.tb.cogs', label: 'COGS', warnings, context: ctx },
     async () => {
       const row = await db('sales').where({ dealer_id: dealerId })
+        .whereNot('document_status', 'reversed')
         .modify(qb => { if (asOf) qb.where('sale_date', '<=', asOf); })
         .sum({ total: 'cogs' }).first();
       return num(row?.total);
@@ -476,6 +555,7 @@ router.get('/trial-balance', async (req, res) => {
     async () => {
       const row = await db('sales')
         .where({ dealer_id: dealerId, cogs_method: 'legacy_pre_fix' })
+        .whereNot('document_status', 'reversed')
         .modify(qb => { if (asOf) qb.where('sale_date', '<=', asOf); })
         .count<{ count: string }[]>('id as count')
         .first();
@@ -505,6 +585,7 @@ router.get('/trial-balance', async (req, res) => {
       db('journal_entry_lines as jel')
         .join('journal_entries as je', 'je.id', 'jel.journal_entry_id')
         .where('jel.dealer_id', dealerId)
+        .whereNull('je.voided_at')
         .modify(qb => { if (asOf) qb.where('je.entry_date', '<=', asOf); })
         .select('jel.account')
         .sum({ debit: 'jel.debit' })

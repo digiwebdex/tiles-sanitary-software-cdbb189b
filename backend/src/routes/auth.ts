@@ -114,6 +114,15 @@ router.post('/login', async (req: Request, res: Response) => {
       res.status(403).json({ error: err.message, code });
       return;
     }
+    // Invalid request body — return a clean message + field issues instead of
+    // leaking the raw stringified Zod error as the `error` string.
+    if (err?.name === 'ZodError') {
+      res.status(400).json({
+        error: 'Invalid login request',
+        issues: err.flatten?.() ?? err.issues,
+      });
+      return;
+    }
     res.status(400).json({ error: err.message || 'Login failed' });
   }
 });
@@ -130,6 +139,10 @@ router.post('/refresh', async (req: Request, res: Response) => {
       user: result.user,
     });
   } catch (err: any) {
+    if (err?.name === 'ZodError') {
+      res.status(400).json({ error: 'Invalid refresh request', issues: err.flatten?.() ?? err.issues });
+      return;
+    }
     res.status(401).json({
       error: err.message || 'Token refresh failed',
       code: err.code,

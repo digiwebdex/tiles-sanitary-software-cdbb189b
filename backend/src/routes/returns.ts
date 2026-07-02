@@ -406,37 +406,73 @@ router.post('/sales', async (req: Request, res: Response) => {
   const { ip, ua } = clientMeta(req);
 
   try {
-    // Pre-tx validations (read-only)
-    const sale = await db('sales')
-      .where({ id: input.sale_id, dealer_id: dealerId })
-      .first('id', 'customer_id', 'total_amount', 'invoice_number', 'due_amount', 'paid_amount', 'discount');
-    if (!sale) {
-      res.status(404).json({ error: 'Sale not found' });
-      return;
-    }
-    if (Number(input.refund_amount) > Number(sale.total_amount)) {
-      res.status(400).json({ error: 'Refund amount cannot exceed original sale amount' });
-      return;
-    }
-
-    const saleItem = await db('sale_items')
-      .where({ sale_id: input.sale_id, product_id: input.product_id })
-      .first('id', 'quantity', 'backorder_qty', 'allocated_qty', 'fulfillment_status');
-    if (!saleItem) {
-      res.status(400).json({ error: 'Product not found in this sale' });
-      return;
-    }
-
-    const existing = await db('sales_returns')
-      .where({ sale_id: input.sale_id, product_id: input.product_id })
-      .sum<{ sum: string }[]>('qty as sum');
-    const alreadyReturned = Number(existing?.[0]?.sum ?? 0);
-    if (alreadyReturned + Number(input.qty) > Number(saleItem.quantity)) {
-      res.status(400).json({ error: 'Return quantity exceeds sold quantity' });
-      return;
-    }
-
+    // All validation runs INSIDE the transaction under a row lock on the sale,
+    // so concurrent returns for the same sale serialise (prevents double-return
+    // and over-refund races). Validation failures throw an error carrying a
+    // statusCode that the catch block maps to the right HTTP status.
     const returnId = await db.transaction(async (trx) => {
+      const sale = await trx('sales')
+        .where({ id: input.sale_id, dealer_id: dealerId })
+        .forUpdate()
+        .first(
+          'id',
+          'customer_id',
+          'total_amount',
+          'invoice_number',
+          'due_amount',
+          'paid_amount',
+          'discount',
+          'document_status',
+          'sale_status',
+        );
+      if (!sale) {
+        throw Object.assign(new Error('Sale not found'), { statusCode: 404 });
+      }
+      // State guard: a reversed/cancelled sale has already had its stock and
+      // ledger fully unwound — returning against it would double-refund and
+      // phantom-restore stock.
+      if (sale.document_status === 'reversed' || sale.sale_status === 'cancelled') {
+        throw Object.assign(
+          new Error('Cannot record a return against a reversed or cancelled sale'),
+          { statusCode: 409 },
+        );
+      }
+      if (Number(input.refund_amount) > Number(sale.total_amount)) {
+        throw Object.assign(
+          new Error('Refund amount cannot exceed original sale amount'),
+          { statusCode: 400 },
+        );
+      }
+
+      const saleItem = await trx('sale_items')
+        .where({ sale_id: input.sale_id, product_id: input.product_id })
+        .first('id', 'quantity', 'backorder_qty', 'allocated_qty', 'fulfillment_status');
+      if (!saleItem) {
+        throw Object.assign(new Error('Product not found in this sale'), { statusCode: 400 });
+      }
+
+      // Cumulative quantity guard (under the sale lock).
+      const qtyAgg = await trx('sales_returns')
+        .where({ sale_id: input.sale_id, product_id: input.product_id })
+        .sum<{ sum: string }[]>('qty as sum');
+      const alreadyReturned = Number(qtyAgg?.[0]?.sum ?? 0);
+      if (alreadyReturned + Number(input.qty) > Number(saleItem.quantity)) {
+        throw Object.assign(new Error('Return quantity exceeds sold quantity'), { statusCode: 400 });
+      }
+
+      // Cumulative refund guard: total refunded across all returns for this sale
+      // must never exceed the original sale amount.
+      const refundAgg = await trx('sales_returns')
+        .where({ sale_id: input.sale_id })
+        .sum<{ sum: string }[]>('refund_amount as sum');
+      const alreadyRefunded = Number(refundAgg?.[0]?.sum ?? 0);
+      if (alreadyRefunded + Number(input.refund_amount) > Number(sale.total_amount)) {
+        throw Object.assign(
+          new Error('Cumulative refund would exceed original sale amount'),
+          { statusCode: 400 },
+        );
+      }
+
       let cogsReversal = 0;
 
       const [header] = await trx('sales_returns')
@@ -569,6 +605,10 @@ router.post('/sales', async (req: Request, res: Response) => {
     const created = await db('sales_returns').where({ id: returnId }).first();
     res.status(201).json(created);
   } catch (err: any) {
+    if (err?.statusCode) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
     console.error('[returns.sales.create] error', err);
     res.status(500).json({ error: err?.message || 'Failed to create sales return' });
   }

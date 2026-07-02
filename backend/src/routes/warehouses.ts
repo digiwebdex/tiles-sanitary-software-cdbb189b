@@ -214,6 +214,7 @@ router.post('/transfers', async (req, res) => {
 /** Request a transfer (no stock/cost yet). */
 router.post('/transfers/request', async (req, res) => {
   const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
   const p = TransferSchema.safeParse(req.body);
   if (!p.success) { res.status(400).json({ error: p.error.flatten() }); return; }
   const userId = req.user?.userId ?? null;
@@ -268,6 +269,7 @@ router.post('/transfers/:id/reject', async (req, res) => {
 /** Mark approved transfer as received (posts transport cost). */
 router.post('/transfers/:id/receive', async (req, res) => {
   const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
   const trx = await db.transaction();
   try {
     const userId = req.user?.userId ?? null;

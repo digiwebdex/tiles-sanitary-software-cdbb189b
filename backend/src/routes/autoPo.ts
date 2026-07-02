@@ -49,6 +49,10 @@ function requireAdmin(req: Request, res: Response): boolean {
  */
 router.get('/suggestions', async (req, res) => {
   try {
+    // Admin-only: suggestions expose cost-derived purchase rates
+    // (last purchase rate / product.cost_price), which are stripped from
+    // salesman-facing product endpoints. Gate here to preserve that.
+    if (!requireAdmin(req, res)) return;
     const dealerId = resolveDealer(req, res);
     if (!dealerId) return;
 

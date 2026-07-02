@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { checkDbConnection } from './db/connection';
 import { optionalAuth } from './middleware/auth';
 import { demoReadOnly } from './middleware/demoReadOnly';
+import { requireActiveSubscription } from './middleware/subscription';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -143,17 +144,35 @@ app.use((req, res, next) => {
 });
 
 // ── Rate limiting ──
+// The app sits behind Cloudflare → nginx. `req.ip` (even with trust proxy) can
+// resolve to a rotating Cloudflare edge address, which put every request in a
+// fresh bucket and made both limiters no-ops (remaining never decremented).
+// Key on CF-Connecting-IP — the real client IP that Cloudflare sets and clients
+// cannot spoof through CF — falling back to the normalised req.ip when the
+// header is absent (e.g. direct/local access).
+const clientIpKey = (req: express.Request): string => {
+  const cf = req.headers['cf-connecting-ip'];
+  if (typeof cf === 'string' && cf.trim()) return cf.trim();
+  return req.ip ?? 'unknown';
+};
+// Disable the library's built-in validators for these two limiters: we use a
+// custom keyGenerator (CF-Connecting-IP, already a single normalised address),
+// which otherwise trips the IPv6-fallback sanity check.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientIpKey,
+  validate: false,
 });
 app.use(limiter);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  keyGenerator: clientIpKey,
+  validate: false,
   message: { error: 'Too many login attempts. Try again in 15 minutes.' },
   skip: (req) => {
     const path = req.originalUrl.split('?')[0];
@@ -174,6 +193,12 @@ app.use(express.urlencoded({ extended: true }));
 // optionalAuth decodes the JWT (if present) so demoReadOnly can inspect
 // req.user.isDemo. Routes still run their own `authenticate` for hard auth.
 app.use('/api', optionalAuth, demoReadOnly);
+
+// ── Subscription paywall (server-side) ──
+// Blocks state-changing requests for dealers with an expired/suspended
+// subscription. Runs after optionalAuth so req.user is available; reads and
+// auth/renewal endpoints stay open (see middleware allowlist).
+app.use('/api', requireActiveSubscription);
 
 // ── Routes ──
 app.use('/api/health', healthRoutes);
@@ -272,11 +297,38 @@ app.use((_req, res) => {
 });
 
 // ── Global error handler ──
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[ERROR]', err.message);
-  res.status(500).json({
-    error: env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  // Honour a status carried on the error. body-parser sets status 400 +
+  // type 'entity.parse.failed' for malformed JSON, so this returns a clean
+  // 400 instead of an opaque 500.
+  const status =
+    Number(err?.statusCode || err?.status) ||
+    (err?.type === 'entity.parse.failed' || err instanceof SyntaxError ? 400 : 500);
+  console.error('[ERROR]', status, err?.message);
+  const isClientError = status >= 400 && status < 500;
+  res.status(status).json({
+    error:
+      isClientError || env.NODE_ENV !== 'production'
+        ? err?.message || 'Request failed'
+        : 'Internal server error',
+    ...(err?.code ? { code: err.code } : {}),
   });
+});
+
+// ── Process-level safety nets ──
+// Express 4 does not route rejected promises from async handlers to the error
+// middleware, so an unhandled rejection could otherwise crash the process
+// (availability risk). Log and keep the process alive; individual handlers are
+// still responsible for responding to their own request.
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[unhandledRejection]', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (err: Error) => {
+  console.error('[uncaughtException]', err.stack || err.message);
 });
 
 // ── Start ──

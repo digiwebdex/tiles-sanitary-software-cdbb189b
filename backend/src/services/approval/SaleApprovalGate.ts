@@ -223,11 +223,16 @@ export async function buildRequiredSaleApprovals(
     });
   }
 
-  const isCreditExceeded = params.creditLimit > 0 && params.outstanding > params.creditLimit;
+  // Include the sale being created — the invoice that BREACHES the limit is the
+  // one that must be gated. Checking only pre-sale `outstanding` let a customer
+  // sitting at/under the limit always post one more invoice of any size.
+  const projectedOutstanding = params.outstanding + params.totalAmount;
+  const isCreditExceeded = params.creditLimit > 0 && projectedOutstanding > params.creditLimit;
   if (isCreditExceeded && isApprovalRequired(settings, 'credit_override')) {
     const context = {
       ...base,
       outstanding: params.outstanding,
+      projected_outstanding: projectedOutstanding,
       credit_limit: params.creditLimit,
       sale_total: params.totalAmount,
     };

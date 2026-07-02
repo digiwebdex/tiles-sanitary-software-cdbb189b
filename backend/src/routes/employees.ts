@@ -148,7 +148,9 @@ router.get('/salary-payments', async (req, res) => {
     .select('sp.*', 'e.name as employee_name', 'e.designation')
     .orderBy('sp.payment_date', 'desc');
   if (period) q.where('sp.period', period);
-  const rows = await q;
+  const limit = Math.min(Math.max(Number(req.query.limit) || 5000, 1), 5000);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  const rows = await q.limit(limit).offset(offset);
   res.json(rows);
 });
 
@@ -309,7 +311,11 @@ router.get('/attendance', async (req, res) => {
   if (from) q.where('a.att_date', '>=', from);
   if (to) q.where('a.att_date', '<=', to);
   if (employee_id) q.where('a.employee_id', employee_id);
-  res.json(await q);
+  // Safety cap: attendance grows unbounded (employees × days). Honour optional
+  // ?limit/?offset and never return more than 5000 rows in one response.
+  const limit = Math.min(Math.max(Number(req.query.limit) || 5000, 1), 5000);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  res.json(await q.limit(limit).offset(offset));
 });
 
 router.post('/attendance', async (req, res) => {
@@ -393,7 +399,9 @@ router.get('/advances', async (req, res) => {
     .orderBy('a.issue_date', 'desc');
   if (employee_id) q.where('a.employee_id', employee_id);
   if (status) q.where('a.status', status);
-  res.json(await q);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 5000, 1), 5000);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  res.json(await q.limit(limit).offset(offset));
 });
 
 router.post('/:id/advances', async (req, res) => {
