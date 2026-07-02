@@ -2,13 +2,17 @@
  * Dealer Data Export & Restore — per-table CSV download for the
  * authenticated dealer's tenant. Read-only export of dealer-scoped tables.
  *
- *   GET /api/data-export/manifest          → [{ key, label, table, rows }]
- *   GET /api/data-export/:key.csv          → CSV file for that table
+ *   GET /api/data-export/manifest            → [{ key, label, table, rows }]
+ *   GET /api/data-export/:key.csv            → CSV file for that table
+ *   GET /api/data-export/daily?date=YYYY-MM-DD → CSV of all transactions on date
+ *   GET /api/data-export/full-backup.zip     → ZIP of all tables as CSVs
  *
  * Restore (CSV upload) is delegated to the existing /api/imports/* routes
  * for products / customers / suppliers.
  */
 import { Router, Request, Response } from 'express';
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+const { ZipArchive } = require('archiver') as { ZipArchive: new (opts?: any) => any };
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
@@ -44,6 +48,21 @@ const EXPORTS: ExportSpec[] = [
   { key: 'quotations', label: 'Quotations', table: 'quotations' },
 ];
 
+// Tables that have a date column and are exported in the daily report
+const DAILY_SPECS: Array<{ label: string; table: string; dateCol: string }> = [
+  { label: 'Sales', table: 'sales', dateCol: 'sale_date' },
+  { label: 'Sale Items', table: 'sale_items', dateCol: 'created_at' },
+  { label: 'Purchases', table: 'purchases', dateCol: 'purchase_date' },
+  { label: 'Expenses', table: 'expenses', dateCol: 'expense_date' },
+  { label: 'Customer Payments (Ledger)', table: 'customer_ledger', dateCol: 'entry_date' },
+  { label: 'Supplier Payments (Ledger)', table: 'supplier_ledger', dateCol: 'entry_date' },
+  { label: 'Cash Ledger', table: 'cash_ledger', dateCol: 'entry_date' },
+  { label: 'Challans', table: 'challans', dateCol: 'challan_date' },
+  { label: 'Sales Returns', table: 'sales_returns', dateCol: 'return_date' },
+  { label: 'Purchase Returns', table: 'purchase_returns', dateCol: 'return_date' },
+  { label: 'Deliveries', table: 'deliveries', dateCol: 'delivery_date' },
+];
+
 function resolveDealer(req: Request, res: Response): string | null {
   if (!req.dealerId) {
     res.status(403).json({ error: 'No dealer assigned to your account' });
@@ -64,6 +83,17 @@ function csvEscape(v: unknown): string {
   return s;
 }
 
+function rowsToCsv(rows: Record<string, unknown>[]): string {
+  if (rows.length === 0) return '(no records)\n';
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push(headers.map((h) => csvEscape(row[h])).join(','));
+  }
+  return lines.join('\n') + '\n';
+}
+
+// ── GET /manifest ─────────────────────────────────────────────────
 router.get('/manifest', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;
@@ -79,6 +109,79 @@ router.get('/manifest', async (req: Request, res: Response) => {
   res.json(out);
 });
 
+// ── GET /daily?date=YYYY-MM-DD — all transactions for one day ─────
+router.get('/daily', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+
+  const dateStr = req.query.date as string | undefined;
+  const date = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : new Date().toISOString().slice(0, 10);
+
+  const stamp = date;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="daily_report_${stamp}.csv"`);
+
+  // Write a combined single CSV with section headers separating each table
+  for (const spec of DAILY_SPECS) {
+    try {
+      const rows = await db(spec.table)
+        .where({ dealer_id: dealerId })
+        .whereRaw(`${spec.dateCol}::date = ?`, [date])
+        .select('*');
+
+      res.write(`\n=== ${spec.label.toUpperCase()} — ${date} (${rows.length} record${rows.length !== 1 ? 's' : ''}) ===\n`);
+      res.write(rowsToCsv(rows));
+    } catch {
+      res.write(`\n=== ${spec.label.toUpperCase()} — skipped (table may not have column ${spec.dateCol}) ===\n`);
+    }
+  }
+
+  res.end();
+});
+
+// ── GET /full-backup.zip — all tables as CSVs in a ZIP ───────────
+router.get('/full-backup.zip', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="full_backup_${stamp}.zip"`);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const archive: any = new ZipArchive({ zlib: { level: 6 } });
+  archive.on('error', (err: Error) => {
+    console.error('[dataExport] zip error', err);
+    // Can't change headers now — just end
+    res.end();
+  });
+  archive.pipe(res);
+
+  for (const spec of EXPORTS) {
+    try {
+      const rows = await db(spec.table).where({ dealer_id: dealerId }).select('*');
+      const csv = rowsToCsv(rows);
+      archive.append(csv, { name: `${spec.key}.csv` });
+    } catch (err) {
+      archive.append(`Error exporting ${spec.table}: ${(err as Error).message}\n`, {
+        name: `${spec.key}_error.txt`,
+      });
+    }
+  }
+
+  // Add a README
+  const readme =
+    `Full Data Backup — ${stamp}\n` +
+    `Dealer ID: ${dealerId}\n` +
+    `Generated: ${new Date().toISOString()}\n\n` +
+    `Contents:\n` +
+    EXPORTS.map((e) => `  ${e.key}.csv  — ${e.label}`).join('\n') + '\n';
+  archive.append(readme, { name: 'README.txt' });
+
+  await archive.finalize();
+});
+
+// ── GET /:key.csv — single table CSV ─────────────────────────────
 router.get('/:key.csv', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;

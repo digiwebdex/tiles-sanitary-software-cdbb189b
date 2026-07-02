@@ -23,6 +23,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ALLOW_PREFIXES = [
   '/api/auth',
   '/api/health',
+  '/api/signup',
 ];
 
 export function demoReadOnly(req: Request, res: Response, next: NextFunction): void {

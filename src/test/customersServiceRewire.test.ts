@@ -1,142 +1,85 @@
 /**
- * Phase 3C — customerService rewire integration test.
+ * customerService — VPS API client tests (Phase 3U-17 cutover).
  *
- * Mirrors suppliersServiceRewire.test.ts. Verifies:
- *   1. customerService.list() (no search) routes through dataClient (so
- *      shadow mode actually fires when configured).
- *   2. customerService.list() (with search) bypasses the adapter and uses
- *      the legacy Supabase OR-ilike path — preserving exact behavior.
- *   3. customerService.list() preserves the legacy `{ data, total }`
- *      response shape so no UI consumer breaks.
- *   4. typeFilter is forwarded as an equality filter to the adapter.
+ * customerService is VPS-only; all reads/writes go through /api/customers.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { adapterListMock, adapterGetByIdMock } = vi.hoisted(() => ({
-  adapterListMock: vi.fn(),
-  adapterGetByIdMock: vi.fn(),
+const { vpsAuthedFetchMock } = vi.hoisted(() => ({
+  vpsAuthedFetchMock: vi.fn(),
 }));
 
-vi.mock("@/lib/data/dataClient", () => ({
-  dataClient: () => ({
-    list: adapterListMock,
-    getById: adapterGetByIdMock,
-    create: vi.fn(),
-    update: vi.fn(),
-    remove: vi.fn(),
-  }),
-}));
-
-const {
-  supabaseRangeMock,
-  supabaseEqOrderMock,
-  supabaseOrMock,
-  supabaseEqMock,
-  supabaseFromMock,
-  supabaseGetUserMock,
-} = vi.hoisted(() => {
-  const supabaseRangeMock = vi.fn();
-  // After .or().order() we either call .range() directly OR call .eq(type).range()
-  const supabaseEqOrderMock = vi.fn(() => ({ range: supabaseRangeMock }));
-  const supabaseOrderMock = vi.fn(() => ({
-    range: supabaseRangeMock,
-    eq: supabaseEqOrderMock,
-  }));
-  const supabaseOrMock = vi.fn(() => ({ order: supabaseOrderMock }));
-  const supabaseEqMock = vi.fn(() => ({ or: supabaseOrMock }));
-  const supabaseSelectMock = vi.fn(() => ({ eq: supabaseEqMock }));
-  const supabaseFromMock = vi.fn(() => ({ select: supabaseSelectMock }));
-  const supabaseGetUserMock = vi.fn(async () => ({ data: { user: null } }));
-  return {
-    supabaseRangeMock,
-    supabaseEqOrderMock,
-    supabaseOrMock,
-    supabaseEqMock,
-    supabaseFromMock,
-    supabaseGetUserMock,
-  };
-});
-
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: supabaseFromMock,
-    auth: { getUser: supabaseGetUserMock },
-  },
+vi.mock("@/lib/vpsAuthClient", () => ({
+  vpsAuthedFetch: (...args: unknown[]) => vpsAuthedFetchMock(...args),
+  vpsTokenStore: { user: null },
 }));
 
 import { customerService } from "@/services/customerService";
 
+function mockVpsOk(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  };
+}
+
+function mockVpsErr(error: string, status = 400) {
+  return {
+    ok: false,
+    status,
+    json: async () => ({ error }),
+  };
+}
+
 beforeEach(() => {
-  adapterListMock.mockReset();
-  adapterGetByIdMock.mockReset();
-  supabaseRangeMock.mockReset();
-  supabaseOrMock.mockClear();
-  supabaseEqMock.mockClear();
-  supabaseEqOrderMock.mockClear();
-  supabaseFromMock.mockClear();
+  vpsAuthedFetchMock.mockReset();
 });
 
-describe("Phase 3C — customerService routes reads through dataClient", () => {
-  it("empty-search list → uses dataClient adapter (shadow-eligible path)", async () => {
-    adapterListMock.mockResolvedValueOnce({
-      rows: [{ id: "c1", name: "Acme" }],
-      total: 1,
-    });
+describe("customerService — VPS API client", () => {
+  it("list (no search) → GET /api/customers with paging params", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(
+      mockVpsOk({ rows: [{ id: "c1", name: "Acme" }], total: 1 }),
+    );
 
     const result = await customerService.list("dealer-1", "", "", 1);
 
-    expect(adapterListMock).toHaveBeenCalledTimes(1);
-    expect(adapterListMock).toHaveBeenCalledWith({
-      dealerId: "dealer-1",
-      page: 0, // 1-indexed UI → 0-indexed adapter
-      pageSize: 25,
-      orderBy: { column: "name", direction: "asc" },
-      filters: undefined,
-    });
-
-    // Legacy response shape preserved
+    expect(vpsAuthedFetchMock).toHaveBeenCalledTimes(1);
+    const [url] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toContain("/api/customers?");
+    expect(url).toContain("dealerId=dealer-1");
+    expect(url).toContain("page=0");
+    expect(url).toContain("pageSize=25");
+    expect(url).toContain("orderBy=name");
+    expect(url).not.toContain("search=");
     expect(result).toEqual({ data: [{ id: "c1", name: "Acme" }], total: 1 });
-
-    // Supabase direct path was NOT used
-    expect(supabaseFromMock).not.toHaveBeenCalled();
   });
 
-  it("typeFilter → forwarded as adapter equality filter", async () => {
-    adapterListMock.mockResolvedValueOnce({ rows: [], total: 0 });
+  it("typeFilter → forwarded as f.type query param", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockVpsOk({ rows: [], total: 0 }));
 
     await customerService.list("dealer-1", "", "retailer", 1);
 
-    expect(adapterListMock).toHaveBeenCalledWith({
-      dealerId: "dealer-1",
-      page: 0,
-      pageSize: 25,
-      orderBy: { column: "name", direction: "asc" },
-      filters: { type: "retailer" },
-    });
+    const [url] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toContain("f.type=retailer");
   });
 
-  it("search list → bypasses adapter, uses legacy Supabase OR-ilike path", async () => {
-    supabaseRangeMock.mockResolvedValueOnce({
-      data: [{ id: "c2", name: "Beta" }],
-      error: null,
-      count: 1,
-    });
+  it("search list → includes search query param", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(
+      mockVpsOk({ rows: [{ id: "c2", name: "Beta" }], total: 1 }),
+    );
 
     const result = await customerService.list("dealer-1", "bet", "", 2);
 
-    expect(adapterListMock).not.toHaveBeenCalled();
-    expect(supabaseFromMock).toHaveBeenCalledWith("customers");
-    expect(supabaseEqMock).toHaveBeenCalledWith("dealer_id", "dealer-1");
-    expect(supabaseOrMock).toHaveBeenCalledWith(
-      "name.ilike.%bet%,phone.ilike.%bet%,reference_name.ilike.%bet%",
-    );
-    // page 2 → from=25, to=49
-    expect(supabaseRangeMock).toHaveBeenCalledWith(25, 49);
+    const [url] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toContain("search=bet");
+    expect(url).toContain("page=1"); // UI page 2 → 0-indexed page 1
     expect(result).toEqual({ data: [{ id: "c2", name: "Beta" }], total: 1 });
   });
 
-  it("propagates adapter errors from list (no silent swallow on primary)", async () => {
-    adapterListMock.mockRejectedValueOnce(new Error("network down"));
+  it("propagates API errors from list", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockVpsErr("network down", 503));
+
     await expect(customerService.list("dealer-1", "", "", 1)).rejects.toThrow(
       "network down",
     );

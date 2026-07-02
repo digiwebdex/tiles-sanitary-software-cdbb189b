@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { SIGNUP_TRIAL_DAYS } from "@/lib/trialConstants";
 import { useCmsContent } from "@/hooks/useCmsContent";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -437,6 +438,23 @@ const PRICING_PLANS = [
       "Dedicated account manager",
     ],
   },
+  {
+    name: "Premium Custom",
+    highlighted: false,
+    isPremium: true,
+    monthlyPrice: 5000,
+    yearlyPrice: 50000,
+    features: [
+      "Everything in Business",
+      "Unlimited users & branches",
+      "Unlimited warehouses",
+      "All modules unlocked",
+      "Custom feature config per dealer",
+      "WhatsApp + SMS + Email",
+      "HRM & advanced finance",
+      "Dedicated account manager",
+    ],
+  },
 ];
 
 const PricingSection = ({ cms }: { cms: typeof DEFAULTS.pricing & { extra_json: any } }) => {
@@ -465,23 +483,31 @@ const PricingSection = ({ cms }: { cms: typeof DEFAULTS.pricing & { extra_json: 
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch max-w-7xl mx-auto">
           {PRICING_PLANS.map((plan, i) => {
             const isTrial = (plan as any).isTrial;
+            const isPremium = (plan as any).isPremium;
             const price = isTrial ? 0 : (yearly ? plan.yearlyPrice : plan.monthlyPrice);
             const period = isTrial ? "" : (yearly ? "/year" : "/month");
             return (
               <div
                 key={i}
                 className={`relative rounded-2xl border-2 p-8 flex flex-col gap-6 transition-all ${
-                  plan.highlighted
+                  isPremium
+                    ? "border-amber-500/60 bg-gradient-to-b from-amber-500/10 to-orange-600/5 shadow-2xl shadow-amber-500/10"
+                    : plan.highlighted
                     ? "border-orange-500 bg-gradient-to-b from-orange-500/10 to-orange-600/5 shadow-2xl shadow-orange-500/10 scale-[1.02]"
                     : isTrial
                       ? "border-emerald-500/30 bg-gradient-to-b from-emerald-500/5 to-emerald-600/[0.02]"
                       : "border-white/10 bg-white/[0.03]"
                 }`}
               >
-                {plan.highlighted && (
+                {isPremium && (
+                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs px-4 py-1 font-bold shadow-lg border-0">
+                    <Sparkles className="h-3 w-3 mr-1" /> All Inclusive
+                  </Badge>
+                )}
+                {plan.highlighted && !isPremium && (
                   <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xs px-4 py-1 font-bold shadow-lg border-0">
                     <Zap className="h-3 w-3 mr-1" /> Most Popular
                   </Badge>
@@ -493,7 +519,7 @@ const PricingSection = ({ cms }: { cms: typeof DEFAULTS.pricing & { extra_json: 
                 )}
                 <div>
                   <p className={`text-sm font-semibold mb-2 ${
-                    plan.highlighted ? "text-orange-400" : isTrial ? "text-emerald-400" : "text-gray-500"
+                    isPremium ? "text-amber-400" : plan.highlighted ? "text-orange-400" : isTrial ? "text-emerald-400" : "text-gray-500"
                   }`}>{plan.name}</p>
                   <div className="flex items-end gap-1 mb-1">
                     {isTrial ? (
@@ -507,7 +533,7 @@ const PricingSection = ({ cms }: { cms: typeof DEFAULTS.pricing & { extra_json: 
                     )}
                   </div>
                   {isTrial ? (
-                    <p className="text-xs mt-2 text-emerald-400/70 font-medium">3 days • No payment required</p>
+                    <p className="text-xs mt-2 text-emerald-400/70 font-medium">{SIGNUP_TRIAL_DAYS} days • No payment required</p>
                   ) : yearly ? (
                     <Badge className="mt-2 text-[10px] px-2 py-0.5 gap-1 bg-gradient-to-r from-amber-500 to-orange-600 text-white border-0">
                       <Sparkles className="h-3 w-3" /> Save 2 months
@@ -522,21 +548,23 @@ const PricingSection = ({ cms }: { cms: typeof DEFAULTS.pricing & { extra_json: 
                   {plan.features.map((feat, fi) => (
                     <li key={fi} className="flex items-start gap-2.5 text-sm">
                       <CheckCircle2 className={`h-4 w-4 mt-0.5 shrink-0 ${
-                        plan.highlighted ? "text-orange-400" : isTrial ? "text-emerald-400" : "text-orange-500/60"
+                        isPremium ? "text-amber-400" : plan.highlighted ? "text-orange-400" : isTrial ? "text-emerald-400" : "text-orange-500/60"
                       }`} />
                       <span className="text-gray-300">{feat}</span>
                     </li>
                   ))}
                 </ul>
-                <Link to="/get-started">
+                <Link to={isPremium ? "/contact" : "/get-started"}>
                   <Button className={`w-full h-12 rounded-xl font-semibold text-base border-0 ${
-                    plan.highlighted
+                    isPremium
+                      ? "bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white shadow-lg shadow-amber-500/20"
+                      : plan.highlighted
                       ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/20"
                       : isTrial
                         ? "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/20"
                         : "bg-white/10 hover:bg-white/15 text-white"
                   }`}>
-                    {isTrial ? "Start 3-Day Trial" : "Start Free Trial"}
+                    {isTrial ? `Start ${SIGNUP_TRIAL_DAYS}-Day Trial` : isPremium ? "Contact Sales" : "Start Free Trial"}
                   </Button>
                 </Link>
               </div>
@@ -681,6 +709,17 @@ const LandingPage = () => {
   const features = { ...DEFAULTS.features, ...(sections?.features ?? {}), extra_json: { ...DEFAULTS.features.extra_json, ...(sections?.features?.extra_json ?? {}) } };
   const pricing  = { ...DEFAULTS.pricing,  ...(sections?.pricing  ?? {}), extra_json: { ...DEFAULTS.pricing.extra_json,  ...(sections?.pricing?.extra_json  ?? {}) } };
   const footer   = { ...DEFAULTS.footer,   ...(sections?.footer   ?? {}), extra_json: { ...DEFAULTS.footer.extra_json,   ...(sections?.footer?.extra_json   ?? {}) } };
+
+  // Scroll to anchor hash after page (and CMS content) has loaded
+  useEffect(() => {
+    if (isLoading) return;
+    const hash = window.location.hash;
+    if (!hash) return;
+    const el = document.querySelector(hash);
+    if (el) {
+      setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+    }
+  }, [isLoading]);
 
   if (isLoading) return (
     <div className="min-h-screen bg-[#0d1117]">

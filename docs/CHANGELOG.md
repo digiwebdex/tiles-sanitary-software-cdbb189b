@@ -4,6 +4,19 @@
 
 ---
 
+## [2026-06-25] — 7-day trial + master plan organogram
+
+### Added
+- **Day 5 trial reminder cron** — SMS + email when 2 days remain (`npm run cron:trial-day5`).
+- **Day 7 trial reminder cron** — SMS + email when trial ends today (`npm run cron:trial-day7`, `npm run cron:trial-reminders`).
+- In-app banners on Subscription page (2 days left + last day).
+
+### Changed
+- **Trial period extended from 3 → 7 days** — signup provisioning (`authService.register`), Free Trial plan (migration `069`), marketing pages, email/SMS copy.
+- Added **`docs/MASTER_PLAN_ORGANOGRAM.md`** — signup → onboarding → renewal playbook with team roles, timeline, and WhatsApp scripts.
+
+---
+
 ## [2026-06-11] — User Guide refresh (বাংলা A–Z)
 
 ### Changed
@@ -227,7 +240,7 @@
 ## [2026-04-09] — Subscription Lifecycle & Access Control
 
 ### Added
-- **Subscription lifecycle**: Trial (3d) → Active → Expiring Soon (≤7d) → Grace (3d) → Expired → Blocked
+- **Subscription lifecycle**: Trial (7d) → Active → Expiring Soon (≤7d) → Grace (3d) → Expired → Blocked
 - **Access levels**: full, grace, readonly, blocked
 - **Subscription guard hook** (`useSubscriptionGuard`) — blocks writes when expired
 - **Subscription blocked page** (`/subscription-blocked`)

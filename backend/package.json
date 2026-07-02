@@ -10,10 +10,19 @@
     "migrate:rollback": "knex migrate:rollback --knexfile src/db/knexfile.ts",
     "migrate:make": "knex migrate:make --knexfile src/db/knexfile.ts",
     "seed": "knex seed:run --knexfile src/db/knexfile.ts",
-    "db:doctor": "tsx src/scripts/dbDoctor.ts"
+    "db:doctor": "tsx src/scripts/dbDoctor.ts",
+    "cron:trial-day5": "tsx src/scripts/sendTrialDay5Reminders.ts",
+    "cron:trial-day7": "tsx src/scripts/sendTrialDay7Reminders.ts",
+    "cron:trial-reminders": "tsx src/scripts/sendTrialReminders.ts",
+    "cron:expiry-reminders": "tsx src/scripts/sendExpiryReminders.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cron:daily-summary": "tsx src/scripts/sendDailySummary.ts"
   },
   "dependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/multer": "^2.1.0",
+    "archiver": "^8.0.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -25,6 +34,8 @@
     "multer": "^2.1.1",
     "nodemailer": "^8.0.6",
     "pg": "^8.13.0",
+    "qrcode": "^1.5.4",
+    "speakeasy": "^2.0.0",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
   },
@@ -35,8 +46,11 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.0.0",
     "@types/nodemailer": "^8.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/speakeasy": "^2.0.10",
     "@types/uuid": "^10.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.6"
   }
 }

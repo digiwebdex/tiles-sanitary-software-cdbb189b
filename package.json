@@ -43,6 +43,7 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "@supabase/supabase-js": "^2.97.0",
     "@tanstack/react-query": "^5.83.0",
+    "@types/qrcode": "^1.5.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -52,6 +53,7 @@
     "jsbarcode": "^3.11.6",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -64,7 +66,7 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
-    "xlsx": "^0.18.5",
+    "write-excel-file": "^2.3.10",
     "zod": "^3.25.76"
   },
   "devDependencies": {

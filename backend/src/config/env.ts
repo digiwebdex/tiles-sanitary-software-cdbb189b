@@ -20,6 +20,10 @@ const envSchema = z.object({
   BULKSMSBD_API_KEY: z.string().optional(),
   BULKSMSBD_API_URL: z.string().optional(),
   BULKSMSBD_SENDER_ID: z.string().optional(),
+  // WhatsApp via WasenderAPI (https://wasenderapi.com). Token is a per-session
+  // Bearer secret — keep it in .env, never in source.
+  WASENDER_API_URL: z.string().optional(),
+  WASENDER_API_TOKEN: z.string().optional(),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PHONE: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
@@ -32,6 +36,8 @@ const envSchema = z.object({
   RESTORE_TOKEN_SECRET: z.string().min(16).optional(),
   /** Phase 2: mirror legacy posts into posting_batches/lines (default off). */
   USE_POSTING_ENGINE: z.string().optional(),
+  /** Phase 6: mirror posting_batches into GL journal (requires USE_POSTING_ENGINE). */
+  USE_GL_SPINE: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

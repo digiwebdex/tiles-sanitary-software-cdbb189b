@@ -1,6 +1,10 @@
 # TilesERP — Developer Documentation (A to Z)
 
-> **Version:** 1.0 | **Last Updated:** 2026-04-14 | **Domain:** tserp.digiwebdex.com
+> **Version:** 2.0 | **Last Updated:** 2026-06-23 | **Domain:** app.sanitileserp.com
+
+> **Architecture note (2026):** Production dealer app uses the **VPS Express API + PostgreSQL**.
+> Supabase is retained for the customer portal and legacy edge functions until Phase 6.
+> See `docs/DATA_PATH.md` for the authoritative data-path decision.
 
 ---
 
@@ -54,30 +58,24 @@ TilesERP is a multi-tenant SaaS ERP system built for **Tiles & Sanitary** dealer
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   Nginx (SSL)                        │
-│           tserp.digiwebdex.com:443                  │
+│         app.sanitileserp.com:443                    │
 ├──────────────┬──────────────────────────────────────┤
 │  Static SPA  │        /api/* proxy                  │
 │  dist/       │        → localhost:3003              │
 ├──────────────┴──────────────────────────────────────┤
-│                                                      │
-│  Frontend (React/Vite)    Backend (Express/Node)     │
-│  ├─ Supabase Client       ├─ Port 3003 (PM2)        │
-│  ├─ TanStack Query        ├─ JWT Auth               │
-│  └─ React Router          ├─ Knex ORM               │
-│                            └─ PostgreSQL:5440        │
-│                                                      │
-│  Supabase Cloud (Lovable Cloud)                     │
-│  ├─ Auth (primary auth)                             │
-│  ├─ Database (primary data)                         │
-│  ├─ Edge Functions                                  │
-│  ├─ RLS Policies                                    │
-│  └─ Realtime                                        │
+│              Express API (Node 20)                   │
+│              Knex + PostgreSQL (tileserp)            │
 └─────────────────────────────────────────────────────┘
+
+Portal (portal.sanitileserp.com) → Supabase Auth + mixed reads (Phase 6 migration)
 ```
 
-**Dual Backend:**
-- **Supabase (Lovable Cloud):** Primary auth, database, RLS, edge functions
-- **Express Backend (VPS):** Health check, supplementary auth routes, future expansion
+**Production stack:**
+- **VPS Express API:** Primary auth, all dealer-app reads/writes, reports, posting engine
+- **PostgreSQL (local):** Authoritative database for dealer data (Knex migrations)
+- **Supabase Cloud:** Customer portal auth, legacy edge functions (Phase 6 decommission planned)
+
+See `docs/DATA_PATH.md` for the full data-path matrix.
 
 ---
 
@@ -454,7 +452,7 @@ Every tenant-scoped table follows:
 
 ### Lifecycle
 ```
-Registration → Trial (3 days) → Active → Expiring Soon (≤7 days) → Grace (3 days) → Expired → Suspended
+Registration → Trial (7 days) → Active → Expiring Soon (≤7 days) → Grace (3 days) → Expired → Suspended
 ```
 
 ### Payment Recording

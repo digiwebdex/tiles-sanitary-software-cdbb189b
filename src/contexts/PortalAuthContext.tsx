@@ -1,16 +1,14 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Session, User } from "@supabase/supabase-js";
 import {
   bindAuthUser,
   getPortalContext,
   touchLastLogin,
   type PortalContext,
 } from "@/services/portalService";
+import { portalAuthBridge, type PortalSessionUser } from "@/lib/portalAuthBridge";
 
 interface PortalAuthValue {
-  user: User | null;
-  session: Session | null;
+  user: PortalSessionUser | null;
   context: PortalContext | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -25,14 +23,12 @@ export function usePortalAuth() {
 }
 
 export function PortalAuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<PortalSessionUser | null>(null);
   const [context, setContext] = useState<PortalContext | null>(null);
   const [loading, setLoading] = useState(true);
   const initRef = useRef(true);
 
   async function loadContext() {
-    // Bind auth user → portal_users row by email (idempotent)
     await bindAuthUser();
     await touchLastLogin();
     const ctx = await getPortalContext();
@@ -42,13 +38,18 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    const bootstrap = async (sessionUser: PortalSessionUser | null) => {
+      setUser(sessionUser);
+      if (sessionUser) {
+        await loadContext();
+      } else {
+        setContext(null);
+      }
+    };
+
     const init = async () => {
       try {
-        const { data: { session: s } } = await supabase.auth.getSession();
-        if (!mounted) return;
-        setSession(s);
-        setUser(s?.user ?? null);
-        if (s?.user) await loadContext();
+        await bootstrap(portalAuthBridge.getSessionUser());
       } finally {
         if (mounted) {
           initRef.current = false;
@@ -56,46 +57,36 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
         }
       }
     };
-    init();
+    void init();
 
-    const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
-        if (!mounted) return;
-        if (initRef.current) return;
-        setLoading(true);
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        if (newSession?.user) {
-          setTimeout(async () => {
-            if (!mounted) return;
-            try {
-              await loadContext();
-            } finally {
-              if (mounted) setLoading(false);
-            }
-          }, 0);
-        } else {
-          setContext(null);
-          setLoading(false);
+    const unsubscribe = portalAuthBridge.onAuthStateChange(() => {
+      if (!mounted) return;
+      if (initRef.current) return;
+      setLoading(true);
+      const sessionUser = portalAuthBridge.getSessionUser();
+      void (async () => {
+        try {
+          await bootstrap(sessionUser);
+        } finally {
+          if (mounted) setLoading(false);
         }
-      }
-    );
+      })();
+    });
 
     return () => {
       mounted = false;
-      sub.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await portalAuthBridge.signOut();
     setUser(null);
-    setSession(null);
     setContext(null);
   };
 
   return (
-    <Ctx.Provider value={{ user, session, context, loading, signOut }}>
+    <Ctx.Provider value={{ user, context, loading, signOut }}>
       {children}
     </Ctx.Provider>
   );

@@ -22,9 +22,12 @@ import {
   getLedgerHistory,
   getOutstandingSummary,
   getRecentPayments,
+  listMyPortalPaymentRequests,
 } from "@/services/portalService";
 import { PortalListSkeleton } from "./PortalLayout";
-import { Wallet } from "lucide-react";
+import { Wallet, BellPlus } from "lucide-react";
+import PortalPaymentRequestDialog from "./PortalPaymentRequestDialog";
+import { paymentModeLabel } from "@/lib/paymentModes";
 
 const fmtBDT = (n: number | null | undefined) =>
   `৳${Number(n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -33,6 +36,7 @@ type FilterType = "all" | "sale" | "payment" | "return" | "adjustment";
 
 export default function PortalLedgerPage() {
   const [filter, setFilter] = useState<FilterType>("all");
+  const [payOpen, setPayOpen] = useState(false);
 
   const summaryQ = useQuery({
     queryKey: ["portal", "outstanding"],
@@ -45,6 +49,10 @@ export default function PortalLedgerPage() {
   const historyQ = useQuery({
     queryKey: ["portal", "ledger-history", 50],
     queryFn: () => getLedgerHistory(50),
+  });
+  const paymentReqQ = useQuery({
+    queryKey: ["portal", "payment-requests"],
+    queryFn: listMyPortalPaymentRequests,
   });
 
   const filteredHistory = useMemo(() => {
@@ -60,9 +68,17 @@ export default function PortalLedgerPage() {
       {/* Outstanding header */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Wallet className="h-4 w-4 text-primary" /> Outstanding balance
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wallet className="h-4 w-4 text-primary" /> Outstanding balance
+            </CardTitle>
+            {outstanding > 0 && (
+              <Button size="sm" onClick={() => setPayOpen(true)}>
+                <BellPlus className="h-4 w-4 mr-1.5" />
+                Notify payment
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
           <Stat
@@ -85,6 +101,55 @@ export default function PortalLedgerPage() {
                 : undefined
             }
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">My payment notifications</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => setPayOpen(true)}>
+              New notification
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {paymentReqQ.isLoading ? (
+            <PortalListSkeleton />
+          ) : (paymentReqQ.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No payment notifications yet. After you pay via bKash or bank, notify your dealer here.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paymentReqQ.data!.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{r.created_at?.slice(0, 10) ?? "—"}</TableCell>
+                      <TableCell className="font-medium">{fmtBDT(r.amount)}</TableCell>
+                      <TableCell>{paymentModeLabel(r.payment_mode)}</TableCell>
+                      <TableCell className="font-mono text-xs">{r.reference_no ?? "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={r.status === "approved" || r.status === "applied" ? "default" : "secondary"}>
+                          {r.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -199,6 +264,12 @@ export default function PortalLedgerPage() {
           )}
         </CardContent>
       </Card>
+
+      <PortalPaymentRequestDialog
+        open={payOpen}
+        onOpenChange={setPayOpen}
+        suggestedAmount={outstanding > 0 ? outstanding : null}
+      />
     </div>
   );
 }

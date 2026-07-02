@@ -48,6 +48,10 @@ import {
   sumSupplierPayable,
 } from '../services/reportQueryService';
 import { detectCogsDataQualityWarnings } from '../lib/pnlMath';
+import {
+  buildFinancialsTrialBalanceFromGl,
+  shouldUseGlTrialBalance,
+} from '../services/gl/glFinancialsBridge';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -341,6 +345,14 @@ router.get('/trial-balance', async (req, res) => {
   if (!requireAdmin(req, res)) return;
 
   const asOf = (req.query.asOf as string | undefined) || null;
+  const source = (req.query.source as string | undefined) || 'auto';
+
+  if (await shouldUseGlTrialBalance(dealerId, source)) {
+    const payload = await buildFinancialsTrialBalanceFromGl(dealerId, asOf);
+    res.json(payload);
+    return;
+  }
+
   const accounts: { account: string; debit: number; credit: number }[] = [];
   const push = (account: string, value: number) => {
     if (Math.abs(value) < 0.005) return;
@@ -527,6 +539,7 @@ router.get('/trial-balance', async (req, res) => {
     total_debit,
     total_credit,
     difference: +(total_debit - total_credit).toFixed(2),
+    data_source: 'legacy_subledgers',
     // ── Phase 1 transparency fields (additive, optional) ──
     warnings,
   });

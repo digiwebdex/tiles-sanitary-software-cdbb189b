@@ -7,13 +7,16 @@ import { useDealerId } from "@/hooks/useDealerId";
 import { PendingApprovalsBadge } from "@/components/approval/PendingApprovalsBadge";
 import SAImpersonationBanner from "@/components/SAImpersonationBanner";
 import { DemoBanner } from "@/components/DemoBanner";
+import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { AppHeader } from "@/components/AppHeader";
 import { SidebarNav } from "@/components/SidebarNav";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCurrentSubscription } from "@/services/dealerSubscriptionService";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
-  const { profile, accessLevel, isSuperAdmin, isDealerAdmin, signOut } = useAuth();
+  const { profile, accessLevel, isSuperAdmin, isSaEmployee, isDealerAdmin, menuMode, planFeatures, signOut } = useAuth();
+  const { isManager, isAccountant, isSalesman } = usePermissions();
   const { data: currentSub } = useQuery({
     queryKey: ["current-subscription-badge"],
     queryFn: fetchCurrentSubscription,
@@ -52,6 +55,12 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           isReadonly={isReadonly}
           isDealerAdmin={isDealerAdmin}
           isSuperAdmin={isSuperAdmin}
+          isSaEmployee={isSaEmployee}
+          isManager={isManager}
+          isAccountant={isAccountant}
+          isSalesman={isSalesman}
+          menuMode={menuMode}
+          planFeatures={planFeatures}
         />
 
         <div className="mt-auto space-y-2 pt-4 border-t">
@@ -92,11 +101,18 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           isReadonly={isReadonly}
           isDealerAdmin={isDealerAdmin}
           isSuperAdmin={isSuperAdmin}
+          isSaEmployee={isSaEmployee}
+          isManager={isManager}
+          isAccountant={isAccountant}
+          isSalesman={isSalesman}
+          menuMode={menuMode}
+          planFeatures={planFeatures}
         />
 
         <AppHeader />
         <SAImpersonationBanner />
         <DemoBanner />
+        <AnnouncementBanner />
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>

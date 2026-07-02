@@ -4,17 +4,19 @@
 
 ## Authentication
 
-### Supabase Auth (Primary)
-- Email/password authentication
-- JWT with auto-refresh
-- Session persisted in localStorage
-- Email verification required (no auto-confirm)
+### VPS JWT (Production — dealer app)
+- Email/password via `POST /api/auth/login`
+- 15-minute access tokens, 7-day refresh tokens with rotation
+- bcryptjs password hashing (12 rounds)
+- Tokens stored in localStorage on the SPA (see hardening backlog)
+- Login lockout: 3 failures / 30 minutes (`login_attempts` table)
 
-### Backend JWT (Secondary)
-- 15-minute access tokens
-- 7-day refresh tokens
-- bcryptjs password hashing
-- Refresh token rotation
+### Supabase Auth (Customer portal — until Phase 6)
+- `portal.sanitileserp.com` still uses Supabase Auth
+- VPS portal foundation: migration 066 + `/api/portal/context` (see `docs/PHASE6_PORTAL_MIGRATION.md`)
+
+### Legacy note
+The dealer app no longer uses Supabase as primary auth. See `docs/DATA_PATH.md`.
 
 ### Login Protection
 - Rate limiting: 20 attempts per 15 minutes

@@ -1,6 +1,6 @@
 # TilesERP — Complete Task List & Status
 
-> **Last updated:** 2026-06-09  
+> **Last updated:** 2026-06-23  
 > **Production VPS:** `/var/www/tilessaas` · deploy after merge to `main`  
 > **Domain:** https://app.sanitileserp.com  
 > **Baseline docs:** `PHASED_IMPLEMENTATION_BACKLOG.md`, `RESTRUCTURE_BLUEPRINT.md`
@@ -16,7 +16,7 @@
 | Phase 0 — Consolidation | ✅ Complete |
 | Phase 1 — Report trust | ✅ Complete (P1-08 doc refresh) |
 | Phase 2 — Posting engine MVP | ✅ Complete |
-| Phase 3 — Returns & inventory truth | 🟡 Mostly done (P3-03 sale due/paid sync ✅) |
+| Phase 3 — Returns & inventory truth | ✅ Complete (P3-04 batch deduct, P3-08 stock table) |
 | Phase 4 — Read models & reports | ✅ Complete (Tier A balance cutover; Tier B period metrics OK) |
 | Phase 5 — VAT / Mushak | ✅ Complete (P5-01–06) |
 | Phase 6 — GL & portal | ⬜ Future |
@@ -84,14 +84,14 @@
 | P3-01 | Sales return batch restoration UI + API | ✅ | Sales return wizard (Phase 7) |
 | P3-02 | COGS reversal on sales return | ✅ | Migration 059 |
 | P3-03 | Sync sale due/paid on return | ✅ | `returns.ts` updates `due_amount` / `paid_amount` |
-| P3-04 | Purchase return batch deduct | 🟡 | `purchaseReturnStock.ts` |
+| P3-04 | Purchase return batch deduct | ✅ | `purchaseReturnStock.ts` + unit tests |
 | P3-05 | `stock_movements` + engine writes | ✅ | Migration 060 |
 | P3-06 | Warehouse transfer stock posting | ✅ | `warehouseTransferStock.ts` |
 | P3-07 | `warehouse_stock` + backfill | ✅ | Migration 061 |
-| P3-08 | Migrate off `products.current_stock` display | 🟡 | Products page uses `stock` table via stock-map |
+| P3-08 | Migrate off `products.current_stock` display | ✅ | `sellableStockAdjust.ts` for display/sample |
 | P3-09 | GRN document (optional) | ⬜ | Optional |
 
-**Exit criteria:** Returns restore batch; warehouse moves qty — 🟡 Mostly met
+**Exit criteria:** Returns restore batch; warehouse moves qty — ✅
 
 ---
 
@@ -128,10 +128,10 @@
 
 | ID | Task | Status |
 |----|------|--------|
-| P6-01 | `gl_postings` spine | ⬜ |
-| P6-02 | Financials from GL | ⬜ |
-| P6-03 | Portal reads VPS API | ⬜ |
-| P6-04 | Portal payment requests | ⬜ |
+| P6-01 | `gl_postings` spine | 🟡 | Migration 068 + chart + journal mirror behind `USE_GL_SPINE` |
+| P6-02 | Financials from GL | 🟡 | Trial balance auto-switches to GL; P&L/BS still legacy |
+| P6-03 | Portal reads VPS API | ✅ | Migration 066 + full `/api/portal/*` + dual-path frontend |
+| P6-04 | Portal payment requests | ✅ | Migration 067 + notify-payment workflow |
 
 ---
 

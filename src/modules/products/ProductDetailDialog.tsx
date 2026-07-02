@@ -33,7 +33,7 @@ interface ProductDetailDialogProps {
   quantity: number;
   showCost?: boolean;
   onEdit: () => void;
-  onPrintBarcode: () => void;
+  onPrintBarcode?: () => void;
   onPurchase?: () => void;
 }
 
@@ -157,9 +157,11 @@ const ProductDetailDialog = ({
          </div>
 
         <div className="flex gap-2 pt-2">
-          <Button variant="outline" className="flex-1" onClick={onPrintBarcode}>
-            <Barcode className="mr-2 h-4 w-4" /> Barcode
-          </Button>
+          {onPrintBarcode && (
+            <Button variant="outline" className="flex-1" onClick={onPrintBarcode}>
+              <Barcode className="mr-2 h-4 w-4" /> Barcode
+            </Button>
+          )}
           {onPurchase && (
             <Button variant="outline" className="flex-1" onClick={onPurchase}>
               <ShoppingCart className="mr-2 h-4 w-4" /> Purchase

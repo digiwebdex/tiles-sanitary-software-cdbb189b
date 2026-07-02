@@ -74,14 +74,14 @@ export async function up(knex: Knex): Promise<void> {
       email_enabled: true,
       daily_summary_enabled: false,
       is_trial: true,
-      trial_days: 3,
+      trial_days: 7,
       sort_order: 1,
       features: JSON.stringify([
         '1 user only',
         'Basic inventory',
         'Sales & purchase entry',
         'Customer ledger',
-        '3 days access',
+        '7 days access',
       ]),
     },
     {

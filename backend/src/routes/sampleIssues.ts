@@ -13,6 +13,7 @@ import { Knex } from 'knex';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { adjustSellableStock } from '../services/sellableStockAdjust';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -88,18 +89,20 @@ async function adjustProductStock(
   productId: string,
   quantity: number,
   type: 'add' | 'deduct',
+  txnType: string,
+  userId: string | null,
+  referenceId?: string | null,
 ) {
-  const product = await trx('products')
-    .where({ id: productId, dealer_id: dealerId })
-    .forUpdate()
-    .first('id', 'current_stock');
-  if (!product) throw new Error('Product not found');
-  const cur = Number(product.current_stock) || 0;
-  const next = type === 'add' ? cur + quantity : cur - quantity;
-  if (next < 0) throw new Error(`Insufficient stock (have ${cur}, need ${quantity})`);
-  await trx('products')
-    .where({ id: productId, dealer_id: dealerId })
-    .update({ current_stock: next, updated_at: trx.fn.now() });
+  await adjustSellableStock(trx, {
+    dealerId,
+    productId,
+    quantity,
+    type,
+    userId,
+    txnType,
+    referenceTable: 'sample_issues',
+    referenceId: referenceId ?? null,
+  });
 }
 
 async function fetchSampleWithJoins(trx: Knex.Transaction | Knex, id: string) {
@@ -181,7 +184,15 @@ router.post('/issue', async (req: Request, res: Response) => {
     }
     const input = parsed.data;
     const result = await db.transaction(async (trx) => {
-      await adjustProductStock(trx, dealerId, input.product_id, input.quantity, 'deduct');
+      await adjustProductStock(
+        trx,
+        dealerId,
+        input.product_id,
+        input.quantity,
+        'deduct',
+        'sample_issue',
+        req.user?.userId ?? null,
+      );
       const [row] = await trx('sample_issues')
         .insert({
           dealer_id: dealerId,
@@ -242,7 +253,16 @@ router.post('/:id/return', async (req: Request, res: Response) => {
         throw new Error(`Cannot return ${return_qty} — only ${remaining} outstanding`);
 
       if (return_to === 'sellable') {
-        await adjustProductStock(trx, dealerId, sample.product_id, return_qty, 'add');
+        await adjustProductStock(
+          trx,
+          dealerId,
+          sample.product_id,
+          return_qty,
+          'add',
+          'sample_return',
+          req.user?.userId ?? null,
+          sample.id,
+        );
       } else if (return_to === 'display') {
         const dRow = await trx('display_stock')
           .where({ dealer_id: dealerId, product_id: sample.product_id })

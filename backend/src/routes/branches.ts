@@ -31,6 +31,27 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
+
+  // Enforce per-plan branch limit
+  const sub = await db('subscriptions as s')
+    .leftJoin('plans as p', 'p.id', 's.plan_id')
+    .where({ 's.dealer_id': dealerId })
+    .orderBy('s.start_date', 'desc')
+    .select('p.max_branches')
+    .first();
+  const maxBranches: number = sub?.max_branches ?? 1;
+  const currentCount: number = await db('branches')
+    .where({ dealer_id: dealerId })
+    .count('id as cnt')
+    .then((r: any[]) => Number(r[0]?.cnt ?? 0));
+  if (currentCount >= maxBranches) {
+    return res.status(403).json({
+      error: `Your plan allows a maximum of ${maxBranches} branch(es). Please upgrade to add more.`,
+      code: 'PLAN_LIMIT_BRANCHES',
+      limit: maxBranches,
+    });
+  }
+
   try {
     const [row] = await db('branches')
       .insert({ ...parsed.data, dealer_id: dealerId, created_by: req.user!.userId })

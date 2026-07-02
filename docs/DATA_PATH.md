@@ -1,52 +1,53 @@
 # Production Data Path — Source of Truth
 
-**Status:** locked as of P0 hardening sprint
-**Owner:** platform/architecture
+**Status:** VPS-primary as of Phase 3U cutover (2026)  
+**Owner:** platform/architecture  
+**Last updated:** 2026-06-23
 
 ## Decision
 
-The single production data path is **Supabase (Lovable Cloud)**.
+The production data path for **app.sanitileserp.com** is the **self-hosted VPS API**
+(`backend/`) backed by **PostgreSQL** on the same server.
 
-The VPS backend (`backend/`) is a parallel target running in **shadow mode only**.
-It receives mirrored reads for diff/parity checks and is NOT the authoritative
-source for any user-facing transaction in production today.
+Supabase remains in use for:
 
-This document removes the ambiguity flagged in `TilesERP_QA_Audit_v1.md` (C2/C3).
+- **Customer portal** auth (`portal.sanitileserp.com`)
+- **Legacy edge functions** (signup, notifications, backups) until Phase 6
+- **Historical SQL migrations** (`supabase/migrations/`) — not applied to VPS PG
 
 ## What this means in code
 
 | Concern | Production path | Notes |
 |---|---|---|
-| Authentication | **VPS** (`backend/src/routes/auth.ts`) — already migrated in Phase 1 | Issues JWT consumed by both UIs and VPS routes |
-| Reads (Customers, Suppliers, Products) | **Supabase primary**, VPS mirror via `dataClient` shadow mode | Diffs logged but never used |
-| Writes (all entities) | **Supabase only** | VPS write routes exist but the frontend MUST NOT call them |
-| Reports / KPIs / dashboards | **Supabase** | All RLS-protected views remain canonical |
-| Backups | **VPS-local + automated script** | Independent of data path; see `docs/BACKUP_RESTORE.md` |
+| Authentication (dealer app) | **VPS** (`/api/auth/*`) | JWT access + refresh; `AUTH_BACKEND=vps` on sanitileserp.com |
+| Customers, Suppliers | **VPS** (`customerService`, `supplierService`) | Phase 3U-17 cutover; no Supabase fallback |
+| Products | **VPS** via `dataClient` | `DATA_BACKENDS.PRODUCTS=vps` on sanitileserp.com |
+| Sales, purchases, ledger, reports, HRM | **VPS** (`/api/*`) | Atomic transactions in Express routes |
+| Challans, deliveries, returns | **VPS** | Stock/ledger side effects server-side |
+| Customer portal | **Supabase auth** + mixed reads | Phase 6 will migrate to VPS |
+| Backups | **VPS-local + Google Drive** | See `docs/BACKUP_RESTORE.md` |
+
+## `dataClient` shadow mode
+
+`src/lib/data/dataClient.ts` still supports per-resource `supabase` / `vps` / `shadow`
+toggles via `VITE_DATA_*` env vars. On production hosts, core resources are set to
+`vps` in `src/lib/env.ts` safety overrides.
+
+Shadow mode is for **parity verification during migration**, not for production reads.
 
 ## Hard rules (enforced going forward)
 
-1. **No new feature** may write through `dataClient` with `DATA_BACKENDS[*] = "vps"`
-   in production until an explicit migration plan exists for that resource.
-2. The default for every `DataResource` in `src/lib/env.ts` MUST stay `"supabase"`.
-3. `shadow` mode is allowed and is the only sanctioned way to exercise VPS read
-   parity. It must never short-circuit on errors — Supabase's response is the
-   one returned to the user.
-4. The VPS write routes (`POST/PATCH/DELETE` on `/api/products`, `/api/customers`,
-   `/api/suppliers`) are defense-in-depth implementations only. They are now
-   gated by `requireRole('dealer_admin')` so an accidental wiring does not
-   create a privilege-escalation vector.
-5. New backend routes for transactional modules (sales, POS, deliveries, returns,
-   ledger, reservations, approvals) are **not in scope**. Building any of them
-   requires lifting this lock first.
+1. **New dealer-app features** must read and write through VPS `/api/*` routes.
+2. Do not add new Supabase write paths for dealer-app entities.
+3. Portal-only features may continue using Supabase until Phase 6 ships.
+4. Backend routes must enforce `tenantGuard` + `requireRole` on every mutation.
+5. Financial mutations must route through `PostingOrchestrator` where applicable.
 
-## Rollback / migration plan (future, not now)
+## Remaining migration (Phase 6)
 
-A future "VPS cutover" sprint will:
+1. Portal auth → VPS JWT (unified session model)
+2. Portal reads → VPS API
+3. Decommission unused Supabase edge functions
+4. GL postings spine (`gl_postings` double-entry)
 
-1. Pick one resource at a time (start with `SUPPLIERS`, then `CUSTOMERS`).
-2. Run shadow for ≥ 7 production days with zero diffs.
-3. Add per-route `requireRole` + audit-log writes on the VPS path.
-4. Flip `DATA_BACKENDS[<resource>]` to `"vps"` in production env.
-5. Decommission the matching Supabase write path only after 30 days clean.
-
-Until that plan ships, this file is the source of truth: **Supabase wins**.
+Until Phase 6 completes, this file is the source of truth: **VPS wins for the dealer app**.

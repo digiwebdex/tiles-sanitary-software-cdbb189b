@@ -1,136 +1,79 @@
+/**
+ * challanService — VPS API client tests (Phase 3U-17 cutover).
+ *
+ * Business rules (stock reserve, status transitions) live in the backend;
+ * the client proxies to /api/challans and enforces dealer scope locally.
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ── Mock Supabase client ───────────────────────────────────
-const mockSelect = vi.fn();
-const mockInsert = vi.fn();
-const mockUpdate = vi.fn();
-const mockEq = vi.fn();
-const mockSingle = vi.fn();
-const mockOrder = vi.fn();
-
-function createChainMock() {
-  const chain: any = {
-    select: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    update: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue({ data: null, error: null }),
-    order: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-  };
-  return chain;
-}
-
-let fromChains: Record<string, ReturnType<typeof createChainMock>> = {};
-
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (table: string) => {
-      if (!fromChains[table]) fromChains[table] = createChainMock();
-      return fromChains[table];
-    },
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: "user-1" } },
-      }),
-    },
-  },
-}));
-
-// ── Mock dependencies ──────────────────────────────────────
-vi.mock("@/services/stockService", () => ({
-  stockService: {
-    reserveStock: vi.fn().mockResolvedValue(undefined),
-    unreserveStock: vi.fn().mockResolvedValue(undefined),
-    deductReservedStock: vi.fn().mockResolvedValue(undefined),
-  },
-}));
-
-vi.mock("@/services/ledgerService", () => ({
-  customerLedgerService: {
-    addEntry: vi.fn().mockResolvedValue(undefined),
-  },
-  cashLedgerService: {
-    addEntry: vi.fn().mockResolvedValue(undefined),
-  },
-}));
-
-vi.mock("@/services/auditService", () => ({
-  logAudit: vi.fn().mockResolvedValue(undefined),
-}));
-
 const mockAssertDealerId = vi.fn().mockResolvedValue(undefined);
+
 vi.mock("@/lib/tenancy", () => ({
-  assertDealerId: (...args: any[]) => mockAssertDealerId(...args),
+  assertDealerId: (...args: unknown[]) => mockAssertDealerId(...args),
 }));
 
 vi.mock("@/lib/rateLimit", () => ({
-  rateLimits: {
-    api: vi.fn(),
-  },
+  rateLimits: { api: vi.fn() },
+}));
+
+const { vpsAuthedFetchMock } = vi.hoisted(() => ({
+  vpsAuthedFetchMock: vi.fn(),
+}));
+
+vi.mock("@/lib/vpsAuthClient", () => ({
+  vpsAuthedFetch: (...args: unknown[]) => vpsAuthedFetchMock(...args),
+  vpsTokenStore: { user: null },
 }));
 
 import { challanService } from "@/services/challanService";
-import { stockService } from "@/services/stockService";
-import { customerLedgerService, cashLedgerService } from "@/services/ledgerService";
 
-// ── Tests ──────────────────────────────────────────────────
-describe("challanService", () => {
+function mockVpsOk(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  };
+}
+
+function mockVpsErr(error: string, status = 400) {
+  return {
+    ok: false,
+    status,
+    json: async () => ({ error }),
+  };
+}
+
+describe("challanService — VPS API client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fromChains = {};
+    mockAssertDealerId.mockResolvedValue(undefined);
+    vpsAuthedFetchMock.mockReset();
   });
 
   describe("dealer scope validation", () => {
-    it("create calls assertDealerId with the provided dealer_id", async () => {
-      // Setup: sale query returns a valid challan_mode sale
-      const saleChain = createChainMock();
-      saleChain.single.mockResolvedValue({
-        data: {
-          id: "sale-1",
-          sale_type: "challan_mode",
-          sale_status: "draft",
-          sale_items: [{ product_id: "p1", quantity: 5, products: { unit_type: "box_sft" } }],
-        },
-        error: null,
+    it("create calls assertDealerId before POST", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(
+        mockVpsOk({ id: "ch-1", challan_no: "CH-00001" }),
+      );
+
+      await challanService.create({
+        dealer_id: "dealer-1",
+        sale_id: "sale-1",
+        challan_date: "2026-01-01",
       });
-
-      const challanChain = createChainMock();
-      challanChain.single.mockResolvedValue({
-        data: { id: "ch-1", challan_no: "CH-00001" },
-        error: null,
-      });
-
-      // Count query for challan number generation
-      const countChain = createChainMock();
-      countChain.eq.mockReturnValue({
-        ...countChain,
-        select: vi.fn().mockResolvedValue({ count: 0, error: null }),
-      });
-
-      fromChains["sales"] = saleChain;
-      fromChains["challans"] = challanChain;
-
-      // Override from to handle count query
-      const origFrom = (await import("@/integrations/supabase/client")).supabase.from;
-
-      try {
-        await challanService.create({
-          dealer_id: "dealer-1",
-          sale_id: "sale-1",
-          challan_date: "2026-01-01",
-        });
-      } catch {
-        // May fail due to mock chain, but assertDealerId should have been called
-      }
 
       expect(mockAssertDealerId).toHaveBeenCalledWith("dealer-1");
+      expect(vpsAuthedFetchMock).toHaveBeenCalledWith(
+        "/api/challans",
+        expect.objectContaining({ method: "POST" }),
+      );
     });
 
     it("create rejects mismatched dealer_id", async () => {
       mockAssertDealerId.mockRejectedValueOnce(
-        new Error("Access denied: dealer_id mismatch. You cannot operate on another dealer's data.")
+        new Error(
+          "Access denied: dealer_id mismatch. You cannot operate on another dealer's data.",
+        ),
       );
 
       await expect(
@@ -138,190 +81,108 @@ describe("challanService", () => {
           dealer_id: "wrong-dealer",
           sale_id: "sale-1",
           challan_date: "2026-01-01",
-        })
+        }),
       ).rejects.toThrow("Access denied: dealer_id mismatch");
+      expect(vpsAuthedFetchMock).not.toHaveBeenCalled();
     });
 
-    it("markDelivered calls assertDealerId", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: { id: "ch-1", status: "pending", dealer_id: "dealer-1", sales: { id: "s1", sale_status: "challan_created" } },
-        error: null,
-      });
-      fromChains["challans"] = chain;
+    it("markDelivered calls assertDealerId and POST /deliver", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(mockVpsOk({ ok: true }));
 
-      try {
-        await challanService.markDelivered("ch-1", "dealer-1");
-      } catch {
-        // may fail on subsequent mock calls
-      }
+      await challanService.markDelivered("ch-1", "dealer-1");
 
       expect(mockAssertDealerId).toHaveBeenCalledWith("dealer-1");
+      expect(vpsAuthedFetchMock).toHaveBeenCalledWith(
+        "/api/challans/ch-1/deliver",
+        expect.objectContaining({ method: "POST" }),
+      );
     });
 
-    it("markDelivered rejects wrong dealer", async () => {
-      mockAssertDealerId.mockRejectedValueOnce(new Error("Access denied: dealer_id mismatch."));
+    it("convertToInvoice calls assertDealerId and POST convert endpoint", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(mockVpsOk({ ok: true }));
 
-      await expect(
-        challanService.markDelivered("ch-1", "wrong-dealer")
-      ).rejects.toThrow("Access denied");
-    });
-
-    it("convertToInvoice calls assertDealerId", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: {
-          id: "s1", sale_status: "delivered", customer_id: "c1",
-          total_amount: 1000, paid_amount: 500, sale_date: "2026-01-01",
-          invoice_number: "INV-00001",
-          sale_items: [], customers: { name: "Test" },
-        },
-        error: null,
-      });
-      fromChains["sales"] = chain;
-
-      try {
-        await challanService.convertToInvoice("s1", "dealer-1");
-      } catch {
-        // may fail on mock
-      }
+      await challanService.convertToInvoice("s1", "dealer-1");
 
       expect(mockAssertDealerId).toHaveBeenCalledWith("dealer-1");
+      expect(vpsAuthedFetchMock).toHaveBeenCalledWith(
+        "/api/challans/convert-invoice/s1",
+        expect.objectContaining({ method: "POST" }),
+      );
     });
 
-    it("cancelChallan calls assertDealerId", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: {
-          id: "ch-1", status: "pending", dealer_id: "dealer-1",
-          sales: { id: "s1", sale_items: [] },
-        },
-        error: null,
-      });
-      fromChains["challans"] = chain;
+    it("cancelChallan calls assertDealerId and POST /cancel", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(mockVpsOk({ ok: true }));
 
-      try {
-        await challanService.cancelChallan("ch-1", "dealer-1");
-      } catch {
-        // may fail on mock
-      }
+      await challanService.cancelChallan("ch-1", "dealer-1");
 
       expect(mockAssertDealerId).toHaveBeenCalledWith("dealer-1");
-    });
-
-    it("cancelChallan rejects wrong dealer", async () => {
-      mockAssertDealerId.mockRejectedValueOnce(new Error("Access denied: dealer_id mismatch."));
-
-      await expect(
-        challanService.cancelChallan("ch-1", "wrong-dealer")
-      ).rejects.toThrow("Access denied");
+      expect(vpsAuthedFetchMock).toHaveBeenCalledWith(
+        "/api/challans/ch-1/cancel",
+        expect.objectContaining({ method: "POST" }),
+      );
     });
   });
 
-  describe("status validation", () => {
-    it("create rejects non-challan_mode sale", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: { id: "s1", sale_type: "direct_invoice", sale_status: "invoiced", sale_items: [] },
-        error: null,
-      });
-      fromChains["sales"] = chain;
+  describe("API error propagation", () => {
+    it("create surfaces backend validation errors", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(
+        mockVpsErr("Sale is not in challan mode"),
+      );
 
       await expect(
         challanService.create({
           dealer_id: "dealer-1",
           sale_id: "s1",
           challan_date: "2026-01-01",
-        })
+        }),
       ).rejects.toThrow("Sale is not in challan mode");
     });
 
-    it("create rejects sale with non-draft status", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: { id: "s1", sale_type: "challan_mode", sale_status: "challan_created", sale_items: [] },
-        error: null,
-      });
-      fromChains["sales"] = chain;
+    it("markDelivered surfaces not-found errors", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(mockVpsErr("Challan not found", 404));
 
-      await expect(
-        challanService.create({
-          dealer_id: "dealer-1",
-          sale_id: "s1",
-          challan_date: "2026-01-01",
-        })
-      ).rejects.toThrow("Challan already created");
+      await expect(challanService.markDelivered("bad-id", "dealer-1")).rejects.toThrow(
+        "Challan not found",
+      );
     });
 
-    it("markDelivered rejects non-pending challan", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: { id: "ch-1", status: "delivered", dealer_id: "dealer-1" },
-        error: null,
-      });
-      fromChains["challans"] = chain;
+    it("convertToInvoice surfaces status errors", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(
+        mockVpsErr("Sale must be delivered or challan_created"),
+      );
 
-      await expect(
-        challanService.markDelivered("ch-1", "dealer-1")
-      ).rejects.toThrow("Challan is not pending");
+      await expect(challanService.convertToInvoice("s1", "dealer-1")).rejects.toThrow(
+        "Sale must be delivered or challan_created",
+      );
     });
 
-    it("convertToInvoice rejects non-delivered sale", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: { id: "s1", sale_status: "draft", sale_items: [], customers: {} },
-        error: null,
-      });
-      fromChains["sales"] = chain;
+    it("cancelChallan surfaces cancellation errors", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(
+        mockVpsErr("Cannot cancel this challan"),
+      );
 
-      await expect(
-        challanService.convertToInvoice("s1", "dealer-1")
-      ).rejects.toThrow("Sale must be delivered or challan_created");
-    });
-
-    it("cancelChallan rejects already cancelled challan", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({
-        data: { id: "ch-1", status: "cancelled", sales: { id: "s1", sale_items: [] } },
-        error: null,
-      });
-      fromChains["challans"] = chain;
-
-      await expect(
-        challanService.cancelChallan("ch-1", "dealer-1")
-      ).rejects.toThrow("Cannot cancel this challan");
+      await expect(challanService.cancelChallan("ch-1", "dealer-1")).rejects.toThrow(
+        "Cannot cancel this challan",
+      );
     });
   });
 
-  describe("challan not found", () => {
-    it("markDelivered throws when challan not found", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({ data: null, error: { message: "not found" } });
-      fromChains["challans"] = chain;
+  describe("list", () => {
+    it("GET /api/challans with dealerId", async () => {
+      vpsAuthedFetchMock.mockResolvedValueOnce(
+        mockVpsOk([
+          { id: "ch-1", challan_no: "CH-00001", status: "pending" },
+          { id: "ch-2", challan_no: "CH-00002", status: "delivered" },
+        ]),
+      );
 
-      await expect(
-        challanService.markDelivered("nonexistent", "dealer-1")
-      ).rejects.toThrow("Challan not found");
-    });
+      const result = await challanService.list("dealer-1");
 
-    it("cancelChallan throws when challan not found", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({ data: null, error: { message: "not found" } });
-      fromChains["challans"] = chain;
-
-      await expect(
-        challanService.cancelChallan("nonexistent", "dealer-1")
-      ).rejects.toThrow("Challan not found");
-    });
-
-    it("convertToInvoice throws when sale not found", async () => {
-      const chain = createChainMock();
-      chain.single.mockResolvedValue({ data: null, error: { message: "not found" } });
-      fromChains["sales"] = chain;
-
-      await expect(
-        challanService.convertToInvoice("nonexistent", "dealer-1")
-      ).rejects.toThrow("Sale not found");
+      expect(vpsAuthedFetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/challans?dealerId=dealer-1"),
+        expect.anything(),
+      );
+      expect(result).toHaveLength(2);
     });
   });
 });

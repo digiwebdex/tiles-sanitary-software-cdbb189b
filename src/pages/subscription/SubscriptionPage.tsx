@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { differenceInDays, format, parseISO } from "date-fns";
-import { Crown, RefreshCw, Sparkles, Zap, Gem, Rocket, Check, Phone } from "lucide-react";
+import { Crown, RefreshCw, Sparkles, Zap, Gem, Rocket, Check, Phone, AlertTriangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,8 @@ import {
 } from "@/services/dealerSubscriptionService";
 import UpgradeRequestDialog from "@/components/subscription/UpgradeRequestDialog";
 import { PaymentMethodsCard } from "@/components/subscription/PaymentMethodsCard";
+import PaymentRequestDialog from "@/components/subscription/PaymentRequestDialog";
+import PaymentRequestHistory from "@/components/subscription/PaymentRequestHistory";
 
 const SUPPORT_PHONE = "01674533303";
 
@@ -68,6 +70,7 @@ function planRibbon(plan: PlanOption, sortedPlans: PlanOption[], isCurrent: bool
 const SubscriptionPage = () => {
   const { isDemo } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<PlanOption | null>(null);
+  const [showPaymentRequest, setShowPaymentRequest] = useState(false);
 
   const subQuery = useQuery({
     queryKey: ["dealer-subscription-current"],
@@ -128,6 +131,48 @@ const SubscriptionPage = () => {
           <RefreshCw className="h-4 w-4" /> Refresh
         </Button>
       </div>
+
+      {daysRemaining === 2 && sub && (
+        <Card className="border-yellow-500/50 bg-yellow-500/10">
+          <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-start gap-3 flex-1">
+              <AlertTriangle className="h-6 w-6 text-yellow-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-foreground">২ দিন বাকি / 2 days left on your trial</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Complete at least one purchase → sale → collection before your trial ends.
+                  Choose a plan below or call{" "}
+                  <span className="font-mono font-semibold text-foreground">{SUPPORT_PHONE}</span> for help.
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" className="shrink-0 gap-2" onClick={() => plans[0] && setSelectedPlan(plans[0])}>
+              View Plans
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {daysRemaining === 0 && sub && (
+        <Card className="border-orange-500/50 bg-orange-500/10">
+          <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-start gap-3 flex-1">
+              <AlertTriangle className="h-6 w-6 text-orange-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-foreground">আজ আপনার trial শেষ / Your trial ends today</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Renew now to keep full access. Pay via bKash/Nagad{" "}
+                  <span className="font-mono font-semibold text-foreground">{SUPPORT_PHONE}</span>{" "}
+                  and send your Transaction ID below.
+                </p>
+              </div>
+            </div>
+            <Button className="shrink-0 gap-2" onClick={() => plans[0] && setSelectedPlan(plans[0])}>
+              <Phone className="h-4 w-4" /> Renew Now
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Current Plan */}
       <Card>
@@ -348,6 +393,11 @@ const SubscriptionPage = () => {
       </Card>
 
       <PaymentMethodsCard />
+
+      {/* Dealer Payment Request Section */}
+      <PaymentRequestHistory onOpenDialog={() => setShowPaymentRequest(true)} />
+
+      <PaymentRequestDialog open={showPaymentRequest} onClose={() => setShowPaymentRequest(false)} />
 
       <UpgradeRequestDialog
         plan={selectedPlan}

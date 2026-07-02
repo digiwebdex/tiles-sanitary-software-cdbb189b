@@ -79,6 +79,28 @@ router.post('/', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const p = WarehouseSchema.safeParse(req.body);
   if (!p.success) { res.status(400).json({ error: p.error.flatten() }); return; }
+
+  // Enforce per-plan warehouse limit
+  const sub = await db('subscriptions as s')
+    .leftJoin('plans as p2', 'p2.id', 's.plan_id')
+    .where({ 's.dealer_id': dealerId })
+    .orderBy('s.start_date', 'desc')
+    .select('p2.max_warehouses')
+    .first();
+  const maxWarehouses: number = sub?.max_warehouses ?? 1;
+  const currentCount: number = await db('warehouses')
+    .where({ dealer_id: dealerId, is_active: true })
+    .count('id as cnt')
+    .then((r: any[]) => Number(r[0]?.cnt ?? 0));
+  if (currentCount >= maxWarehouses) {
+    res.status(403).json({
+      error: `Your plan allows a maximum of ${maxWarehouses} warehouse(s). Please upgrade to add more.`,
+      code: 'PLAN_LIMIT_WAREHOUSES',
+      limit: maxWarehouses,
+    });
+    return;
+  }
+
   if (p.data.is_default) {
     await db('warehouses').where({ dealer_id: dealerId }).update({ is_default: false });
   }

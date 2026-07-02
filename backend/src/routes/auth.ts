@@ -63,10 +63,13 @@ router.post('/register', async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      pending: true,
-      message: 'Account created. Awaiting Super Admin approval before you can log in.',
+      active: true,
+      message: 'Account created and activated. You can now log in.',
       user_id: result.userId,
       dealer_id: result.dealerId,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      user: result.user,
     });
   } catch (err: any) {
     if (err.code === 'EMAIL_TAKEN') {
@@ -86,7 +89,8 @@ router.post('/register', async (req: Request, res: Response) => {
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
-    const result = await authService.login(email, password, getIp(req));
+    const { totpCode } = req.body; // optional — sent on second step
+    const result = await authService.login(email, password, getIp(req), totpCode);
 
     res.json({
       accessToken: result.accessToken,
@@ -98,6 +102,14 @@ router.post('/login', async (req: Request, res: Response) => {
     const code = err.code as string | undefined;
     const lock = err.lock;
 
+    if (code === 'TOTP_REQUIRED') {
+      res.status(200).json({ totpRequired: true });
+      return;
+    }
+    if (code === 'TOTP_INVALID') {
+      res.status(401).json({ error: err.message, code });
+      return;
+    }
     if (code === 'LOCKED') {
       res.status(423).json({ error: err.message, code, lock });
       return;
@@ -115,6 +127,56 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
     res.status(400).json({ error: err.message || 'Login failed' });
+  }
+});
+
+// POST /api/auth/totp/setup  — generate secret + QR URL (requires auth)
+router.post('/totp/setup', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const result = await authService.totpGenerateSecret(userId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/totp/enable  — confirm code, activate TOTP
+router.post('/totp/enable', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const { code } = req.body;
+    await authService.totpEnable(userId, code);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/totp/disable  — disable TOTP (confirm with current code)
+router.post('/totp/disable', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const { code } = req.body;
+    await authService.totpDisable(userId, code);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/auth/totp/status
+router.get('/totp/status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const status = await authService.totpStatus(userId);
+    res.json(status);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -176,12 +238,11 @@ router.post('/password-reset/request', async (req: Request, res: Response) => {
     const { email } = emailSchema.parse(req.body);
     const result = await authService.requestPasswordReset(email);
 
-    const payload: any = { success: true };
     if (result && process.env.NODE_ENV !== 'production') {
-      // Dev-only convenience so QA can complete the flow without SMTP.
-      payload.devToken = result.token;
+      // Never return the token over the network. Log server-side for QA only.
+      console.log('[DEV] password-reset token for', email, ':', result.token);
     }
-    res.json(payload);
+    res.json({ success: true });
   } catch {
     res.json({ success: true });
   }
@@ -195,6 +256,27 @@ router.post('/password-reset/confirm', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid reset request' });
+  }
+});
+
+const changePasswordSchema = z.object({
+  current_password: z.string().min(1),
+  new_password: z.string().min(8).max(72),
+});
+
+// POST /api/auth/change-password (requires authentication + current password verification)
+router.post('/change-password', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { current_password, new_password } = changePasswordSchema.parse(req.body);
+    const user = await authService.verifyCurrentPassword(req.user!.userId, current_password);
+    if (!user) {
+      res.status(401).json({ error: 'Current password is incorrect' });
+      return;
+    }
+    await authService.setPassword(req.user!.userId, new_password);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to update password' });
   }
 });
 

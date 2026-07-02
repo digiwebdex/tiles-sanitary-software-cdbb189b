@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useDealerId } from "@/hooks/useDealerId";
 import { financialService } from "@/services/financialService";
 import { formatCurrency } from "@/lib/utils";
@@ -40,7 +48,7 @@ const FinancialStatementsPage = () => {
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const [pl, setPl] = useState({ from: monthAgo, to: today });
   const [bs, setBs] = useState({ asOf: today });
-  const [tb, setTb] = useState({ asOf: today });
+  const [tb, setTb] = useState({ asOf: today, source: "auto" as "auto" | "gl" | "legacy" });
 
   const { data: pAndL, isLoading: plLoading } = useQuery({
     queryKey: ["pnl", dealerId, pl],
@@ -56,7 +64,7 @@ const FinancialStatementsPage = () => {
 
   const { data: trial, isLoading: tbLoading } = useQuery({
     queryKey: ["trial-balance", dealerId, tb],
-    queryFn: () => financialService.trialBalance(dealerId, tb.asOf),
+    queryFn: () => financialService.trialBalance(dealerId, tb.asOf, tb.source),
     enabled: !!dealerId,
   });
 
@@ -173,9 +181,22 @@ const FinancialStatementsPage = () => {
 
         <TabsContent value="tb" className="space-y-4">
           <Card>
-            <CardContent className="pt-6">
-              <Label>As of</Label>
-              <Input type="date" value={tb.asOf} onChange={e => setTb({ asOf: e.target.value })} className="max-w-xs" />
+            <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>As of</Label>
+                <Input type="date" value={tb.asOf} onChange={e => setTb({ ...tb, asOf: e.target.value })} />
+              </div>
+              <div>
+                <Label>Data source</Label>
+                <Select value={tb.source} onValueChange={(v) => setTb({ ...tb, source: v as typeof tb.source })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (GL when available)</SelectItem>
+                    <SelectItem value="gl">GL spine only</SelectItem>
+                    <SelectItem value="legacy">Legacy sub-ledgers</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardContent>
           </Card>
 
@@ -183,7 +204,14 @@ const FinancialStatementsPage = () => {
             <>
             <DataQualityNotes warnings={trial.warnings} />
             <Card>
-              <CardHeader><CardTitle>Trial Balance — as of {trial.as_of ?? "today"}</CardTitle></CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between gap-2">
+                <CardTitle>Trial Balance — as of {trial.as_of ?? "today"}</CardTitle>
+                {trial.data_source === "gl_spine" ? (
+                  <Badge variant="secondary">GL spine</Badge>
+                ) : (
+                  <Badge variant="outline">Legacy ledgers</Badge>
+                )}
+              </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -218,7 +246,9 @@ const FinancialStatementsPage = () => {
                   </TableBody>
                 </Table>
                 <p className="text-xs text-muted-foreground mt-3">
-                  Note: this is a derived trial balance from operational ledgers (cash, bank, sales, expenses, COGS, journal entries). Small differences are expected since revenue/expense closing entries are computed, not posted.
+                  {trial.data_source === "gl_spine"
+                    ? "Sourced from GL journal entries mirrored from the posting engine. Enable USE_POSTING_ENGINE and USE_GL_SPINE for new documents to flow here."
+                    : "Derived from operational sub-ledgers (cash, bank, sales, expenses, COGS, manual journal). Small differences are expected since closing entries are computed, not posted."}
                 </p>
               </CardContent>
             </Card>
