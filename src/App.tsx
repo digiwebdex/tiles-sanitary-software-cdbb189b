@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { getHostEntryRedirect } from "@/lib/hostRouting";
@@ -138,18 +139,40 @@ import PortalRequestsAdminPage from "./pages/admin/PortalRequestsAdminPage";
 const IS_PRODUCTION = import.meta.env.PROD;
 
 const queryClient = new QueryClient({
+  // Global query-error surfacing: previously a failed *query* silently rendered
+  // an empty state ("No records found") indistinguishable from a real load
+  // error. In react-query v5 per-query onError was removed, so the QueryCache
+  // handler is the single place to surface load failures as a toast. It fires
+  // once per query after retries settle (not per retry).
+  queryCache: new QueryCache({
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Failed to load data";
+      console.error("[QueryError]", error);
+      toast({
+        title: "Couldn’t load data",
+        description: message,
+        variant: "destructive",
+      });
+    },
+  }),
   defaultOptions: {
     queries: {
       retry: IS_PRODUCTION ? 2 : 0,
       staleTime: 30_000,
     },
     mutations: {
-      onError: (error) => {
-        if (IS_PRODUCTION) {
-          console.error("[MutationError]", error.message);
-        } else {
-          console.error("[MutationError]", error);
-        }
+      // A DEFAULT handler: react-query only invokes it for mutations that do
+      // NOT define their own onError, so this adds a fallback toast for the
+      // many fire-and-forget mutations without doubling up on the ~74 that
+      // already surface their own error.
+      onError: (error: unknown) => {
+        const message = error instanceof Error ? error.message : "Something went wrong";
+        console.error("[MutationError]", error);
+        toast({
+          title: "Action failed",
+          description: message,
+          variant: "destructive",
+        });
       },
     },
   },

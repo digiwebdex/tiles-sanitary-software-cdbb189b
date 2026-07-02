@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { computeVatBreakdown, normalizeDealerVatSettings } from '../lib/vatMath';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -171,13 +172,31 @@ async function deductReservedStockTrx(
   if (!product) throw new Error(`Product not found: ${productId}`);
   const stock = await getOrCreateStockTrx(trx, productId, dealerId);
 
+  // Assert the existing reservation actually covers the quantity being
+  // invoiced. Previously this used Math.max(0, reserved - qty), which silently
+  // floored any shortfall to zero — so a drifted/edited reservation would leave
+  // stranded reserved stock while the invoice was booked anyway. Fail instead,
+  // rolling back the whole convert-invoice transaction.
+  const EPS = 1e-6;
   if (product.unit_type === 'box_sft') {
+    const reserved = Number(stock.reserved_box_qty ?? 0);
+    if (quantity > reserved + EPS) {
+      throw new Error(
+        `Reserved stock (${reserved}) does not cover invoice quantity (${quantity}) for product ${productId}. Re-check the challan reservation before invoicing.`,
+      );
+    }
     await trx('stock').where({ id: stock.id }).update({
-      reserved_box_qty: Math.max(0, Number(stock.reserved_box_qty ?? 0) - quantity),
+      reserved_box_qty: reserved - quantity,
     });
   } else {
+    const reserved = Number(stock.reserved_piece_qty ?? 0);
+    if (quantity > reserved + EPS) {
+      throw new Error(
+        `Reserved stock (${reserved}) does not cover invoice quantity (${quantity}) for product ${productId}. Re-check the challan reservation before invoicing.`,
+      );
+    }
     await trx('stock').where({ id: stock.id }).update({
-      reserved_piece_qty: Math.max(0, Number(stock.reserved_piece_qty ?? 0) - quantity),
+      reserved_piece_qty: reserved - quantity,
     });
   }
 
@@ -690,11 +709,27 @@ router.put('/:id', async (req: Request, res: Response) => {
           .first('discount', 'paid_amount');
         const discount = Number(saleData?.discount ?? 0);
         const paidAmount = Number(saleData?.paid_amount ?? 0);
-        const totalAmount = subtotal - discount;
+
+        // Route totals through the same VAT engine as the sales path so
+        // taxable/VAT/SD stay consistent with the invoice print and the
+        // ledger. computeVatBreakdown clamps the taxable base at 0, so an
+        // over-discount can no longer produce a negative total.
+        const dealerVatRow = await trx('dealers')
+          .where({ id: dealerId })
+          .first('vat_enabled', 'default_vat_rate');
+        const vatBreakdown = computeVatBreakdown(
+          Math.max(0, subtotal - discount),
+          normalizeDealerVatSettings(dealerVatRow),
+        );
+        const totalAmount = vatBreakdown.total_with_tax;
         const dueAmount = totalAmount - paidAmount;
 
         await trx('sales').where({ id: saleId, dealer_id: dealerId }).update({
           total_amount: totalAmount,
+          taxable_amount: vatBreakdown.taxable_amount,
+          vat_rate: vatBreakdown.vat_rate,
+          vat_amount: vatBreakdown.vat_amount,
+          sd_amount: vatBreakdown.sd_amount,
           due_amount: dueAmount,
           total_box: totalBox,
           total_sft: totalSft,

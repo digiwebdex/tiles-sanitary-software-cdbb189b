@@ -18,8 +18,14 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { requireRole } from '../middleware/roles';
 
 const router = Router();
+
+// Payroll structure changes drive net-salary computation — restrict all
+// writes to admin/manager. Previously these were tenant-scoped only, letting
+// any authenticated user (e.g. a salesman) alter salary components.
+const requirePayrollAdmin = requireRole('dealer_admin', 'manager');
 
 const COMPONENT_WRITABLE = new Set([
   'code', 'name', 'kind', 'calc', 'default_amount', 'default_percent', 'is_taxable', 'active', 'notes',
@@ -73,7 +79,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requirePayrollAdmin, async (req, res) => {
   try {
     const dealerId = resolveDealerScope(req, res);
     if (!dealerId) return;
@@ -96,7 +102,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requirePayrollAdmin, async (req, res) => {
   try {
     const dealerId = resolveDealerScope(req, res);
     if (!dealerId) return;
@@ -119,7 +125,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePayrollAdmin, async (req, res) => {
   try {
     const dealerId = resolveDealerScope(req, res);
     if (!dealerId) return;
@@ -154,7 +160,7 @@ router.get('/employee/:employeeId', async (req, res) => {
   }
 });
 
-router.post('/employee/:employeeId', async (req, res) => {
+router.post('/employee/:employeeId', requirePayrollAdmin, async (req, res) => {
   try {
     const dealerId = resolveDealerScope(req, res);
     if (!dealerId) return;
@@ -183,7 +189,7 @@ router.post('/employee/:employeeId', async (req, res) => {
   }
 });
 
-router.patch('/employee-assign/:id', async (req, res) => {
+router.patch('/employee-assign/:id', requirePayrollAdmin, async (req, res) => {
   try {
     const dealerId = resolveDealerScope(req, res);
     if (!dealerId) return;
@@ -204,7 +210,7 @@ router.patch('/employee-assign/:id', async (req, res) => {
   }
 });
 
-router.delete('/employee-assign/:id', async (req, res) => {
+router.delete('/employee-assign/:id', requirePayrollAdmin, async (req, res) => {
   try {
     const dealerId = resolveDealerScope(req, res);
     if (!dealerId) return;

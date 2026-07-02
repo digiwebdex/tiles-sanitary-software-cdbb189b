@@ -261,9 +261,12 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
 
     await trx.commit();
     res.status(201).json(row);
-  } catch (err) {
+  } catch (err: any) {
     await trx.rollback();
-    throw err;
+    console.error('[employeeExits.create] error', err?.message);
+    res
+      .status(Number(err?.statusCode || err?.status) || 500)
+      .json({ error: err?.message || 'Failed to create exit record' });
   }
 });
 
@@ -415,9 +418,12 @@ router.post('/:id/settle', requireRole('dealer_admin'), async (req: Request, res
 
     await trx.commit();
     res.json(row);
-  } catch (err) {
+  } catch (err: any) {
     await trx.rollback();
-    throw err;
+    console.error('[employeeExits.settle] error', err?.message);
+    res
+      .status(Number(err?.statusCode || err?.status) || 500)
+      .json({ error: err?.message || 'Failed to settle exit' });
   }
 });
 

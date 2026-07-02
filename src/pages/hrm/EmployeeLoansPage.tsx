@@ -60,6 +60,7 @@ export default function EmployeeLoansPage() {
   const [empFilter, setEmpFilter] = useState<string>("all");
 
   const [newOpen, setNewOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [newForm, setNewForm] = useState({ ...EMPTY_NEW });
 
   const [detail, setDetail] = useState<LoanDetail | null>(null);
@@ -106,6 +107,8 @@ export default function EmployeeLoansPage() {
     if (newForm.payment_method === "bank" && !newForm.bank_account_id) {
       return toast({ title: "Select a bank account", variant: "destructive" });
     }
+    if (saving) return; // guard against double-submit (duplicate loan + schedule)
+    setSaving(true);
     try {
       await employeeLoanService.create({
         employee_id: newForm.employee_id,
@@ -124,6 +127,8 @@ export default function EmployeeLoansPage() {
       reload();
     } catch (e: any) {
       toast({ title: "Failed", description: String(e.message ?? e), variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -151,6 +156,8 @@ export default function EmployeeLoansPage() {
   async function recordPayment() {
     if (!payOpen) return;
     if (payForm.amount <= 0) return toast({ title: "Amount required", variant: "destructive" });
+    if (saving) return; // guard against double-submit (duplicate EMI payment)
+    setSaving(true);
     try {
       await employeeLoanService.payEmi(payOpen.emiId, {
         amount: Number(payForm.amount),
@@ -165,6 +172,8 @@ export default function EmployeeLoansPage() {
       reload();
     } catch (e: any) {
       toast({ title: "Failed", description: String(e.message ?? e), variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   }
   async function waiveEmi(emiId: string) {
@@ -306,7 +315,7 @@ export default function EmployeeLoansPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewOpen(false)}>Cancel</Button>
-            <Button onClick={createLoan}>Issue Loan & Generate Schedule</Button>
+            <Button onClick={createLoan} disabled={saving}>{saving ? "Issuing…" : "Issue Loan & Generate Schedule"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -413,7 +422,7 @@ export default function EmployeeLoansPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayOpen(null)}>Cancel</Button>
-            <Button onClick={recordPayment}>Record</Button>
+            <Button onClick={recordPayment} disabled={saving}>{saving ? "Recording…" : "Record"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

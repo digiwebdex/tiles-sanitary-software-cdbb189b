@@ -13,7 +13,7 @@
  *   GET    /api/employee-loans/summary                  KPI block: outstanding, due-this-month, overdue
  *   GET    /api/employee-loans/employee/:employeeId/outstanding  total outstanding for one employee
  */
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate as requireAuth } from '../middleware/auth';
@@ -21,6 +21,15 @@ import { requireRole } from '../middleware/roles';
 
 const router = Router();
 router.use(requireAuth);
+
+// Express 4 does not forward rejected promises from async handlers to the
+// router-level error middleware below, so an unhandled business/DB error (or a
+// throwing schema.parse) would hang the request. Wrap async handlers so their
+// rejections reach the error handler (which maps err.status → HTTP status).
+const wrap =
+  (fn: (req: Request, res: Response) => Promise<unknown>): RequestHandler =>
+  (req, res, next: NextFunction) =>
+    Promise.resolve(fn(req, res)).catch(next);
 
 /* ─────────────────────── helpers ─────────────────────── */
 
@@ -44,7 +53,7 @@ async function nextLoanCode(trx: any, dealerId: string): Promise<string> {
 
 /* ─────────────────────── summary ─────────────────────── */
 
-router.get('/summary', async (req: Request, res: Response) => {
+router.get('/summary', wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = today.slice(0, 7) + '-01';
@@ -77,11 +86,11 @@ router.get('/summary', async (req: Request, res: Response) => {
     overdue_count: Number(overdue.count),
     active_loans: Number(activeLoans[0].count),
   });
-});
+}));
 
 /* ─────────────────────── per-employee outstanding ─────────────────────── */
 
-router.get('/employee/:employeeId/outstanding', async (req: Request, res: Response) => {
+router.get('/employee/:employeeId/outstanding', wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const rows = await db('employee_loans as l')
     .leftJoin('employee_loan_emis as e', 'e.loan_id', 'l.id')
@@ -93,11 +102,11 @@ router.get('/employee/:employeeId/outstanding', async (req: Request, res: Respon
       db.raw('COUNT(DISTINCT l.id)::int as active_loans'),
     );
   res.json({ outstanding: Number(rows[0].outstanding), active_loans: Number(rows[0].active_loans) });
-});
+}));
 
 /* ─────────────────────── list ─────────────────────── */
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const { employee_id, status } = req.query as Record<string, string | undefined>;
   let qb = db('employee_loans as l')
@@ -122,11 +131,11 @@ router.get('/', async (req: Request, res: Response) => {
   if (employee_id) qb = qb.andWhere('l.employee_id', employee_id);
   if (status) qb = qb.andWhere('l.status', status);
   res.json(await qb);
-});
+}));
 
 /* ─────────────────────── detail ─────────────────────── */
 
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const loan = await db('employee_loans as l')
     .leftJoin('employees as e', 'e.id', 'l.employee_id')
@@ -140,7 +149,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     .where({ loan_id: loan.id, dealer_id: dealerId })
     .orderBy('installment_no');
   res.json({ ...loan, emis });
-});
+}));
 
 /* ─────────────────────── create / disburse ─────────────────────── */
 
@@ -156,7 +165,7 @@ const createSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
+router.post('/', requireRole('dealer_admin', 'super_admin'), wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = createSchema.parse(req.body);
 
@@ -209,11 +218,11 @@ router.post('/', requireRole('dealer_admin', 'super_admin'), async (req: Request
   });
 
   res.status(201).json(result);
-});
+}));
 
 /* ─────────────────────── cancel ─────────────────────── */
 
-router.post('/:id/cancel', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
+router.post('/:id/cancel', requireRole('dealer_admin', 'super_admin'), wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const result = await db.transaction(async (trx: any) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
@@ -234,11 +243,11 @@ router.post('/:id/cancel', requireRole('dealer_admin', 'super_admin'), async (re
     return updated;
   });
   res.json(result);
-});
+}));
 
 /* ─────────────────────── close (waive remaining) ─────────────────────── */
 
-router.post('/:id/close', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
+router.post('/:id/close', requireRole('dealer_admin', 'super_admin'), wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const result = await db.transaction(async (trx: any) => {
     const loan = await trx('employee_loans').where({ id: req.params.id, dealer_id: dealerId }).forUpdate().first();
@@ -257,7 +266,7 @@ router.post('/:id/close', requireRole('dealer_admin', 'super_admin'), async (req
     return updated;
   });
   res.json(result);
-});
+}));
 
 /* ─────────────────────── pay an EMI ─────────────────────── */
 
@@ -269,7 +278,7 @@ const paySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-router.post('/emis/:emiId/pay', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
+router.post('/emis/:emiId/pay', requireRole('dealer_admin', 'super_admin'), wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const body = paySchema.parse(req.body);
 
@@ -312,11 +321,11 @@ router.post('/emis/:emiId/pay', requireRole('dealer_admin', 'super_admin'), asyn
   });
 
   res.json(result);
-});
+}));
 
 /* ─────────────────────── waive an EMI ─────────────────────── */
 
-router.post('/emis/:emiId/waive', requireRole('dealer_admin', 'super_admin'), async (req: Request, res: Response) => {
+router.post('/emis/:emiId/waive', requireRole('dealer_admin', 'super_admin'), wrap(async (req: Request, res: Response) => {
   const dealerId = req.user!.dealerId;
   const result = await db.transaction(async (trx: any) => {
     const emi = await trx('employee_loan_emis').where({ id: req.params.emiId, dealer_id: dealerId }).forUpdate().first();
@@ -339,12 +348,17 @@ router.post('/emis/:emiId/waive', requireRole('dealer_admin', 'super_admin'), as
     return updated;
   });
   res.json(result);
-});
+}));
 
 /* ─────────────────────── error handler ─────────────────────── */
 
 router.use((err: any, _req: Request, res: Response, _next: any) => {
-  const status = err?.status ?? 500;
+  // Invalid request bodies arrive here as ZodError (schema.parse) → 400.
+  if (err?.name === 'ZodError') {
+    res.status(400).json({ error: 'Invalid input', issues: err.flatten?.() ?? err.errors });
+    return;
+  }
+  const status = Number(err?.status ?? err?.statusCode) || 500;
   res.status(status).json({ error: err?.message ?? 'Internal error' });
 });
 

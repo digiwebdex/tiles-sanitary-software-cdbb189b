@@ -85,6 +85,7 @@ export default function EmployeeExitsPage() {
   const [newItem, setNewItem] = useState({ department: "HR", item: "", remarks: "" });
 
   const [settleOpen, setSettleOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [settleForm, setSettleForm] = useState<any>({ settled_date: todayISO(), payment_method: "cash", bank_account_id: null });
 
   async function reload() {
@@ -135,6 +136,8 @@ export default function EmployeeExitsPage() {
       toast({ title: "Pick an employee", variant: "destructive" });
       return;
     }
+    if (saving) return; // guard against double-submit (duplicate exit record)
+    setSaving(true);
     try {
       const created = await employeeExitService.create(form);
       toast({ title: `Exit ${created.exit_code} initiated` });
@@ -144,6 +147,8 @@ export default function EmployeeExitsPage() {
       await openDetail(created);
     } catch (e: any) {
       toast({ title: "Create failed", description: String(e.message ?? e), variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -205,6 +210,8 @@ export default function EmployeeExitsPage() {
 
   async function handleSettle() {
     if (!detail) return;
+    if (saving) return; // guard against double-submit (duplicate final settlement)
+    setSaving(true);
     try {
       await employeeExitService.settle(detail.id, settleForm);
       toast({ title: "Settled. Employee marked inactive." });
@@ -213,6 +220,8 @@ export default function EmployeeExitsPage() {
       await refreshDetail();
     } catch (e: any) {
       toast({ title: "Settle failed", description: String(e.message ?? e), variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -373,7 +382,7 @@ export default function EmployeeExitsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate}>Initiate</Button>
+            <Button onClick={handleCreate} disabled={saving}>{saving ? "Initiating…" : "Initiate"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -614,7 +623,7 @@ export default function EmployeeExitsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSettleOpen(false)}>Cancel</Button>
-            <Button onClick={handleSettle}>Confirm Settlement</Button>
+            <Button onClick={handleSettle} disabled={saving}>{saving ? "Settling…" : "Confirm Settlement"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

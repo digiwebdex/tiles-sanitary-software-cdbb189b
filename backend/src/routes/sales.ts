@@ -748,10 +748,20 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     const subtotal = itemsCalc.reduce((s, i) => s + i.total, 0);
+    // Discount cannot exceed the line subtotal — otherwise the taxable base is
+    // clamped to 0 while gross profit goes negative with no gate, effectively
+    // an unapproved sell-below-zero.
+    if (Number(input.discount) > subtotal + 1e-6) {
+      res.status(400).json({
+        error: `Discount (${input.discount}) cannot exceed the item subtotal (${subtotal.toFixed(2)}).`,
+        code: 'DISCOUNT_EXCEEDS_SUBTOTAL',
+      });
+      return;
+    }
     const taxableBase = Math.max(0, subtotal - input.discount);
     const vatBreakdown = computeVatBreakdown(taxableBase, vatSettings);
     const totalAmount = vatBreakdown.total_with_tax;
-    const dueAmount = totalAmount - input.paid_amount;
+    const dueAmount = Math.max(0, totalAmount - input.paid_amount);
     const grossProfit = taxableBase - totalCogs;
     const isChallanMode = input.sale_type === 'challan_mode';
     const salePaymentMode = normalizePaymentMode(input.payment_mode);
@@ -794,6 +804,18 @@ router.post('/', async (req: Request, res: Response) => {
 
     // ── 6. Atomic transaction: header + items + stock + ledger + audit ──
     const saleId: string = await db.transaction(async (trx) => {
+      // Serialise concurrent sales for the same customer by locking the
+      // customer row up-front. Prevents two simultaneous invoices from both
+      // reading a stale pre-sale outstanding balance and each slipping under
+      // the credit limit (TOCTOU) — the second sale now waits for the first
+      // to commit before proceeding.
+      if (customerId) {
+        await trx('customers')
+          .where({ id: customerId, dealer_id: dealerId })
+          .forUpdate()
+          .first('id');
+      }
+
       // Sale header
       const [sale] = await trx('sales')
         .insert({
@@ -876,7 +898,7 @@ router.post('/', async (req: Request, res: Response) => {
         for (let idx = 0; idx < itemsCalc.length; idx++) {
           const item = itemsCalc[idx];
           const saleItemId = saleItemIdsByIndex[idx];
-          const deductQty = Math.min(item.quantity, item.available_qty_at_sale);
+          let deductQty = Math.min(item.quantity, item.available_qty_at_sale);
           if (deductQty <= 0) continue;
 
           let batchAllocationsForPost: SaleBatchAllocation[] | undefined;
@@ -885,8 +907,41 @@ router.post('/', async (req: Request, res: Response) => {
           const stockBeforeRow = await trx('stock')
             .where({ dealer_id: dealerId, product_id: item.product_id })
             .forUpdate()
-            .first('total_pieces');
+            .first(
+              'total_pieces',
+              'box_qty',
+              'piece_qty',
+              'reserved_box_qty',
+              'reserved_piece_qty',
+            );
           const stockBeforePieces = Number(stockBeforeRow?.total_pieces ?? 0);
+
+          // ── Oversell guard: re-validate availability UNDER the row lock ──
+          // `available_qty_at_sale` was computed from a pre-transaction read
+          // with no lock, so two concurrent sales can both pass it and oversell
+          // (the deduct RPC then silently floors stock at zero). Now that the
+          // row is locked, recompute the true available qty and reject when
+          // backorder is disabled instead of corrupting stock.
+          const availableNow =
+            item.unitType === 'box_sft'
+              ? Number(stockBeforeRow?.box_qty ?? 0) - Number(stockBeforeRow?.reserved_box_qty ?? 0)
+              : Number(stockBeforeRow?.piece_qty ?? 0) -
+                Number(stockBeforeRow?.reserved_piece_qty ?? 0);
+          if (deductQty > availableNow) {
+            if (!backorderEnabled) {
+              const pname = (productMap.get(item.product_id) as any)?.name ?? 'product';
+              throw Object.assign(
+                new Error(
+                  `Insufficient stock for ${pname} — stock was consumed by a concurrent transaction. Please retry.`,
+                ),
+                { statusCode: 409, code: 'STOCK_CONFLICT' },
+              );
+            }
+            // Backorder enabled: deduct only what is physically available; the
+            // shortfall is already recorded as backorder_qty on the line.
+            deductQty = Math.max(0, availableNow);
+            if (deductQty <= 0) continue;
+          }
 
           // Plan FIFO allocation honouring customer reservations
           const batches = await trx('product_batches')
@@ -1218,6 +1273,10 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(400).json({ error: err.message, code: err.code });
       return;
     }
+    if (err?.statusCode) {
+      res.status(err.statusCode).json({ error: err.message, code: err.code });
+      return;
+    }
     res
       .status(500)
       .json({ error: err?.message || 'Failed to create sale' });
@@ -1402,10 +1461,20 @@ router.put('/:id', async (req: Request, res: Response) => {
     });
 
     const subtotal = itemsCalc.reduce((s, i) => s + i.total, 0);
+    // Discount cannot exceed the line subtotal — otherwise the taxable base is
+    // clamped to 0 while gross profit goes negative with no gate, effectively
+    // an unapproved sell-below-zero.
+    if (Number(input.discount) > subtotal + 1e-6) {
+      res.status(400).json({
+        error: `Discount (${input.discount}) cannot exceed the item subtotal (${subtotal.toFixed(2)}).`,
+        code: 'DISCOUNT_EXCEEDS_SUBTOTAL',
+      });
+      return;
+    }
     const taxableBase = Math.max(0, subtotal - input.discount);
     const vatBreakdown = computeVatBreakdown(taxableBase, vatSettings);
     const totalAmount = vatBreakdown.total_with_tax;
-    const dueAmount = totalAmount - input.paid_amount;
+    const dueAmount = Math.max(0, totalAmount - input.paid_amount);
     const grossProfit = taxableBase - totalCogs;
 
     // ── Atomic transaction ──
