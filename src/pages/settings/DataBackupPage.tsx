@@ -164,6 +164,33 @@ const DataBackupPage = () => {
     },
   });
   const [driveBusy, setDriveBusy] = useState(false);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [savingCreds, setSavingCreds] = useState(false);
+
+  const saveCreds = async () => {
+    if (!clientId.trim() || !clientSecret.trim()) {
+      toast.error("Enter both Client ID and Client Secret");
+      return;
+    }
+    setSavingCreds(true);
+    try {
+      const res = await vpsAuthedFetch(`/api/dealer-drive/credentials`, {
+        method: "POST",
+        body: JSON.stringify({ client_id: clientId.trim(), client_secret: clientSecret.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error || "Could not save credentials");
+      toast.success("Google credentials saved. Now click Connect.");
+      setClientId("");
+      setClientSecret("");
+      refetchDrive();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingCreds(false);
+    }
+  };
 
   const connectDrive = async () => {
     setDriveBusy(true);
@@ -339,11 +366,8 @@ const DataBackupPage = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {drive?.configured === false ? (
-            <p className="text-sm text-muted-foreground">
-              Google Drive backup isn’t enabled on this system yet. Please contact support.
-            </p>
-          ) : drive?.connected ? (
+          {drive?.connected ? (
+            /* Step 3 — connected */
             <>
               <div className="flex items-center gap-2 text-sm">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -371,15 +395,53 @@ const DataBackupPage = () => {
                 </Button>
               </div>
             </>
-          ) : (
+          ) : drive?.has_credentials ? (
+            /* Step 2 — credentials saved, needs to authorize */
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Not connected. Click below and sign in with your Google account to enable nightly
-                backups to your own Google Drive.
+                Your Google credentials are saved. Click below and sign in with your Google account
+                to authorize backups to your own Drive.
               </p>
               <Button onClick={connectDrive} disabled={driveBusy}>
                 <Cloud className="h-4 w-4 mr-2" />
                 {driveBusy ? "Connecting…" : "Connect Google Drive"}
+              </Button>
+            </div>
+          ) : (
+            /* Step 1 — enter your own Google credentials */
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                To use Google Drive backup, create a Google app (one-time) and paste its
+                credentials here. See the setup guide, then enter your{" "}
+                <strong>Client ID</strong> and <strong>Client Secret</strong>.
+              </p>
+              <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+                In your Google app’s “Authorized redirect URIs”, add:
+                <code className="ml-1 break-all text-foreground">
+                  {drive?.redirect_uri || "https://api.sanitileserp.com/api/dealer-drive/callback"}
+                </code>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gclient-id">Google Client ID</Label>
+                <Input
+                  id="gclient-id"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  placeholder="…apps.googleusercontent.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gclient-secret">Google Client Secret</Label>
+                <Input
+                  id="gclient-secret"
+                  type="password"
+                  value={clientSecret}
+                  onChange={(e) => setClientSecret(e.target.value)}
+                  placeholder="GOCSPX-…"
+                />
+              </div>
+              <Button onClick={saveCreds} disabled={savingCreds}>
+                {savingCreds ? "Saving…" : "Save credentials"}
               </Button>
             </div>
           )}
