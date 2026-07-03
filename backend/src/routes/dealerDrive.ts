@@ -1,19 +1,21 @@
 /**
- * /api/dealer-drive — Per-dealer Google Drive backup.
+ * /api/dealer-drive — Per-dealer Google Drive backup (bring your own credentials).
  *
- * Each dealer_admin connects THEIR OWN Google account (through the platform's
- * single OAuth app). Their full data is exported to an Excel workbook and
- * uploaded to a "SaniTiles Backups" folder in their own Drive — manually
- * ("Back up now") and automatically every night.
+ * Each dealer_admin supplies THEIR OWN Google OAuth app (Client ID + Secret,
+ * created in their own Google Cloud project), then connects their Google
+ * account. Their full data is exported to Excel and uploaded to a
+ * "SaniTiles Backups" folder in their own Drive — on demand and every night.
  *
- *   GET  /auth-url        (dealer_admin) → Google consent URL
+ *   POST /credentials     (dealer_admin) save this dealer's Google Client ID+Secret
+ *   GET  /auth-url        (dealer_admin) → Google consent URL (uses their creds)
  *   GET  /callback        (public) Google redirects here; stores the token
- *   GET  /status          (dealer_admin) → { connected, email, last_backup... }
- *   POST /disconnect      (dealer_admin) revoke + delete token
+ *   GET  /status          (dealer_admin) → { has_credentials, connected, ... }
+ *   POST /disconnect      (dealer_admin) revoke + delete token (keeps creds)
  *   POST /backup-now      (dealer_admin) run a backup immediately
  *   POST /cron/run-all    (x-cron-secret) nightly: back up every connected dealer
  */
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import ExcelJS from 'exceljs';
 import { db } from '../db/connection';
 import { env } from '../config/env';
@@ -26,14 +28,25 @@ const router = Router();
 const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 const CRON_SECRET = process.env.CRON_SECRET || 'tilessaas-cron-internal';
 
+// Fixed backend callback — every dealer registers this same URI in their own
+// Google OAuth app's "Authorized redirect URIs".
 function redirectUri(): string {
   return (
     env.GOOGLE_OAUTH_REDIRECT_URI ||
     `${env.APP_PUBLIC_URL || 'https://api.sanitileserp.com'}/api/dealer-drive/callback`
   );
 }
-function isConfigured(): boolean {
-  return !!(env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET);
+
+async function getDealerCreds(
+  dealerId: string,
+): Promise<{ client_id: string; client_secret: string } | null> {
+  const { rows } = await db.raw(
+    `SELECT client_id, client_secret FROM dealer_drive_tokens WHERE dealer_id = ?`,
+    [dealerId],
+  );
+  const r = rows[0];
+  if (!r?.client_id || !r?.client_secret) return null;
+  return { client_id: r.client_id, client_secret: r.client_secret };
 }
 
 // ── Excel + Drive helpers ─────────────────────────────────────────────
@@ -77,20 +90,22 @@ async function buildWorkbookBuffer(dealerId: string): Promise<Buffer> {
 
 async function getValidAccessToken(dealerId: string): Promise<string> {
   const { rows } = await db.raw(
-    `SELECT access_token, refresh_token, expires_at FROM dealer_drive_tokens WHERE dealer_id = ?`,
+    `SELECT access_token, refresh_token, expires_at, client_id, client_secret
+       FROM dealer_drive_tokens WHERE dealer_id = ?`,
     [dealerId],
   );
   const tok = rows[0];
   if (!tok) throw new Error('Google Drive not connected');
   if (new Date(tok.expires_at).getTime() - Date.now() > 60_000) return tok.access_token;
   if (!tok.refresh_token) throw new Error('Session expired — please reconnect Google Drive');
+  if (!tok.client_id || !tok.client_secret) throw new Error('Google credentials missing — re-enter them');
 
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: env.GOOGLE_OAUTH_CLIENT_ID!,
-      client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET!,
+      client_id: tok.client_id,
+      client_secret: tok.client_secret,
       refresh_token: tok.refresh_token,
       grant_type: 'refresh_token',
     }),
@@ -197,7 +212,6 @@ router.get('/callback', async (req: Request, res: Response) => {
 
   if (gErr) return close(false, `Google returned: ${gErr}`);
   if (!code || !state) return close(false, 'Missing code or state.');
-  if (!isConfigured()) return close(false, 'Google OAuth is not configured on the server.');
 
   let dealerId: string;
   try {
@@ -208,14 +222,17 @@ router.get('/callback', async (req: Request, res: Response) => {
     return close(false, 'Invalid state.');
   }
 
+  const creds = await getDealerCreds(dealerId);
+  if (!creds) return close(false, 'No Google credentials saved for this account.');
+
   try {
     const tr = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: env.GOOGLE_OAUTH_CLIENT_ID!,
-        client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET!,
+        client_id: creds.client_id,
+        client_secret: creds.client_secret,
         redirect_uri: redirectUri(),
         grant_type: 'authorization_code',
       }),
@@ -233,23 +250,19 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     const exp = new Date(Date.now() + (tokens.expires_in || 3600) * 1000);
     await db.raw(
-      `INSERT INTO dealer_drive_tokens
-         (dealer_id, google_email, access_token, refresh_token, token_type, scope, expires_at, connected_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, now(), now())
-       ON CONFLICT (dealer_id) DO UPDATE SET
-         google_email = EXCLUDED.google_email,
-         access_token = EXCLUDED.access_token,
-         refresh_token = COALESCE(EXCLUDED.refresh_token, dealer_drive_tokens.refresh_token),
-         token_type = EXCLUDED.token_type, scope = EXCLUDED.scope,
-         expires_at = EXCLUDED.expires_at, updated_at = now()`,
+      `UPDATE dealer_drive_tokens SET
+         google_email = ?, access_token = ?,
+         refresh_token = COALESCE(?, refresh_token),
+         token_type = ?, scope = ?, expires_at = ?, connected_at = now(), updated_at = now()
+       WHERE dealer_id = ?`,
       [
-        dealerId,
         email,
         tokens.access_token,
         tokens.refresh_token || null,
         tokens.token_type || 'Bearer',
         tokens.scope || SCOPES.join(' '),
         exp,
+        dealerId,
       ],
     );
     return close(true, email ? `Connected as ${email}` : 'Connected.');
@@ -287,16 +300,40 @@ function dealerOf(req: Request): string | null {
   return (req.dealerId as string) || req.user?.dealerId || null;
 }
 
-router.get('/auth-url', (req: Request, res: Response) => {
-  if (!isConfigured()) {
-    res.status(503).json({ error: 'Google Drive backup is not enabled yet. Please contact support.' });
-    return;
-  }
+const credsSchema = z.object({
+  client_id: z.string().trim().min(10).max(400),
+  client_secret: z.string().trim().min(6).max(400),
+});
+
+router.post('/credentials', async (req: Request, res: Response) => {
   const dealerId = dealerOf(req);
   if (!dealerId) { res.status(403).json({ error: 'Dealer scope required' }); return; }
+  const parsed = credsSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Enter a valid Client ID and Client Secret.' });
+    return;
+  }
+  await db.raw(
+    `INSERT INTO dealer_drive_tokens (dealer_id, client_id, client_secret, connected_at, updated_at)
+       VALUES (?, ?, ?, now(), now())
+     ON CONFLICT (dealer_id) DO UPDATE SET
+       client_id = EXCLUDED.client_id, client_secret = EXCLUDED.client_secret, updated_at = now()`,
+    [dealerId, parsed.data.client_id, parsed.data.client_secret],
+  );
+  res.json({ ok: true });
+});
+
+router.get('/auth-url', async (req: Request, res: Response) => {
+  const dealerId = dealerOf(req);
+  if (!dealerId) { res.status(403).json({ error: 'Dealer scope required' }); return; }
+  const creds = await getDealerCreds(dealerId);
+  if (!creds) {
+    res.status(400).json({ error: 'Add your Google Client ID and Secret first, then connect.' });
+    return;
+  }
   const state = Buffer.from(JSON.stringify({ did: dealerId, t: Date.now() })).toString('base64url');
   const params = new URLSearchParams({
-    client_id: env.GOOGLE_OAUTH_CLIENT_ID!,
+    client_id: creds.client_id,
     redirect_uri: redirectUri(),
     response_type: 'code',
     scope: SCOPES.join(' '),
@@ -313,20 +350,23 @@ router.get('/status', async (req: Request, res: Response) => {
   if (!dealerId) { res.status(403).json({ error: 'Dealer scope required' }); return; }
   const { rows } = await db.raw(
     `SELECT google_email, auto_backup_enabled, last_backup_at, last_backup_status,
-            last_backup_error, last_backup_file, refresh_token IS NOT NULL AS has_refresh
+            last_backup_error, last_backup_file,
+            client_id IS NOT NULL AND client_secret IS NOT NULL AS has_credentials,
+            refresh_token IS NOT NULL AS connected
        FROM dealer_drive_tokens WHERE dealer_id = ?`,
     [dealerId],
   );
   const row = rows[0];
   res.json({
-    configured: isConfigured(),
-    connected: !!row,
+    has_credentials: !!row?.has_credentials,
+    connected: !!row?.connected,
     email: row?.google_email || null,
     auto_backup_enabled: row?.auto_backup_enabled ?? true,
     last_backup_at: row?.last_backup_at || null,
     last_backup_status: row?.last_backup_status || null,
     last_backup_error: row?.last_backup_error || null,
     last_backup_file: row?.last_backup_file || null,
+    redirect_uri: redirectUri(),
   });
 });
 
@@ -340,10 +380,17 @@ router.post('/disconnect', async (req: Request, res: Response) => {
   const tok = rows[0];
   if (tok) {
     const t = tok.refresh_token || tok.access_token;
-    try { await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(t)}`, { method: 'POST' }); }
-    catch {/* ignore */}
+    if (t) {
+      try { await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(t)}`, { method: 'POST' }); }
+      catch {/* ignore */}
+    }
   }
-  await db.raw(`DELETE FROM dealer_drive_tokens WHERE dealer_id = ?`, [dealerId]);
+  // Keep the saved credentials; only clear the connected tokens.
+  await db.raw(
+    `UPDATE dealer_drive_tokens SET access_token = NULL, refresh_token = NULL, google_email = NULL,
+       expires_at = NULL, folder_id = NULL, updated_at = now() WHERE dealer_id = ?`,
+    [dealerId],
+  );
   res.json({ ok: true });
 });
 
