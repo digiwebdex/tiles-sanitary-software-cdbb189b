@@ -92,7 +92,25 @@ export const financialService = {
     if (!r.ok) throw new Error("Failed to load trial balance");
     return r.json();
   },
+  async cashFlow(dealerId: string, from?: string, to?: string): Promise<CashFlow> {
+    const qs = new URLSearchParams({ dealerId });
+    if (from) qs.set("from", from); if (to) qs.set("to", to);
+    const r = await vpsAuthedFetch(`/api/financials/cash-flow?${qs}`);
+    if (!r.ok) throw new Error("Failed to load cash flow");
+    return r.json();
+  },
 };
+
+export interface CashFlow {
+  period: { from: string | null; to: string | null };
+  opening_cash: number;
+  inflows: { label: string; amount: number }[];
+  outflows: { label: string; amount: number }[];
+  total_in: number;
+  total_out: number;
+  net_cash_flow: number;
+  closing_cash: number;
+}
 
 export const journalService = {
   async list(dealerId: string, opts: { from?: string; to?: string; limit?: number; offset?: number } = {}): Promise<{ rows: JournalEntry[]; total: number }> {
