@@ -47,6 +47,7 @@ const DataBackupPage = () => {
   const [dailyDate, setDailyDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [downloadingDaily, setDownloadingDaily] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [downloadingXlsx, setDownloadingXlsx] = useState(false);
 
   const manifestQuery = useQuery({
     queryKey: ["data-export-manifest"],
@@ -137,6 +138,22 @@ const DataBackupPage = () => {
     }
   };
 
+  const handleExcelBackup = async () => {
+    setDownloadingXlsx(true);
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      await triggerDownload(
+        `${env.VPS_API_BASE}/api/data-export/full-backup.xlsx`,
+        `full_backup_${stamp}.xlsx`,
+      );
+      toast.success("Excel backup downloaded");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDownloadingXlsx(false);
+    }
+  };
+
   return (
     <div className="container mx-auto max-w-6xl space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -200,18 +217,28 @@ const DataBackupPage = () => {
               Full Database Backup
             </CardTitle>
             <CardDescription>
-              Download all your dealer data in one ZIP archive containing separate CSV files
-              for every table — customers, products, sales, ledger, stock and more.
+              Download all your dealer data — customers, products, sales, ledger, stock and
+              more. Choose <strong>Excel</strong> for one workbook with a sheet per area, or
+              <strong> ZIP</strong> for separate CSV files.
             </CardDescription>
           </div>
-          <Button
-            onClick={handleFullBackup}
-            disabled={downloadingZip}
-            className="shrink-0"
-          >
-            <Package2 className="h-4 w-4 mr-2" />
-            {downloadingZip ? "Packing ZIP…" : "Download Full Backup (.zip)"}
-          </Button>
+          <div className="flex flex-col gap-2 shrink-0">
+            <Button
+              onClick={handleExcelBackup}
+              disabled={downloadingXlsx}
+            >
+              <Package2 className="h-4 w-4 mr-2" />
+              {downloadingXlsx ? "Building Excel…" : "Download Excel (.xlsx)"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleFullBackup}
+              disabled={downloadingZip}
+            >
+              <Package2 className="h-4 w-4 mr-2" />
+              {downloadingZip ? "Packing ZIP…" : "Download CSV ZIP (.zip)"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
