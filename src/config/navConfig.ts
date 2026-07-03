@@ -223,24 +223,44 @@ export type NavFilterOpts = {
   planFeatures?: PlanFeaturesMap | null;
 };
 
+// Advanced plan features (everything except the standard POS). An item behind
+// one of these — or flagged tier:"advanced" — belongs to the advanced menu.
+const ADVANCED_FEATURES = new Set<PlanFeatureKey>([
+  "quotations", "projects", "leads", "hrm", "campaigns",
+  "advanced_finance", "advanced_reports", "portal", "backorders",
+]);
+
+/**
+ * A package has the advanced menu if it includes any advanced feature — i.e.
+ * Business / Premium Custom. Used both to gate the advanced items and to decide
+ * whether the Simple/Advanced toggle appears in Settings.
+ */
+export function planHasAdvancedMenu(pf: PlanFeaturesMap | null | undefined): boolean {
+  if (!pf) return false;
+  return !!(
+    pf.quotationsEnabled || pf.projectsEnabled || pf.leadsEnabled || pf.hrmEnabled ||
+    pf.campaignsEnabled || pf.advancedFinanceEnabled || pf.advancedReportsEnabled ||
+    pf.portalEnabled || pf.backordersEnabled
+  );
+}
+
 export function filterNavItem(item: NavItem, opts: NavFilterOpts): boolean {
   if (item.superAdminOnly) return !!opts.isSuperAdmin || !!opts.isSaEmployee;
   if (item.dealerAdminOnly && !opts.isDealerAdmin && !opts.isSuperAdmin) return false;
 
-  // Advanced menu: an item is "advanced" if flagged tier:"advanced" OR gated by
-  // an advanced plan feature (everything except the standard POS). Simple mode
-  // hides the whole advanced menu; the dealer turns it on in Settings. Combined
-  // with the plan-feature gate below, advanced items therefore only appear for
-  // packages that include them (Business / Premium Custom) AND when the dealer
-  // has switched to Advanced mode.
-  const ADVANCED_FEATURES = new Set<PlanFeatureKey>([
-    "quotations", "projects", "leads", "hrm", "campaigns",
-    "advanced_finance", "advanced_reports", "portal", "backorders",
-  ]);
+  // Advanced menu: an item is "advanced" if flagged tier:"advanced" (the 4
+  // utility items: Notice Board, Auto-PO, Manage Branches, File Manager) OR
+  // gated by an advanced plan feature (Quotations, HRM, Projects, …). The whole
+  // advanced menu exists ONLY for packages that include advanced features
+  // (Business / Premium Custom); within those, the dealer turns it on via the
+  // Settings Simple/Advanced toggle.
   const isAdvancedItem =
     item.tier === "advanced" ||
     (!!item.planFeature && ADVANCED_FEATURES.has(item.planFeature));
-  if (isAdvancedItem && opts.menuMode === "simple" && !opts.isSuperAdmin) return false;
+  if (isAdvancedItem && !opts.isSuperAdmin) {
+    if (!planHasAdvancedMenu(opts.planFeatures)) return false; // not a Business/Premium package
+    if (opts.menuMode === "simple") return false;              // dealer hasn't enabled it
+  }
 
   // Plan-feature gate: super_admin bypasses all plan restrictions.
   if (item.planFeature && !opts.isSuperAdmin) {

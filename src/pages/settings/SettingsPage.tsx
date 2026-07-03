@@ -14,6 +14,7 @@ import { Settings, AlertTriangle, Package, ShieldCheck, Calculator, Tags, ArrowR
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/contexts/AuthContext";
+import { planHasAdvancedMenu } from "@/config/navConfig";
 import { ApprovalSettingsCard } from "@/components/approval/ApprovalSettingsCard";
 import { DemandPlanningSettingsCard } from "@/components/DemandPlanningSettingsCard";
 import WhatsAppSettingsCard from "@/components/whatsapp/WhatsAppSettingsCard";
@@ -62,6 +63,9 @@ const SettingsPage = () => {
   const { isDealerAdmin } = usePermissions();
   const { planFeatures, isSuperAdmin } = useAuth();
   const backordersEnabled = isSuperAdmin || !!(planFeatures?.backordersEnabled);
+  // The Simple/Advanced toggle only appears for packages that include the
+  // advanced menu (Business / Premium Custom). Other packages are standard-only.
+  const showMenuMode = isSuperAdmin || planHasAdvancedMenu(planFeatures);
   const dealerId = useDealerId();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -180,7 +184,8 @@ const SettingsPage = () => {
         <p className="text-muted-foreground">Loading…</p>
       ) : (
         <>
-          {/* Menu Mode — Simple vs Advanced */}
+          {/* Menu Mode — Simple vs Advanced (only for packages with the advanced menu) */}
+          {showMenuMode && (
           <Card className="border-primary/30">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -243,6 +248,7 @@ const SettingsPage = () => {
               </p>
             </CardContent>
           </Card>
+          )}
 
           {/* Stock & Backorder Settings — Pro+ plan only */}
           {backordersEnabled && <Card>
