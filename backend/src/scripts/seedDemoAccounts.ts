@@ -70,20 +70,23 @@ async function ensureDealer(key: 'A' | 'B'): Promise<string> {
     dealerId = row.id;
   }
 
-  // Ensure a 365-day active subscription so login isn't blocked
+  // Ensure a 365-day active Pro subscription so login isn't blocked
+  const proPlan = await db('plans').where({ name: 'Pro' }).first();
+  const planId = proPlan?.id ?? null;
   const sub = await db('subscriptions').where({ dealer_id: dealerId }).orderBy('start_date', 'desc').first();
   const start = new Date();
   const end = new Date(); end.setDate(end.getDate() + 365);
   if (!sub) {
     await db('subscriptions').insert({
       dealer_id: dealerId,
-      plan: 'business',
+      plan_id: planId,
       status: 'active',
       start_date: start.toISOString().slice(0, 10),
       end_date: end.toISOString().slice(0, 10),
     });
   } else {
     await db('subscriptions').where({ id: sub.id }).update({
+      plan_id: planId,
       status: 'active',
       end_date: end.toISOString().slice(0, 10),
     });
