@@ -13,7 +13,7 @@
  */
 import { db } from '../db/connection';
 
-const DEMO_EMAIL = 'dealer@tileserp.com';
+const DEMO_EMAIL = process.env.DEMO_DEALER_EMAIL || 'dealer@tileserp.com';
 
 type UUID = string;
 
