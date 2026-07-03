@@ -60,7 +60,8 @@ router.post('/skills', requireRole('dealer_admin', 'manager'), async (req: Reque
     res.json(row);
   } catch (e: any) {
     if (String(e.message).includes('unique')) return res.status(409).json({ error: 'Skill code already exists' });
-    throw e;
+    console.error('[training.skills.create] error', e?.message);
+    return res.status(500).json({ error: e?.message || 'Failed to create skill' });
   }
 });
 

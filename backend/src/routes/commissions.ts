@@ -297,6 +297,7 @@ router.put('/sale/:saleId', async (req: Request, res: Response) => {
   try {
     const dealerId = resolveDealer(req, res);
     if (!dealerId) return;
+    if (!requireAdmin(req, res, 'Only dealer_admin can manage commissions')) return;
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid input' });
@@ -307,6 +308,23 @@ router.put('/sale/:saleId', async (req: Request, res: Response) => {
       parsed.data.commission_value,
       parsed.data.commission_base_amount,
     );
+    // Ceiling: a commission liability must never exceed the sale it is attached
+    // to (guards a runaway fixed-amount or inflated base).
+    const saleRow = await db('sales')
+      .where({ id: req.params.saleId, dealer_id: dealerId })
+      .first('total_amount');
+    if (!saleRow) {
+      res.status(404).json({ error: 'Sale not found' });
+      return;
+    }
+    const saleTotal = Number(saleRow.total_amount) || 0;
+    if (calculated > saleTotal + 1e-6) {
+      res.status(400).json({
+        error: `Commission (${calculated}) cannot exceed the sale total (${saleTotal.toFixed(2)}).`,
+        code: 'COMMISSION_EXCEEDS_SALE',
+      });
+      return;
+    }
     const existing = await db('sale_commissions')
       .where({ sale_id: req.params.saleId, dealer_id: dealerId })
       .first();
@@ -504,7 +522,7 @@ router.post('/:id/settle', async (req: Request, res: Response) => {
 
       const refSrc = await trx('referral_sources')
         .select('name')
-        .where({ id: existing.referral_source_id })
+        .where({ id: existing.referral_source_id, dealer_id: dealerId })
         .first();
       const sale = await trx('sales')
         .select('invoice_number')
@@ -516,7 +534,11 @@ router.post('/:id/settle', async (req: Request, res: Response) => {
       await trx('cash_ledger').insert({
         dealer_id: dealerId,
         type: 'expense',
-        amount,
+        // Cash outflow: stored as a negative amount to match the codebase
+        // convention (expenses.ts, supplierPayment.ts). cashbook/cash-closing
+        // classify amount >= 0 as cash-in, so a positive value here would be
+        // mis-counted as a receipt and double-inflate cash on hand.
+        amount: -amount,
         description: `Commission payout to ${refName} for invoice ${invoiceNo}${
           parsed.data.note ? ` — ${parsed.data.note}` : ''
         }`,

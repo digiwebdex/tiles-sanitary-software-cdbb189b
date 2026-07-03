@@ -177,7 +177,17 @@ const entrySchema = z.object({
   entry_date: z.string().optional(),
 });
 
-router.post('/:kind', requireRole('dealer_admin', 'salesman'), async (req: Request, res: Response) => {
+// Manual ledger writes are admin-only and restricted to bookkeeping
+// adjustments. Money movement (cash receipts/payments, customer/supplier
+// settlements) MUST go through the collection/payment/expense services, which
+// post BOTH sides of the entry. This generic endpoint writes a single row, so
+// permitting it for those types silently breaks double-entry — e.g. a
+// `cash {type:'receipt'}` would inflate cash with no offsetting sale, and a
+// `customers {type:'payment'}` would clear a due with no cash received
+// (see POSTING_RULES_MATRIX §3).
+const ADJUSTMENT_TYPES = new Set(['adjustment', 'opening_balance']);
+
+router.post('/:kind', requireRole('dealer_admin'), async (req: Request, res: Response) => {
   try {
     const kind = getKind(req);
     if (!isKind(kind)) {
@@ -191,6 +201,26 @@ router.post('/:kind', requireRole('dealer_admin', 'salesman'), async (req: Reque
     if (!parsed.success) {
       res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
       return;
+    }
+
+    // Block one-sided money movement through this generic endpoint.
+    if (kind === 'cash') {
+      res.status(403).json({
+        error:
+          'Direct cash-ledger writes are disabled. Record cash movement through collections, expenses, or payments so both sides are posted.',
+        code: 'MANUAL_LEDGER_BLOCKED',
+      });
+      return;
+    }
+    if (kind === 'customers' || kind === 'suppliers') {
+      const entryType = (parsed.data.type ?? '').toLowerCase();
+      if (!ADJUSTMENT_TYPES.has(entryType)) {
+        res.status(403).json({
+          error: `Manual ${kind} ledger writes are limited to 'adjustment' or 'opening_balance'. Use the payment/collection flow for receipts and payments.`,
+          code: 'MANUAL_LEDGER_BLOCKED',
+        });
+        return;
+      }
     }
 
     const payload: Record<string, unknown> = {

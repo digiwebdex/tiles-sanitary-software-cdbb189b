@@ -76,7 +76,9 @@ router.get('/', async (req, res) => {
   const from = req.query.from as string | undefined;
   const to = req.query.to as string | undefined;
 
-  const baseQ = db('journal_entries as je').where('je.dealer_id', dealerId);
+  const baseQ = db('journal_entries as je')
+    .where('je.dealer_id', dealerId)
+    .whereNull('je.voided_at');
   if (from) baseQ.where('je.entry_date', '>=', from);
   if (to) baseQ.where('je.entry_date', '<=', to);
 
@@ -102,7 +104,10 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const dealerId = resolveDealer(req, res); if (!dealerId) return;
   if (!requireAdmin(req, res)) return;
-  const header = await db('journal_entries').where({ id: req.params.id, dealer_id: dealerId }).first();
+  const header = await db('journal_entries')
+    .where({ id: req.params.id, dealer_id: dealerId })
+    .whereNull('voided_at')
+    .first();
   if (!header) return res.status(404).json({ error: 'Not found' });
   const lines = await db('journal_entry_lines')
     .where({ journal_entry_id: header.id })
@@ -168,13 +173,25 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ── DELETE ──
+// ── VOID (soft delete) ──
+// Journal entries are never physically deleted — that would silently alter the
+// trial balance and destroy the audit trail. Marking the entry voided keeps the
+// row (and its lines) but excludes it from all balances and listings.
 router.delete('/:id', async (req, res) => {
   const dealerId = resolveDealer(req, res); if (!dealerId) return;
   if (!requireAdmin(req, res)) return;
-  const n = await db('journal_entries').where({ id: req.params.id, dealer_id: dealerId }).delete();
-  if (!n) return res.status(404).json({ error: 'Not found' });
-  res.json({ ok: true });
+  const reason =
+    typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 1000) : null;
+  const n = await db('journal_entries')
+    .where({ id: req.params.id, dealer_id: dealerId })
+    .whereNull('voided_at')
+    .update({
+      voided_at: db.fn.now(),
+      voided_by: req.user?.userId ?? null,
+      void_reason: reason,
+    });
+  if (!n) return res.status(404).json({ error: 'Not found or already voided' });
+  res.json({ ok: true, voided: true });
 });
 
 export default router;

@@ -110,7 +110,8 @@ router.post('/', requireRole('dealer_admin', 'manager'), async (req: Request, re
     res.json(result);
   } catch (e: any) {
     if (String(e.message).includes('unique')) return res.status(409).json({ error: 'Review for this period already exists' });
-    throw e;
+    console.error('[performance.create] error', e?.message);
+    return res.status(500).json({ error: e?.message || 'Failed to create review' });
   }
 });
 
