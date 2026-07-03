@@ -626,4 +626,55 @@ router.get('/trial-balance', async (req, res) => {
   });
 });
 
+// ── GET /cash-flow — period cash movement summary (from the cash ledger) ──
+// Opening cash + inflows/outflows grouped by type → closing cash. Complements
+// the "Cash in Hand" dashboard KPI (same cash_ledger source).
+router.get('/cash-flow', async (req, res) => {
+  const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
+  const from = (req.query.from as string | undefined) || null;
+  const to = (req.query.to as string | undefined) || null;
+  try {
+    const r2 = (v: unknown) => Math.round(num(v) * 100) / 100;
+    const openingRow = from
+      ? await db('cash_ledger').where({ dealer_id: dealerId }).where('entry_date', '<', from).sum({ s: 'amount' }).first()
+      : null;
+    const opening_cash = r2((openingRow as any)?.s);
+
+    const rows = await db('cash_ledger')
+      .where({ dealer_id: dealerId })
+      .modify((qb) => { if (from) qb.where('entry_date', '>=', from); if (to) qb.where('entry_date', '<=', to); })
+      .select('type')
+      .sum({ inflow: db.raw('CASE WHEN amount >= 0 THEN amount ELSE 0 END') })
+      .sum({ outflow: db.raw('CASE WHEN amount < 0 THEN -amount ELSE 0 END') })
+      .groupBy('type');
+
+    const inflows: { label: string; amount: number }[] = [];
+    const outflows: { label: string; amount: number }[] = [];
+    for (const r of rows as any[]) {
+      const inflow = num(r.inflow);
+      const outflow = num(r.outflow);
+      const label = String(r.type || 'other');
+      if (inflow > 0.005) inflows.push({ label, amount: r2(inflow) });
+      if (outflow > 0.005) outflows.push({ label, amount: r2(outflow) });
+    }
+    inflows.sort((a, b) => b.amount - a.amount);
+    outflows.sort((a, b) => b.amount - a.amount);
+    const total_in = r2(inflows.reduce((s, r) => s + r.amount, 0));
+    const total_out = r2(outflows.reduce((s, r) => s + r.amount, 0));
+    const net_cash_flow = r2(total_in - total_out);
+    const closing_cash = r2(opening_cash + net_cash_flow);
+
+    res.json({
+      period: { from, to },
+      opening_cash, inflows, outflows,
+      total_in, total_out, net_cash_flow, closing_cash,
+      source: 'cash_ledger',
+    });
+  } catch (err: any) {
+    console.error('[financials.cash-flow]', err?.message);
+    res.status(500).json({ error: 'Failed to compute cash flow' });
+  }
+});
+
 export default router;
