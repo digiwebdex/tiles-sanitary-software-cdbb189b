@@ -49,6 +49,7 @@ import PurchaseReturnsPage from "./pages/purchase-returns/PurchaseReturnsPage";
 import CreatePurchaseReturn from "./pages/purchase-returns/CreatePurchaseReturn";
 import DeliveriesPage from "./pages/deliveries/DeliveriesPage";
 import POSSalePage from "./pages/sales/POSSalePage";
+import TileCalculatorPage from "./pages/tools/TileCalculatorPage";
 import CampaignsPage from "./pages/campaigns/CampaignsPage";
 import CollectionsPage from "./pages/collections/CollectionsPage";
 import SupplierPayablesPage from "./pages/payables/SupplierPayablesPage";
@@ -299,6 +300,7 @@ const App = () => (
             <Route path="/files" element={<ProtectedRoute><AppLayout><FileManagerPage /></AppLayout></ProtectedRoute>} />
             <Route path="/holidays" element={<ProtectedRoute><AppLayout><HolidaysPage /></AppLayout></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><AppLayout><SalesPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/tools/tile-calculator" element={<ProtectedRoute allowReadonly><AppLayout><TileCalculatorPage /></AppLayout></ProtectedRoute>} />
             <Route path="/sales/new" element={<ProtectedRoute><AppLayout><CreateSale /></AppLayout></ProtectedRoute>} />
             <Route path="/sales/:id/invoice" element={<ProtectedRoute><AppLayout><InvoicePage /></AppLayout></ProtectedRoute>} />
             <Route path="/sales/:id/edit" element={<ProtectedRoute><AppLayout><EditSale /></AppLayout></ProtectedRoute>} />
