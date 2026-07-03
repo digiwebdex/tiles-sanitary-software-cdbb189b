@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   Database, Download, FileText, ArrowLeft, CheckCircle2,
-  Upload, Calendar, Archive, Package2,
+  Upload, Calendar, Archive, Package2, Cloud,
 } from "lucide-react";
 import { toast } from "sonner";
 import { vpsAuthedFetch, vpsTokenStore } from "@/lib/vpsAuthClient";
@@ -154,6 +154,77 @@ const DataBackupPage = () => {
     }
   };
 
+  // ── Google Drive auto-backup ──
+  const { data: drive, refetch: refetchDrive } = useQuery({
+    queryKey: ["dealer-drive-status"],
+    queryFn: async () => {
+      const res = await vpsAuthedFetch(`/api/dealer-drive/status`);
+      if (!res.ok) return { configured: false, connected: false } as any;
+      return res.json();
+    },
+  });
+  const [driveBusy, setDriveBusy] = useState(false);
+
+  const connectDrive = async () => {
+    setDriveBusy(true);
+    try {
+      const res = await vpsAuthedFetch(`/api/dealer-drive/auth-url`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error || "Could not start Google connect");
+      const popup = window.open(body.url, "gdrive_connect", "width=520,height=660");
+      const onMsg = (e: MessageEvent) => {
+        if (e?.data?.type === "dealer_gdrive_oauth") {
+          window.removeEventListener("message", onMsg);
+          if (e.data.ok) toast.success(e.data.message || "Google Drive connected");
+          else toast.error(e.data.message || "Connection failed");
+          setDriveBusy(false);
+          refetchDrive();
+        }
+      };
+      window.addEventListener("message", onMsg);
+      const timer = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(timer);
+          window.removeEventListener("message", onMsg);
+          setDriveBusy(false);
+          refetchDrive();
+        }
+      }, 1000);
+    } catch (e) {
+      toast.error((e as Error).message);
+      setDriveBusy(false);
+    }
+  };
+
+  const backupNow = async () => {
+    setDriveBusy(true);
+    try {
+      const res = await vpsAuthedFetch(`/api/dealer-drive/backup-now`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error || "Backup failed");
+      toast.success(`Backed up to your Google Drive: ${body.file}`);
+      refetchDrive();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const disconnectDrive = async () => {
+    if (!window.confirm("Disconnect Google Drive? Nightly auto-backup will stop.")) return;
+    setDriveBusy(true);
+    try {
+      await vpsAuthedFetch(`/api/dealer-drive/disconnect`, { method: "POST" });
+      toast.success("Google Drive disconnected");
+      refetchDrive();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
   return (
     <div className="container mx-auto max-w-6xl space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -251,6 +322,67 @@ const DataBackupPage = () => {
               <span className="text-xs text-muted-foreground">Loading table info…</span>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Google Drive Auto-Backup ──────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cloud className="h-5 w-5 text-primary" />
+            Google Drive Auto-Backup
+          </CardTitle>
+          <CardDescription>
+            Connect your own Google account to automatically back up your full data (as an Excel
+            workbook) to your Google Drive <strong>every night</strong>. You can also back up on
+            demand.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {drive?.configured === false ? (
+            <p className="text-sm text-muted-foreground">
+              Google Drive backup isn’t enabled on this system yet. Please contact support.
+            </p>
+          ) : drive?.connected ? (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                Connected as <strong>{drive.email || "your Google account"}</strong>
+              </div>
+              {drive.last_backup_at && (
+                <p className="text-xs text-muted-foreground">
+                  Last backup: {new Date(drive.last_backup_at).toLocaleString()} —{" "}
+                  {drive.last_backup_status === "success"
+                    ? "✅ success"
+                    : `❌ ${drive.last_backup_error || "failed"}`}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Backups are saved in a “SaniTiles Backups” folder in your Drive, automatically each
+                night.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={backupNow} disabled={driveBusy}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  {driveBusy ? "Backing up…" : "Back up now"}
+                </Button>
+                <Button variant="outline" onClick={disconnectDrive} disabled={driveBusy}>
+                  Disconnect
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Not connected. Click below and sign in with your Google account to enable nightly
+                backups to your own Google Drive.
+              </p>
+              <Button onClick={connectDrive} disabled={driveBusy}>
+                <Cloud className="h-4 w-4 mr-2" />
+                {driveBusy ? "Connecting…" : "Connect Google Drive"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
