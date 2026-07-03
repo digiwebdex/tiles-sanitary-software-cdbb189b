@@ -28,7 +28,7 @@ interface ExportSpec {
   table: string;
 }
 
-const EXPORTS: ExportSpec[] = [
+export const EXPORTS: ExportSpec[] = [
   { key: 'customers', label: 'Customers', table: 'customers' },
   { key: 'suppliers', label: 'Suppliers', table: 'suppliers' },
   { key: 'products', label: 'Products', table: 'products' },
