@@ -377,9 +377,9 @@ export async function getPortalSaleItems(
     .where('si.sale_id', saleId)
     .select(
       'si.product_id',
-      db.raw(`COALESCE(p.name, si.product_name_snapshot, 'Item') as product_name`),
-      db.raw(`COALESCE(p.sku, si.product_sku_snapshot, '') as product_sku`),
-      db.raw(`COALESCE(si.unit_type, p.unit_type, 'piece') as unit_type`),
+      db.raw(`COALESCE(p.name, 'Item') as product_name`),
+      db.raw(`COALESCE(p.sku, '') as product_sku`),
+      db.raw(`COALESCE(p.unit_type, 'piece') as unit_type`),
       'si.quantity',
       'si.sale_rate as rate',
     );
@@ -454,7 +454,7 @@ export async function getPortalInvoiceDoc(
     .leftJoin('products as p', 'p.id', 'si.product_id')
     .where('si.sale_id', saleId)
     .orderBy('si.created_at', 'asc')
-    .select('si.*', db.raw(`COALESCE(p.name, si.product_name_snapshot) as product_name`));
+    .select('si.*', db.raw(`COALESCE(p.name, 'Item') as product_name`));
 
   const dealer = await db('dealers').where({ id: dealerId }).first();
   const customer = await db('customers').where({ id: customerId }).first();
@@ -479,7 +479,7 @@ export async function getPortalChallanDoc(
     .leftJoin('products as p', 'p.id', 'si.product_id')
     .where('si.sale_id', challan.sale_id)
     .orderBy('si.created_at', 'asc')
-    .select('si.*', db.raw(`COALESCE(p.name, si.product_name_snapshot) as product_name`));
+    .select('si.*', db.raw(`COALESCE(p.name, 'Item') as product_name`));
 
   const dealer = await db('dealers').where({ id: dealerId }).first();
   const customer = await db('customers').where({ id: customerId }).first();

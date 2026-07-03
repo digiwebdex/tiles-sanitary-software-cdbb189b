@@ -301,7 +301,7 @@ async function getTodayTopProduct(dealerId: string, today: string) {
       'p.name',
       'p.unit_type',
       db.raw('sum(si.quantity) as qty'),
-      db.raw('sum(si.total_price) as amount'),
+      db.raw('sum(si.total) as amount'),
     )
     .groupBy('p.id', 'p.name', 'p.unit_type')
     .orderBy('amount', 'desc')
