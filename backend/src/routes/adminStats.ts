@@ -118,19 +118,19 @@ router.get('/dashboard-v2', async (_req: Request, res: Response) => {
       db('subscriptions as s')
         .join('dealers as d', 'd.id', 's.dealer_id')
         .leftJoin('plans as p', 'p.id', 's.plan_id')
-        .leftJoin('profiles as pr', 'pr.dealer_id', 'd.id')
+        // Phone lives on dealers (d.phone); the profiles table has no phone column.
         .where('s.status', 'active')
         .whereRaw('s.end_date::date BETWEEN ? AND ?', [todayStr, expirySoonCutoff.toISOString().slice(0, 10)])
         .orWhere(function () {
           this.where('s.status', 'expired')
             .whereRaw('s.end_date::date >= ?', [graceCutoff.toISOString().slice(0, 10)]);
         })
-        .groupBy('s.id', 'd.id', 'p.id', 'pr.phone')
+        .groupBy('s.id', 'd.id', 'p.id')
         .select(
           'd.id as dealer_id', 'd.name as dealer_name', 'd.status as dealer_status',
           's.id as sub_id', 's.status as sub_status', 's.end_date',
           'p.name as plan_name',
-          db.raw('MIN(pr.phone) as phone'),
+          db.raw('MIN(d.phone) as phone'),
           db.raw(`(s.end_date::date - CURRENT_DATE) as days_left`)
         )
         .orderBy(db.raw('s.end_date::date'))
