@@ -50,6 +50,7 @@ import CreatePurchaseReturn from "./pages/purchase-returns/CreatePurchaseReturn"
 import DeliveriesPage from "./pages/deliveries/DeliveriesPage";
 import POSSalePage from "./pages/sales/POSSalePage";
 import TileCalculatorPage from "./pages/tools/TileCalculatorPage";
+import LoginHistoryPage from "./pages/settings/LoginHistoryPage";
 import CampaignsPage from "./pages/campaigns/CampaignsPage";
 import CollectionsPage from "./pages/collections/CollectionsPage";
 import SupplierPayablesPage from "./pages/payables/SupplierPayablesPage";
@@ -245,6 +246,7 @@ const App = () => (
             <Route path="/reports" element={<ProtectedRoute allowReadonly><AppLayout><ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/credit" element={<ProtectedRoute allowReadonly><AppLayout><CreditReportPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/settings/login-history" element={<ProtectedRoute><AppLayout><LoginHistoryPage /></AppLayout></ProtectedRoute>} />
             <Route path="/subscription" element={<ProtectedRoute allowReadonly><AppLayout><SubscriptionPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings/pricing-tiers" element={<ProtectedRoute><AppLayout><PricingTiersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings/data-backup" element={<ProtectedRoute><AppLayout><DataBackupPage /></AppLayout></ProtectedRoute>} />

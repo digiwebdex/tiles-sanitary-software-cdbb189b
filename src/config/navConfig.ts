@@ -190,6 +190,7 @@ export const navSections: NavSection[] = [
     defaultOpen: false,
     items: [
       { path: "/settings", label: "Settings", icon: Settings },
+      { path: "/settings/login-history", label: "Login History", icon: ShieldCheck, dealerAdminOnly: true },
       { path: "/settings/branches", label: "Manage Branches", icon: Building2, dealerAdminOnly: true, tier: "advanced" },
       { path: "/files", label: "File Manager", icon: Folder, dealerAdminOnly: true, tier: "advanced" },
       { path: "/admin/portal-users", label: "Portal Users", icon: UserCog, dealerAdminOnly: true, planFeature: "portal" },
