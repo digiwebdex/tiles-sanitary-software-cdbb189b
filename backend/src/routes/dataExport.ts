@@ -11,6 +11,7 @@
  * for products / customers / suppliers.
  */
 import { Router, Request, Response } from 'express';
+import ExcelJS from 'exceljs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
 const { ZipArchive } = require('archiver') as { ZipArchive: new (opts?: any) => any };
 import { db } from '../db/connection';
@@ -179,6 +180,75 @@ router.get('/full-backup.zip', async (req: Request, res: Response) => {
   archive.append(readme, { name: 'README.txt' });
 
   await archive.finalize();
+});
+
+// ── GET /full-backup.xlsx — native Excel workbook, one sheet per area ──
+// Streams a real .xlsx (not CSV): each data area becomes its own sheet with
+// bold headers. Values that are objects/JSON are stringified so Excel shows
+// readable text instead of "[object Object]".
+function cellSafe(v: unknown): string | number | boolean | Date | null {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date) return v;
+  if (typeof v === 'object') { try { return JSON.stringify(v); } catch { return String(v); } }
+  return v as string | number | boolean;
+}
+function sheetName(label: string): string {
+  // Excel sheet names: max 31 chars, cannot contain \ / ? * [ ] :
+  return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet';
+}
+
+router.get('/full-backup.xlsx', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  );
+  res.setHeader('Content-Disposition', `attachment; filename="full_backup_${stamp}.xlsx"`);
+
+  const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+
+  // Summary sheet first.
+  const summary = wb.addWorksheet('Summary');
+  summary.addRow(['SaniTiles ERP — Full Data Backup']).font = { bold: true, size: 14 };
+  summary.addRow([`Generated: ${new Date().toISOString()}`]);
+  summary.addRow([]);
+  const head = summary.addRow(['Data area', 'Records']);
+  head.font = { bold: true };
+
+  const counts: Array<{ label: string; count: number }> = [];
+  for (const spec of EXPORTS) {
+    try {
+      const rows = await db(spec.table).where({ dealer_id: dealerId }).select('*');
+      counts.push({ label: spec.label, count: rows.length });
+      const ws = wb.addWorksheet(sheetName(spec.label));
+      if (rows.length > 0) {
+        const headers = Object.keys(rows[0]);
+        ws.columns = headers.map((h) => ({ header: h, key: h, width: 20 }));
+        ws.getRow(1).font = { bold: true };
+        for (const row of rows) {
+          const out: Record<string, unknown> = {};
+          for (const h of headers) out[h] = cellSafe((row as any)[h]);
+          ws.addRow(out).commit();
+        }
+      } else {
+        ws.addRow(['(no records)']).commit();
+      }
+      ws.commit();
+    } catch (err) {
+      counts.push({ label: spec.label, count: -1 });
+      const ws = wb.addWorksheet(sheetName(spec.label));
+      ws.addRow([`Error exporting ${spec.table}: ${(err as Error).message}`]).commit();
+      ws.commit();
+    }
+  }
+
+  for (const c of counts) summary.addRow([c.label, c.count < 0 ? 'error' : c.count]).commit();
+  summary.commit();
+
+  await wb.commit();
 });
 
 // ── GET /:key.csv — single table CSV ─────────────────────────────
