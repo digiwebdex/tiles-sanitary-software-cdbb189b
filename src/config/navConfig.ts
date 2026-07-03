@@ -227,8 +227,20 @@ export function filterNavItem(item: NavItem, opts: NavFilterOpts): boolean {
   if (item.superAdminOnly) return !!opts.isSuperAdmin || !!opts.isSaEmployee;
   if (item.dealerAdminOnly && !opts.isDealerAdmin && !opts.isSuperAdmin) return false;
 
-  // Simple mode hides tier:"advanced" items for the whole dealer.
-  if (item.tier === "advanced" && opts.menuMode === "simple") return false;
+  // Advanced menu: an item is "advanced" if flagged tier:"advanced" OR gated by
+  // an advanced plan feature (everything except the standard POS). Simple mode
+  // hides the whole advanced menu; the dealer turns it on in Settings. Combined
+  // with the plan-feature gate below, advanced items therefore only appear for
+  // packages that include them (Business / Premium Custom) AND when the dealer
+  // has switched to Advanced mode.
+  const ADVANCED_FEATURES = new Set<PlanFeatureKey>([
+    "quotations", "projects", "leads", "hrm", "campaigns",
+    "advanced_finance", "advanced_reports", "portal", "backorders",
+  ]);
+  const isAdvancedItem =
+    item.tier === "advanced" ||
+    (!!item.planFeature && ADVANCED_FEATURES.has(item.planFeature));
+  if (isAdvancedItem && opts.menuMode === "simple" && !opts.isSuperAdmin) return false;
 
   // Plan-feature gate: super_admin bypasses all plan restrictions.
   if (item.planFeature && !opts.isSuperAdmin) {
