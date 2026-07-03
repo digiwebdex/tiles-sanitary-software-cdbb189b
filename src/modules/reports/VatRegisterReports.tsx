@@ -85,7 +85,7 @@ export function VatSalesRegisterReport({ dealerId }: { dealerId: string }) {
       const params = new URLSearchParams({ dealerId, from, to });
       const res = await vpsAuthedFetch(`/api/reports/vat/sales-register?${params}`);
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
-      return res.json() as {
+      return (await res.json()) as {
         rows: VatSalesRow[];
         totals: { taxable: number; vat: number; sd: number; total: number };
       };
@@ -190,7 +190,7 @@ export function VatPurchaseRegisterReport({ dealerId }: { dealerId: string }) {
       const params = new URLSearchParams({ dealerId, from, to });
       const res = await vpsAuthedFetch(`/api/reports/vat/purchase-register?${params}`);
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
-      return res.json() as {
+      return (await res.json()) as {
         rows: VatPurchaseRow[];
         totals: { taxable: number; vat: number; sd: number; total: number };
       };

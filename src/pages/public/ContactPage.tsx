@@ -10,7 +10,7 @@ import {
   Layers, ArrowRight, Phone, Mail, MapPin,
   MessageCircle, CheckCircle2, Send, Clock, Building2,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { env } from "@/lib/env";
 
 /* ─── Validation schema ─── */
 const contactSchema = z.object({
@@ -155,15 +155,11 @@ const ContactPage = () => {
 
     setLoading(true);
     try {
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-      const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/submit-contact`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(result.data),
-        }
-      );
+      const res = await fetch(`${env.VPS_API_BASE}/api/signup/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result.data),
+      });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Submission failed");
       setSubmitted(true);

@@ -12,12 +12,19 @@ import {
   isNavItemActive,
   navSections,
   type NavItem,
+  type PlanFeaturesMap,
 } from "@/config/navConfig";
 
 type SidebarNavProps = {
   isReadonly: boolean;
   isDealerAdmin: boolean;
   isSuperAdmin: boolean;
+  isSaEmployee?: boolean;
+  isManager?: boolean;
+  isAccountant?: boolean;
+  isSalesman?: boolean;
+  menuMode?: "simple" | "advanced";
+  planFeatures?: PlanFeaturesMap | null;
   className?: string;
   compact?: boolean;
 };
@@ -30,22 +37,32 @@ export function SidebarNav({
   isReadonly,
   isDealerAdmin,
   isSuperAdmin,
+  isSaEmployee = false,
+  isManager = false,
+  isAccountant = false,
+  isSalesman = false,
+  menuMode = "advanced",
+  planFeatures = null,
   className,
   compact = false,
 }: SidebarNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const filterOpts = { isReadonly, isDealerAdmin, isSuperAdmin };
 
   const visibleSections = useMemo(
-    () =>
-      navSections
+    () => {
+      const filterOpts = {
+        isReadonly, isDealerAdmin, isSuperAdmin, isSaEmployee,
+        isManager, isAccountant, isSalesman, menuMode, planFeatures,
+      };
+      return navSections
         .map((section) => ({
           ...section,
           items: section.items.filter((item) => filterNavItem(item, filterOpts)),
         }))
-        .filter((section) => section.items.length > 0),
-    [isDealerAdmin, isSuperAdmin, isReadonly],
+        .filter((section) => section.items.length > 0);
+    },
+    [isDealerAdmin, isSuperAdmin, isSaEmployee, isReadonly, isManager, isAccountant, isSalesman, menuMode, planFeatures],
   );
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {

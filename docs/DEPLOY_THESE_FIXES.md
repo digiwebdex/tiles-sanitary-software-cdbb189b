@@ -1,102 +1,96 @@
-# How to deploy these fixes (simple, step-by-step)
+# Deploy the audit fixes — step by step (your real setup)
 
-This guide is written for someone who is **not** a developer. Follow it in order.
-Don't skip the "check first" and "how to undo" parts.
+Written for a non-developer. Your live ERP runs under **PM2** as `tilessaas-api`
+from `/var/www/tilessaas/backend/dist/index.js`, database **`tileserp`** on
+`127.0.0.1:5440`. Deploy = SSH + git + build + migrate + PM2 restart.
 
-The code changes are already written, committed, and both the backend and
-frontend build successfully. What's left is: get the code to GitHub, let your
-server pick it up, run two small database updates, and check it worked.
+The fixes are on branch **`fixes-on-live`** (built on top of your real live code,
+already on GitHub). It adds 2 database updates: **081** and **082**.
 
----
-
-## What changed (one line)
-Fixes for money/stock bugs, access control, tax reports, and safety — see
-`docs/PRODUCTION_READINESS_AUDIT.md` for the full list.
-
-## ⚠️ Two things you MUST know before deploying
-1. **Two database migrations run on deploy** (`066_journal_soft_void` and
-   `067_document_number_unique`). Migration **067 will stop with an error if you
-   already have duplicate invoice/challan/delivery numbers.** That's on purpose —
-   fix the duplicates first (Step 2 shows how to check).
-2. **Profit numbers change for VAT-registered dealers.** VAT and SD are now
-   correctly treated as tax you owe the government, not as your income. Your
-   Profit & Loss and Trial Balance will show lower (correct) profit than before.
-   Dealers with VAT turned off see **no change**.
+Do the steps **in order**. Don't skip the backup.
 
 ---
 
-## Step 1 — Push the code to GitHub
-The commit is on branch `claude/sweet-mccarthy-9a4489`. This machine has no
-GitHub login, so push from your own computer (or fix the token here).
+## ⚠️ Know before you start
+- Your live code is safely backed up on GitHub as branch **`server-live-snapshot`**
+  (this was done for you). `fixes-on-live` = that snapshot **plus** the 24 fixes.
+- **Profit numbers change for VAT-registered dealers** — VAT/SD are now correctly
+  treated as tax owed, not income. This is the *correct* number. VAT-off dealers:
+  no change.
+- The duplicate-invoice-number check was already run against your live DB — **it
+  came back clean**, so update 082 will apply fine.
 
+## Step 1 — Back up the database (your undo button)
 ```bash
-# set your real GitHub token (get one at github.com → Settings → Developer
-# settings → Personal access tokens). Keep it secret.
-git remote set-url origin https://<YOUR_TOKEN>@github.com/digiwebdex/tiles-sanitary-software-cdbb189b.git
-git push -u origin claude/sweet-mccarthy-9a4489
+cd /var/www/tilessaas
+# direct, reliable dump of the live ERP DB:
+export PGPASSWORD="$(grep -E '^DB_PASSWORD=' backend/.env | cut -d= -f2-)"
+pg_dump -h 127.0.0.1 -p 5440 -U tileserp -d tileserp -Fc \
+  -f "/root/tileserp_backup_$(date +%Y%m%d_%H%M%S).dump"
+unset PGPASSWORD
+ls -lh /root/tileserp_backup_*.dump   # confirm a file was created
 ```
+Keep that `.dump` file. (Or use `bash scripts/backup.sh` if you prefer.)
 
-Then on GitHub, open a Pull Request from `claude/sweet-mccarthy-9a4489` into
-`main`, review, and merge it. (If your server deploys from `main`, merging is
-what triggers the deploy.)
-
-## Step 2 — BEFORE deploying: check for duplicate document numbers
-Run these against your **production database** (read-only, safe). If any return
-rows, de-duplicate them before deploying, or migration 067 will fail.
-
-```sql
-SELECT dealer_id, invoice_number, COUNT(*) FROM sales
-  WHERE invoice_number IS NOT NULL AND invoice_number <> ''
-  GROUP BY dealer_id, invoice_number HAVING COUNT(*) > 1;
-
-SELECT dealer_id, challan_no, COUNT(*) FROM challans
-  WHERE challan_no IS NOT NULL AND challan_no <> ''
-  GROUP BY dealer_id, challan_no HAVING COUNT(*) > 1;
-
-SELECT dealer_id, delivery_no, COUNT(*) FROM deliveries
-  WHERE delivery_no IS NOT NULL AND delivery_no <> ''
-  GROUP BY dealer_id, delivery_no HAVING COUNT(*) > 1;
-```
-No rows returned = you're good.
-
-## Step 3 — Take a database backup (always)
-Your project already has a backup script:
+## Step 2 — Get the fixes onto the server
 ```bash
-bash scripts/backup.sh
+cd /var/www/tilessaas
+git fetch origin
+git merge --ff-only origin/fixes-on-live
 ```
-Keep the backup file somewhere safe. This is your undo button for the migrations.
+If `--ff-only` errors, run `git status` and send me the output before continuing.
 
-## Step 4 — Deploy
-- If you use **Coolify**: after the PR is merged (or the branch is pushed),
-  Coolify redeploys automatically, or click **Redeploy** on the backend service.
-- The backend must run the database migrations. If your deploy does NOT run them
-  automatically, run them once after deploy:
+## Step 3 — Build + apply the 2 database updates + restart the API
+```bash
+cd /var/www/tilessaas/backend
+npm ci                 # install exact deps (safe)
+npm run build          # compile TypeScript -> dist
+npm run migrate:latest # applies updates 081 and 082 (uses backend/.env)
+pm2 restart tilessaas-api
+pm2 logs tilessaas-api --lines 40   # watch for a clean start (Ctrl+C to exit)
+```
+Expected: migrations report **081** and **082** as "Batch ... run", and the API
+logs show it started with the database connected.
+If update 082 complains about duplicates, it will list them — stop and send me
+that message (we already checked and it was clean, so this is unlikely).
+
+## Step 4 — Rebuild the website (frontend)
+```bash
+cd /var/www/tilessaas
+npm ci
+npm run build          # regenerates /var/www/tilessaas/dist
+```
+Your web server (nginx) serves the site from the `dist` folder, so this updates
+the live site. If your nginx serves from a different folder, copy `dist/*` there.
+(Not sure? Send me `grep -ri 'root ' /etc/nginx/ | grep -i tiles` and I'll tell you.)
+
+## Step 5 — Verify
+1. Open https://app.sanitileserp.com and log in — loads normally.
+2. Create a test sale + a return — no errors.
+3. Open a Profit & Loss report for a VAT dealer — profit reflects ex-VAT revenue,
+   and VAT/SD show as separate liabilities.
+4. (Optional) confirm rate limiting: many bad logins now return "Too many login
+   attempts" after 20 tries.
+
+## How to UNDO
+- **Code:** `cd /var/www/tilessaas && git checkout server-live-snapshot`,
+  then redo Step 3 build + `pm2 restart tilessaas-api` and Step 4 frontend build.
+- **Database (updates 081/082):**
   ```bash
-  # from the backend service/container, with the DB env configured
-  npm run migrate:latest
+  cd /var/www/tilessaas/backend
+  npm run migrate:rollback   # undoes 082
+  npm run migrate:rollback   # undoes 081
   ```
-  (If a migration fails, read the error — 067 lists the duplicate rows to fix.)
-
-## Step 5 — Verify it worked
-1. Open https://app.sanitileserp.com and log in — the app should load normally.
-2. Create a test sale, a return, and check a report — no errors.
-3. Confirm rate limiting now works (ask your dev, or): repeated bad logins should
-   start returning "Too many login attempts" after 20 tries in 15 minutes.
-4. Check a Profit & Loss report for a VAT dealer — profit reflects ex-VAT revenue.
-
-## How to UNDO if something goes wrong
-- **Undo the code:** in Coolify, redeploy the previous version (or
-  `git revert` the merge commit and redeploy).
-- **Undo the migrations:**
+- **Full DB restore** from Step 1 backup:
   ```bash
-  npm run migrate:rollback   # rolls back 067, then run again for 066
+  export PGPASSWORD="$(grep -E '^DB_PASSWORD=' backend/.env | cut -d= -f2-)"
+  pg_restore -h 127.0.0.1 -p 5440 -U tileserp -d tileserp --clean --if-exists \
+    /root/tileserp_backup_YYYYMMDD_HHMMSS.dump
+  unset PGPASSWORD
   ```
-- **Restore the database** from the Step 3 backup if needed (see
-  `docs/BACKUP_RESTORE.md`).
 
 ---
 
-## If you get stuck
-Tell your developer (or paste back here): which step, and the exact error
-message. The safe order is always: **backup → check duplicates → deploy →
-verify → (undo if needed).**
+## If anything looks wrong
+Send me the **step number** and the **exact terminal output**. Safe order is
+always: **backup → merge → build → migrate → restart → verify → (undo if needed).**

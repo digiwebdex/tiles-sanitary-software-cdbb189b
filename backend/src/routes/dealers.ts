@@ -13,9 +13,12 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../db/connection';
+import { env } from '../config/env';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
-import { dispatchApprovalNotification, sendEmail, sendSms } from '../services/notificationService';
+import { dispatchApprovalNotification, dispatchSignupNotifications, sendEmail, sendSms } from '../services/notificationService';
+import { recordSaAudit } from '../services/saAuditService';
+import { notifySuspended } from '../services/subscriptionNotifyService';
 
 const router = Router();
 
@@ -414,6 +417,15 @@ router.post('/:id/suspend', async (req: Request, res: Response) => {
       }
     });
 
+    await recordSaAudit(req, {
+      action: 'dealer.suspend',
+      targetType: 'dealer',
+      targetId: dealerId,
+      targetLabel: dealer.name,
+    });
+
+    await notifySuspended({ dealerId, reason: req.body?.reason ?? undefined });
+
     res.json({ success: true, dealer_id: dealerId, status: 'suspended' });
   } catch (err: any) {
     console.error('[dealers:suspend] failed:', err);
@@ -440,6 +452,13 @@ router.post('/:id/reactivate', async (req: Request, res: Response) => {
       if (adminIds.length) {
         await trx('users').whereIn('id', adminIds).update({ status: 'active' });
       }
+    });
+
+    await recordSaAudit(req, {
+      action: 'dealer.reactivate',
+      targetType: 'dealer',
+      targetId: dealerId,
+      targetLabel: dealer.name,
     });
 
     res.json({ success: true, dealer_id: dealerId, status: 'active' });
@@ -776,6 +795,14 @@ router.delete('/:id', async (req: Request, res: Response) => {
       await trx('dealers').where({ id: dealerId }).del();
     });
 
+    await recordSaAudit(req, {
+      action: 'dealer.delete',
+      targetType: 'dealer',
+      targetId: dealerId,
+      targetLabel: dealer.name,
+      details: { profiles_removed: profileIds.length },
+    });
+
     res.json({ success: true, dealer_id: dealerId, deleted: true });
   } catch (err: any) {
     console.error('[dealers:delete] failed:', err);
@@ -874,6 +901,18 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, dealer: result.dealer, admin_user: result.adminUser, subscription: result.sub });
+
+    // Best-effort: notify super admin (WhatsApp + SMS + Email) and dealer (if phone/email provided)
+    if (result.adminUser || body.phone) {
+      dispatchSignupNotifications({
+        dealerName:   result.adminUser?.name ?? name,
+        businessName: name,
+        dealerPhone:  body.phone?.trim() ?? '',
+        dealerEmail:  result.adminUser?.email ?? '',
+        adminPhone:   env.ADMIN_PHONE,
+        adminEmail:   env.ADMIN_EMAIL,
+      }).catch((err) => console.error('[dealers:create] notify failed:', err));
+    }
   } catch (err: any) {
     console.error('[dealers:create] failed:', err);
     res.status(500).json({ error: err.message || 'Create failed' });

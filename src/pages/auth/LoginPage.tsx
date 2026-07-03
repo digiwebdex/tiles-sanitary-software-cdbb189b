@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Navigate, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { authBridge } from "@/lib/authBridge";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { LogIn, ArrowLeft, ShieldAlert, Lock } from "lucide-react";
+import { LogIn, ArrowLeft, ShieldAlert, Lock, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const LoginPage = () => {
@@ -15,6 +15,8 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [step, setStep] = useState<"credentials" | "totp">("credentials");
   const [loading, setLoading] = useState(false);
   const [lockInfo, setLockInfo] = useState<{
     locked: boolean;
@@ -22,10 +24,8 @@ const LoginPage = () => {
     remaining_minutes?: number;
   } | null>(null);
   const { toast } = useToast();
+  const totpRef = useRef<HTMLInputElement>(null);
 
-  // Supabase path: AuthContext drives redirect when Supabase session arrives.
-  // VPS path: AuthContext is also hydrated from the stored VPS user, so send
-  // users to the correct area instead of leaving them on /login.
   if (!authLoading && user) {
     const vpsUser = authBridge.getCurrentVpsUser();
     return <Navigate to={vpsUser?.roles.includes("super_admin") ? "/super-admin" : "/dashboard"} replace />;
@@ -33,26 +33,38 @@ const LoginPage = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) return;
     setLoading(true);
 
     try {
-      // 1. Pre-login lock check (single source of truth — backend-aware via bridge)
-      const lockCheck = await authBridge.getLockStatus(email.trim());
-      if (lockCheck.locked) {
-        const mins = Math.ceil(lockCheck.remaining_minutes ?? 30);
-        setLockInfo({ locked: true, remaining_minutes: mins });
-        toast({
-          variant: "destructive",
-          title: "অ্যাকাউন্ট লক করা হয়েছে",
-          description: `অনেকবার ভুল পাসওয়ার্ড দেওয়ায় অ্যাকাউন্ট লক হয়েছে। ${mins} মিনিট পর চেষ্টা করুন।`,
-        });
-        setLoading(false);
-        return;
+      if (step === "credentials") {
+        // Pre-login lock check (only for non-SA, but we don't know role yet)
+        const lockCheck = await authBridge.getLockStatus(email.trim());
+        if (lockCheck.locked) {
+          const mins = Math.ceil(lockCheck.remaining_minutes ?? 30);
+          setLockInfo({ locked: true, remaining_minutes: mins });
+          toast({
+            variant: "destructive",
+            title: "অ্যাকাউন্ট লক করা হয়েছে",
+            description: `অনেকবার ভুল পাসওয়ার্ড দেওয়ায় অ্যাকাউন্ট লক হয়েছে। ${mins} মিনিট পর চেষ্টা করুন।`,
+          });
+          setLoading(false);
+          return;
+        }
       }
 
-      // 2. Sign in via bridge (Supabase OR VPS depending on env flag)
-      const result = await authBridge.signIn(email.trim(), password);
+      const result = await authBridge.signIn(
+        email.trim(),
+        password,
+        step === "totp" ? totpCode.trim() : undefined,
+      );
+
+      if (result.totpRequired) {
+        // Password OK — need TOTP
+        setStep("totp");
+        setLoading(false);
+        setTimeout(() => totpRef.current?.focus(), 100);
+        return;
+      }
 
       if (!result.success) {
         const lock = result.lock ?? { locked: false };
@@ -63,6 +75,13 @@ const LoginPage = () => {
             title: "অ্যাকাউন্ট লক!",
             description: "৩ বার ভুল পাসওয়ার্ড দেওয়ায় অ্যাকাউন্ট ৩০ মিনিটের জন্য লক হয়েছে।",
           });
+        } else if (result.code === "TOTP_INVALID") {
+          toast({
+            variant: "destructive",
+            title: "ভুল কোড",
+            description: "Authenticator app-এর কোড ভুল হয়েছে। আবার চেষ্টা করুন।",
+          });
+          setTotpCode("");
         } else {
           const remaining = lock.remaining_attempts ?? 0;
           setLockInfo({ locked: false, remaining_attempts: remaining });
@@ -77,40 +96,9 @@ const LoginPage = () => {
         }
       } else {
         setLockInfo(null);
-
-        // Legacy pending-check only applies to the old auth backend. VPS auth
-        // already validates user/dealer status server-side during /api/auth/login.
-        if (!authBridge.isVps) {
-          try {
-            const { data: profile } = await import("@/integrations/supabase/client").then(({ supabase }) =>
-              supabase.from("profiles").select("dealer_id").eq("email", email.trim().toLowerCase()).maybeSingle()
-            );
-            if (profile?.dealer_id) {
-              const { supabase } = await import("@/integrations/supabase/client");
-              const { data: dealer } = await supabase.from("dealers").select("status").eq("id", profile.dealer_id).maybeSingle();
-              if (dealer?.status === "pending") {
-                await authBridge.signOut();
-                toast({
-                  variant: "destructive",
-                  title: "Awaiting Approval",
-                  description: "Your account is pending Super Admin approval. You'll be notified by email once activated.",
-                });
-                setLoading(false);
-                return;
-              }
-            }
-          } catch (checkErr) {
-            console.warn("[Login] pending-status check failed:", checkErr);
-          }
-        }
-
-        // VPS path: route by role immediately after tokens are saved.
-        if (authBridge.isVps) {
-          const vpsUser = authBridge.getCurrentVpsUser();
-          const target = vpsUser?.roles.includes("super_admin") ? "/super-admin" : "/dashboard";
-          window.setTimeout(() => navigate(target, { replace: true }), 0);
-        }
-        // Supabase path: onAuthStateChange will trigger AuthContext + redirect.
+        const vpsUser = authBridge.getCurrentVpsUser();
+        const target = vpsUser?.roles.includes("super_admin") ? "/super-admin" : "/dashboard";
+        window.setTimeout(() => navigate(target, { replace: true }), 0);
       }
     } catch (err) {
       console.error("Login error:", err);
@@ -135,11 +123,19 @@ const LoginPage = () => {
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Back to website
         </Link>
+
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Sign In</CardTitle>
-            <CardDescription>Enter your credentials to access the ERP</CardDescription>
+            <CardTitle className="text-2xl">
+              {step === "totp" ? "Two-Factor Authentication" : "Sign In"}
+            </CardTitle>
+            <CardDescription>
+              {step === "totp"
+                ? "Google Authenticator অ্যাপ থেকে ৬-সংখ্যার কোড দিন"
+                : "Enter your credentials to access the ERP"}
+            </CardDescription>
           </CardHeader>
+
           <CardContent>
             {isLocked && (
               <Alert variant="destructive" className="mb-4">
@@ -150,50 +146,104 @@ const LoginPage = () => {
               </Alert>
             )}
 
-            {!isLocked && lockInfo && !lockInfo.locked && lockInfo.remaining_attempts !== undefined && lockInfo.remaining_attempts <= 2 && (
+            {!isLocked && lockInfo && !lockInfo.locked && (lockInfo.remaining_attempts ?? 3) <= 2 && step === "credentials" && (
               <Alert className="mb-4 border-orange-500/50 bg-orange-500/10">
                 <ShieldAlert className="h-4 w-4 text-orange-500" />
                 <AlertDescription className="text-orange-600 dark:text-orange-400">
-                  সতর্কতা: আর মাত্র {lockInfo.remaining_attempts} বার চেষ্টা বাকি আছে। এরপর অ্যাকাউন্ট লক হয়ে যাবে।
+                  সতর্কতা: আর মাত্র {lockInfo.remaining_attempts} বার চেষ্টা বাকি আছে।
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {step === "totp" && (
+              <Alert className="mb-4 border-blue-500/50 bg-blue-500/10">
+                <ShieldCheck className="h-4 w-4 text-blue-500" />
+                <AlertDescription className="text-blue-700 dark:text-blue-300">
+                  পাসওয়ার্ড সঠিক। এখন Google Authenticator কোড দিন।
                 </AlertDescription>
               </Alert>
             )}
 
             <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  disabled={isLocked}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                  disabled={isLocked}
-                />
-              </div>
+              {step === "credentials" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      disabled={isLocked}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoComplete="current-password"
+                      disabled={isLocked}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="totp">Authenticator Code</Label>
+                  <Input
+                    id="totp"
+                    ref={totpRef}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                    required
+                    autoComplete="one-time-code"
+                    className="text-center text-xl tracking-widest font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground text-center">
+                    Google Authenticator → TilesERP Super Admin
+                  </p>
+                </div>
+              )}
+
               <Button type="submit" className="w-full" disabled={loading || isLocked}>
                 <LogIn className="mr-2 h-4 w-4" />
-                {loading ? "Signing in…" : isLocked ? "Account Locked" : "Sign In"}
+                {loading
+                  ? step === "totp" ? "Verifying…" : "Signing in…"
+                  : isLocked
+                  ? "Account Locked"
+                  : step === "totp"
+                  ? "Verify Code"
+                  : "Sign In"}
               </Button>
+
+              {step === "totp" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-sm"
+                  onClick={() => { setStep("credentials"); setTotpCode(""); }}
+                >
+                  ← পাসওয়ার্ড পরিবর্তন করুন
+                </Button>
+              )}
             </form>
 
-            <div className="mt-4 flex items-center justify-center gap-1 text-xs text-muted-foreground">
-              <ShieldAlert className="h-3 w-3" />
-              <span>৩ বার ভুল পাসওয়ার্ড দিলে অ্যাকাউন্ট ৩০ মিনিটের জন্য লক হবে</span>
-            </div>
+            {step === "credentials" && (
+              <div className="mt-4 flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                <ShieldAlert className="h-3 w-3" />
+                <span>৩ বার ভুল পাসওয়ার্ড দিলে অ্যাকাউন্ট ৩০ মিনিটের জন্য লক হবে</span>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

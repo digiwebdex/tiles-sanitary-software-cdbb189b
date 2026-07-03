@@ -103,11 +103,18 @@ import SAPlansPage from "./pages/super-admin/SAPlansPage";
 import SASubscriptionsPage from "./pages/super-admin/SASubscriptionsPage";
 import SARevenuePage from "./pages/super-admin/SARevenuePage";
 import SADealerPaymentsPage from "./pages/super-admin/SADealerPaymentsPage";
+import SAPaymentRequestsPage from "./pages/super-admin/SAPaymentRequestsPage";
 import SASystemPage from "./pages/super-admin/SASystemPage";
 import SASubscriptionStatusPage from "./pages/super-admin/SASubscriptionStatusPage";
+import SARemindersPage from "./pages/super-admin/SARemindersPage";
 import SACmsPage from "./pages/super-admin/SACmsPage";
 import SABackupPage from "./pages/super-admin/SABackupPage";
 import SAUserGuidePage from "./pages/super-admin/SAUserGuidePage";
+import SAAnnouncementsPage from "./pages/super-admin/SAAnnouncementsPage";
+import SAAuditLogPage from "./pages/super-admin/SAAuditLogPage";
+import SATotpSetupPage from "./pages/super-admin/SATotpSetupPage";
+import SaEmployeeManagement from "./pages/admin/SaEmployeeManagement";
+import SASettingsPage from "./pages/super-admin/SASettingsPage";
 import SettingsPage from "./pages/settings/SettingsPage";
 import PricingTiersPage from "./pages/settings/PricingTiersPage";
 import DataBackupPage from "./pages/settings/DataBackupPage";
@@ -217,12 +224,19 @@ const App = () => (
               <Route path="plans" element={<SAPlansPage />} />
               <Route path="subscriptions" element={<SASubscriptionsPage />} />
               <Route path="subscription-status" element={<SASubscriptionStatusPage />} />
+              <Route path="reminders" element={<SARemindersPage />} />
               <Route path="revenue" element={<SARevenuePage />} />
               <Route path="payments" element={<SADealerPaymentsPage />} />
+              <Route path="payment-requests" element={<SAPaymentRequestsPage />} />
               <Route path="cms" element={<SACmsPage />} />
               <Route path="backups" element={<SABackupPage />} />
               <Route path="user-guide" element={<SAUserGuidePage />} />
               <Route path="system" element={<SASystemPage />} />
+              <Route path="announcements" element={<SAAnnouncementsPage />} />
+              <Route path="audit" element={<SAAuditLogPage />} />
+              <Route path="totp-setup" element={<SATotpSetupPage />} />
+              <Route path="settings" element={<SASettingsPage />} />
+              <Route path="staff" element={<SaEmployeeManagement />} />
             </Route>
 
             {/* Dashboard + Reports: allowed in readonly */}

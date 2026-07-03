@@ -4,10 +4,78 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
 import { defaultSubscriptionEndDate } from '../lib/subscriptionEndDate';
+import { recordSaAudit } from '../services/saAuditService';
+import { sendWhatsApp } from '../services/notificationService';
+import {
+  notifyPaymentApproved,
+  notifyPaymentRejected,
+  notifyMoreInfoNeeded,
+  notifyManualActivated,
+  notifyExtended,
+  notifySuspended,
+} from '../services/subscriptionNotifyService';
 
 const router = Router();
 
 router.use(authenticate, requireRole('super_admin'));
+
+// ── WhatsApp notification helpers ────────────────────────────────────────────
+
+const STATUS_LABEL: Record<string, string> = {
+  active: '✅ সক্রিয়',
+  expired: '⛔ মেয়াদোত্তীর্ণ',
+  suspended: '🚫 স্থগিত',
+};
+
+async function notifySubscriptionChange(opts: {
+  dealerPhone: string | null;
+  dealerName: string;
+  event: 'created' | 'updated' | 'payment';
+  status?: string;
+  endDate?: string | null;
+  amount?: number;
+  method?: string;
+  planName?: string;
+}): Promise<void> {
+  const { dealerPhone, dealerName, event, status, endDate, amount, method, planName } = opts;
+  if (!dealerPhone) return;
+
+  const dateStr = endDate ? new Date(endDate).toLocaleDateString('bn-BD') : '—';
+  const statusLabel = status ? (STATUS_LABEL[status] ?? status) : '';
+
+  let text = '';
+  if (event === 'created') {
+    text =
+      `🎉 *সাবস্ক্রিপশন তৈরি হয়েছে*\n` +
+      `ব্যবসা: *${dealerName}*\n` +
+      (planName ? `প্ল্যান: ${planName}\n` : '') +
+      `স্ট্যাটাস: ${statusLabel}\n` +
+      `মেয়াদ শেষ: ${dateStr}\n\n` +
+      `আপনার অ্যাকাউন্ট এখন সক্রিয়। লগইন করুন: app.sanitileserp.com`;
+  } else if (event === 'updated') {
+    text =
+      `🔄 *সাবস্ক্রিপশন আপডেট হয়েছে*\n` +
+      `ব্যবসা: *${dealerName}*\n` +
+      (planName ? `প্ল্যান: ${planName}\n` : '') +
+      `স্ট্যাটাস: ${statusLabel}\n` +
+      `মেয়াদ শেষ: ${dateStr}`;
+  } else if (event === 'payment') {
+    const methodLabels: Record<string, string> = { cash: 'ক্যাশ', bank: 'ব্যাংক', mobile_banking: 'মোবাইল ব্যাংকিং' };
+    text =
+      `💳 *পেমেন্ট গ্রহণ হয়েছে*\n` +
+      `ব্যবসা: *${dealerName}*\n` +
+      `পরিমাণ: ৳${(amount ?? 0).toLocaleString('bn-BD')}\n` +
+      `মাধ্যম: ${methodLabels[method ?? ''] ?? method ?? '—'}\n` +
+      `স্ট্যাটাস: ${statusLabel}\n` +
+      `মেয়াদ শেষ: ${dateStr}\n\n` +
+      `ধন্যবাদ! app.sanitileserp.com`;
+  }
+
+  if (text) {
+    // Best-effort — don't let notification failure block the response
+    sendWhatsApp({ to: dealerPhone, text }).catch(() => {});
+  }
+}
 
 function toDateOnly(value: unknown): string | null {
   if (!value) return null;
@@ -48,6 +116,7 @@ router.get('/', async (_req: Request, res: Response) => {
       .select(
         's.id', 's.dealer_id', 's.plan_id', 's.status', 's.billing_cycle',
         's.start_date', 's.end_date', 's.yearly_discount_applied', 's.created_at',
+        's.custom_features',
         'd.name as dealer_name', 'p.name as plan_name', 'p.price_monthly', 'p.price_yearly', 'p.max_users',
       )
       .orderBy('s.start_date', 'desc')
@@ -189,9 +258,19 @@ router.post('/', async (req: Request, res: Response) => {
     const adminProfile = await db('profiles').where({ dealer_id: body.dealer_id }).first();
     if (adminProfile) {
       await db('users').where({ id: adminProfile.id }).update({ status: 'active', updated_at: new Date() });
-      // Force token refresh on next request so subscription is picked up
-      // Refresh tokens left intact; access token will pick up the new subscription via /me on next request.
     }
+
+    // WhatsApp notification to dealer
+    const newDealer = await db('dealers').where({ id: body.dealer_id }).first();
+    const newPlan = planId ? await db('plans').where({ id: planId }).first() : null;
+    await notifySubscriptionChange({
+      dealerPhone: newDealer?.phone ?? null,
+      dealerName: newDealer?.name ?? 'Unknown',
+      event: 'created',
+      status: finalStatus,
+      endDate: endDate,
+      planName: newPlan?.name ?? undefined,
+    });
 
     res.status(201).json({ subscription: row });
   } catch (err: any) {
@@ -210,6 +289,7 @@ const updateSchema = z.object({
   status: z.enum(['active', 'expired', 'suspended']).optional(),
   billing_cycle: z.enum(['monthly', 'yearly']).optional(),
   yearly_discount_applied: z.boolean().optional(),
+  custom_features: z.record(z.unknown()).nullable().optional(),
 });
 
 router.patch('/:id', async (req: Request, res: Response) => {
@@ -239,6 +319,46 @@ router.patch('/:id', async (req: Request, res: Response) => {
         await db('users').where({ id: adminProfile.id }).update({ status: 'active', updated_at: new Date() });
         // Refresh tokens left intact; access token will pick up the new subscription via /me on next request.
       }
+    }
+
+    const dealer = await db('dealers').where({ id: existing.dealer_id }).first();
+    await recordSaAudit(req, {
+      action: 'subscription.update',
+      targetType: 'subscription',
+      targetId: row.id,
+      targetLabel: dealer?.name ?? null,
+      details: {
+        from: { status: existing.status, end_date: toDateOnly(existing.end_date) },
+        to: { status: row.status, end_date: toDateOnly(row.end_date) },
+      },
+    });
+
+    const updPlan = row.plan_id ? await db('plans').where({ id: row.plan_id }).first() : null;
+    const planName = updPlan?.name ?? undefined;
+    const newEndDate = toDateOnly(row.end_date);
+
+    // Determine which specific event this update represents
+    const wasSuspended = existing.status !== 'suspended' && row.status === 'suspended';
+    const wasActivated = existing.status !== 'active' && row.status === 'active';
+    const endDateExtended = !wasSuspended && !wasActivated &&
+      row.status === 'active' && newEndDate !== toDateOnly(existing.end_date);
+
+    if (wasSuspended) {
+      await notifySuspended({ dealerId: existing.dealer_id });
+    } else if (wasActivated) {
+      await notifyManualActivated({ dealerId: existing.dealer_id, planName, endDate: newEndDate });
+    } else if (endDateExtended) {
+      await notifyExtended({ dealerId: existing.dealer_id, planName, newEndDate });
+    } else {
+      // Generic update fallback
+      await notifySubscriptionChange({
+        dealerPhone: dealer?.phone ?? null,
+        dealerName: dealer?.name ?? 'Unknown',
+        event: 'updated',
+        status: row.status,
+        endDate: newEndDate,
+        planName,
+      });
     }
 
     res.json({ subscription: row });
@@ -360,6 +480,31 @@ router.post('/payments', async (req: Request, res: Response) => {
       }
     });
 
+    const payDealer = await db('dealers').where({ id: body.dealer_id }).first();
+    await recordSaAudit(req, {
+      action: 'subscription.payment',
+      targetType: 'subscription',
+      targetId: body.subscription_id,
+      targetLabel: payDealer?.name ?? null,
+      details: {
+        amount: body.amount,
+        method: body.payment_method,
+        status: body.payment_status,
+        billing_cycle: body.billing_cycle,
+        extend_months: body.extend_months,
+      },
+    });
+
+    await notifySubscriptionChange({
+      dealerPhone: payDealer?.phone ?? null,
+      dealerName: payDealer?.name ?? 'Unknown',
+      event: 'payment',
+      status: updatedSub?.status ?? body.payment_status,
+      endDate: updatedSub ? toDateOnly(updatedSub.end_date) : null,
+      amount: body.amount,
+      method: body.payment_method,
+    });
+
     res.status(201).json({
       payment: paymentRow,
       subscription: updatedSub,
@@ -393,6 +538,103 @@ router.get('/yearly-discount-eligibility', async (req: Request, res: Response) =
   } catch (err: any) {
     console.error('[subscriptions:yearly-discount] failed:', err);
     res.status(500).json({ error: err.message || 'Failed to check eligibility' });
+  }
+});
+
+/**
+ * PATCH /api/subscriptions/payments/:id — SA reviews a dealer upgrade request.
+ * Actions: approve (activates subscription), reject, more_info.
+ */
+const reviewPaymentSchema = z.object({
+  action: z.enum(['approve', 'reject', 'more_info']),
+  review_note: z.string().max(1000).optional().nullable(),
+  extend_months: z.coerce.number().int().min(1).max(36).default(1),
+  billing_cycle: z.enum(['monthly', 'yearly']).default('monthly'),
+});
+
+router.patch('/payments/:id', async (req: Request, res: Response) => {
+  try {
+    const body = reviewPaymentSchema.parse(req.body || {});
+    const reviewedBy = (req as any).user?.id ?? null;
+
+    const payment = await db('subscription_payments').where({ id: req.params.id }).first();
+    if (!payment) {
+      res.status(404).json({ error: 'Payment not found' });
+      return;
+    }
+
+    const newStatus = body.action === 'approve' ? 'paid' : body.action === 'reject' ? 'rejected' : 'more_info';
+
+    await db('subscription_payments').where({ id: req.params.id }).update({
+      payment_status: newStatus,
+      review_note: body.review_note ?? null,
+      reviewed_by: reviewedBy,
+      reviewed_at: new Date(),
+    });
+
+    let updatedSub: any = null;
+    const planName = payment.requested_plan_id
+      ? (await db('plans').where({ id: payment.requested_plan_id }).first())?.name
+      : undefined;
+
+    if (body.action === 'approve') {
+      // Activate + extend subscription, just like a paid payment
+      const sub = await db('subscriptions').where({ id: payment.subscription_id }).first();
+      if (sub) {
+        const baseIso = toDateOnly(sub.end_date) || toDateOnly(sub.start_date) || new Date().toISOString().slice(0, 10);
+        const newEnd = addMonthsIso(baseIso, body.extend_months);
+        const planIdToUse = payment.requested_plan_id ?? sub.plan_id;
+
+        const [row] = await db('subscriptions').where({ id: sub.id }).update({
+          end_date: newEnd,
+          status: 'active',
+          plan_id: planIdToUse,
+          billing_cycle: body.billing_cycle,
+        }).returning('*');
+        updatedSub = row;
+
+        await db('dealers').where({ id: payment.dealer_id }).update({ status: 'active', updated_at: new Date() });
+        const adminProfile = await db('profiles').where({ dealer_id: payment.dealer_id }).first();
+        if (adminProfile) {
+          await db('users').where({ id: adminProfile.id }).update({ status: 'active', updated_at: new Date() });
+        }
+
+        await notifyPaymentApproved({
+          dealerId: payment.dealer_id,
+          planName,
+          endDate: newEnd,
+          reviewNote: body.review_note ?? undefined,
+        });
+      }
+    } else if (body.action === 'reject') {
+      await notifyPaymentRejected({
+        dealerId: payment.dealer_id,
+        planName,
+        reviewNote: body.review_note ?? undefined,
+      });
+    } else {
+      await notifyMoreInfoNeeded({
+        dealerId: payment.dealer_id,
+        reviewNote: body.review_note ?? undefined,
+      });
+    }
+
+    await recordSaAudit(req, {
+      action: `subscription.payment.${body.action}`,
+      targetType: 'subscription',
+      targetId: payment.subscription_id,
+      targetLabel: planName ?? null,
+      details: { payment_id: req.params.id, action: body.action, note: body.review_note },
+    });
+
+    res.json({ success: true, subscription: updatedSub });
+  } catch (err: any) {
+    if (err?.issues) {
+      res.status(400).json({ error: err.issues[0]?.message || 'Invalid review data' });
+      return;
+    }
+    console.error('[subscriptions:payments:review] failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to review payment' });
   }
 });
 

@@ -1,0 +1,36 @@
+stages:
+  - test
+  - build
+
+variables:
+  NODE_VERSION: "20"
+
+default:
+  image: node:${NODE_VERSION}
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+      - backend/node_modules/
+
+frontend:lint:
+  stage: test
+  script:
+    - npm ci
+    - npm run lint
+
+frontend:test:
+  stage: test
+  script:
+    - npm ci
+    - npm run test -- --run
+
+backend:build:
+  stage: build
+  script:
+    - cd backend && npm ci && npm run build
+
+backend:test:
+  stage: test
+  script:
+    - cd backend && npm ci && npm run test

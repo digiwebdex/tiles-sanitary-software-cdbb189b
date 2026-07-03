@@ -15,12 +15,31 @@ const ACCESS_KEY = "vps.accessToken";
 const REFRESH_KEY = "vps.refreshToken";
 const USER_KEY = "vps.user";
 
+export interface PlanFeatures {
+  maxWarehouses: number;
+  maxBranches: number;
+  maxStaffUsers: number;
+  whatsappEnabled: boolean;
+  hrmEnabled: boolean;
+  campaignsEnabled: boolean;
+  portalEnabled: boolean;
+  advancedFinanceEnabled: boolean;
+  advancedReportsEnabled: boolean;
+  posEnabled: boolean;
+  barcodeEnabled: boolean;
+  leadsEnabled: boolean;
+  projectsEnabled: boolean;
+  quotationsEnabled: boolean;
+  backordersEnabled: boolean;
+}
+
 export interface VpsUser {
   userId: string;
   email: string;
   dealerId: string | null;
   roles: string[];
   isDemo?: boolean;
+  menuMode?: "simple" | "advanced";
   subscription?: {
     id: string;
     planId: string;
@@ -28,6 +47,19 @@ export interface VpsUser {
     startDate: string;
     endDate: string | null;
   } | null;
+  planFeatures?: PlanFeatures | null;
+  saPermissions?: SaEmployeePermissions | null;
+}
+
+export interface SaEmployeePermissions {
+  designation: string | null;
+  can_manage_dealers: boolean;
+  can_manage_subscriptions: boolean;
+  can_view_financials: boolean;
+  can_send_reminders: boolean;
+  can_view_audit_log: boolean;
+  can_manage_announcements: boolean;
+  can_view_dealer_users: boolean;
 }
 
 export interface LockStatus {
@@ -77,7 +109,10 @@ export function userFromAccessToken(): VpsUser | null {
       dealerId: (payload.dealerId as string | null) ?? null,
       roles: Array.isArray(payload.roles) ? (payload.roles as string[]) : [],
       isDemo: !!payload.isDemo,
+      menuMode: payload.menuMode === "simple" ? "simple" : "advanced",
       subscription: (payload.subscription as VpsUser["subscription"]) ?? null,
+      planFeatures: (payload.planFeatures as PlanFeatures | null) ?? null,
+      saPermissions: (payload.saPermissions as SaEmployeePermissions | null) ?? null,
     };
   } catch {
     return null;
@@ -207,13 +242,17 @@ export const vpsAuthApi = {
     return (await res.json()) as LockStatus;
   },
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, totpCode?: string): Promise<VpsUser | { totpRequired: true }> {
     const res = await fetch(`${env.VPS_API_BASE}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...(totpCode ? { totpCode } : {}) }),
     });
     const body = await res.json().catch(() => ({}));
+
+    // 200 with totpRequired means password OK but TOTP needed
+    if (res.ok && body.totpRequired) return { totpRequired: true as const };
+
     if (!res.ok) throw makeError(body.error || "Login failed", res.status, body);
 
     vpsTokenStore.set({
@@ -224,19 +263,54 @@ export const vpsAuthApi = {
     return body.user as VpsUser;
   },
 
-  /**
-   * Self-signup. Returns the new dealer/user IDs but does NOT store any
-   * tokens — the backend creates the account in 'pending' state and the
-   * user must wait for Super Admin approval before they can log in.
-   * The success screen surfaces the awaiting-approval message.
-   */
+  async totpSetup(accessToken: string): Promise<{ secret: string; otpauthUrl: string }> {
+    const res = await fetch(`${env.VPS_API_BASE}/api/auth/totp/setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw makeError(body.error || "TOTP setup failed", res.status, body);
+    return body;
+  },
+
+  async totpEnable(accessToken: string, code: string): Promise<void> {
+    const res = await fetch(`${env.VPS_API_BASE}/api/auth/totp/enable`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw makeError(body.error || "TOTP enable failed", res.status, body);
+  },
+
+  async totpDisable(accessToken: string, code: string): Promise<void> {
+    const res = await fetch(`${env.VPS_API_BASE}/api/auth/totp/disable`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw makeError(body.error || "TOTP disable failed", res.status, body);
+  },
+
+  async totpStatus(accessToken: string): Promise<{ enabled: boolean; enabledAt: string | null }> {
+    const res = await fetch(`${env.VPS_API_BASE}/api/auth/totp/status`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw makeError(body.error || "TOTP status failed", res.status, body);
+    return body;
+  },
+
+  /** Self-signup — creates an active account and logs in immediately. */
   async register(input: {
     name: string;
     business_name: string;
     phone: string;
     email: string;
     password: string;
-  }): Promise<{ pending: true; userId: string; dealerId: string; message?: string }> {
+    whatsapp_verify_token?: string;
+  }): Promise<{ userId: string; dealerId: string }> {
     const res = await fetch(`${env.VPS_API_BASE}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -245,12 +319,16 @@ export const vpsAuthApi = {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw makeError(body.error || "Signup failed", res.status, body);
 
-    return {
-      pending: true,
-      userId: body.user_id,
-      dealerId: body.dealer_id,
-      message: body.message,
-    };
+    // Store tokens — user is active and logged in right away.
+    if (body.accessToken && body.refreshToken && body.user) {
+      vpsTokenStore.set({
+        accessToken: body.accessToken,
+        refreshToken: body.refreshToken,
+        user: body.user,
+      });
+    }
+
+    return { userId: body.user_id, dealerId: body.dealer_id };
   },
 
   async logout(): Promise<void> {
@@ -300,6 +378,18 @@ export const vpsAuthApi = {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw makeError(body.error || "Reset failed", res.status, body);
+    }
+  },
+
+  async changePassword(password: string): Promise<void> {
+    const res = await authedFetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw makeError(body.error || "Password update failed", res.status, body);
     }
   },
 };

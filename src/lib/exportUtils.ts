@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import writeXlsxFile from "write-excel-file";
 
 interface ExportColumn {
   header: string;
@@ -6,41 +6,48 @@ interface ExportColumn {
   format?: "currency" | "number" | "percent" | "date";
 }
 
+function cellValue(row: Record<string, unknown>, col: ExportColumn): string | number | Date {
+  const val = row[col.key];
+  if (val === null || val === undefined) return "";
+  if (col.format === "currency" || col.format === "number") return Number(val);
+  if (col.format === "percent") return Number(val) / 100;
+  if (col.format === "date" && val) return new Date(String(val));
+  return String(val);
+}
+
 /**
  * Export data to Excel (.xlsx) and trigger download.
+ * Uses write-excel-file (write-only) instead of the legacy xlsx package.
  */
-export function exportToExcel(
-  data: Record<string, any>[],
+export async function exportToExcelAsync<T extends object>(
+  data: readonly T[],
   columns: ExportColumn[],
-  filename: string
+  filename: string,
 ) {
   if (data.length === 0) return;
 
-  const headers = columns.map((c) => c.header);
-  const rows = data.map((row) =>
-    columns.map((col) => {
-      const val = row[col.key];
-      if (val === null || val === undefined) return "";
-      if (col.format === "currency" || col.format === "number") return Number(val);
-      if (col.format === "percent") return Number(val) / 100;
-      return String(val);
-    })
-  );
+  const schema = columns.map((col) => ({
+    column: col.header,
+    type: col.format === "date" ? Date : col.format === "number" || col.format === "currency" || col.format === "percent" ? Number : String,
+    format: col.format === "currency" ? "#,##0.00" : undefined,
+    value: (row: T) => cellValue(row as Record<string, unknown>, col),
+  }));
 
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-
-  // Auto-width columns
-  ws["!cols"] = columns.map((col, i) => {
-    const maxLen = Math.max(
-      col.header.length,
-      ...rows.map((r) => String(r[i] ?? "").length)
-    );
-    return { wch: Math.min(maxLen + 2, 40) };
+  await writeXlsxFile(data as T[], {
+    schema,
+    fileName: `${filename}.xlsx`,
   });
+}
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+/** Fire-and-forget wrapper — keeps existing sync call sites working. */
+export function exportToExcel<T extends object>(
+  data: readonly T[],
+  columns: ExportColumn[],
+  filename: string,
+) {
+  void exportToExcelAsync(data, columns, filename).catch((err) => {
+    console.error("[exportToExcel]", err);
+  });
 }
 
 // Common column definitions for reuse

@@ -50,6 +50,19 @@ const AUTH_BACKEND: AuthBackend = rawBackend === "vps" || isSanitilesHost || isL
  */
 export type DataBackend = "supabase" | "vps" | "shadow";
 
+/**
+ * Phase 6 portal data path.
+ *   "supabase" → portal.sanitileserp.com uses Supabase Auth + RPC (default).
+ *   "vps"      → portal reads via /api/portal/* with VPS JWT.
+ *
+ * Flip via VITE_PORTAL_BACKEND=vps (rebuild required).
+ * Portal auth must also use VPS JWT before enabling.
+ */
+export type PortalBackend = "supabase" | "vps";
+
+const rawPortalBackend = optionalEnv("VITE_PORTAL_BACKEND", "").toLowerCase();
+const PORTAL_BACKEND: PortalBackend = rawPortalBackend === "vps" ? "vps" : "supabase";
+
 const DATA_RESOURCES = [
   "CUSTOMERS",
   "SUPPLIERS",
@@ -90,6 +103,7 @@ export const env = {
   SUPABASE_URL: requireEnv("VITE_SUPABASE_URL"),
   SUPABASE_ANON_KEY: requireEnv("VITE_SUPABASE_PUBLISHABLE_KEY"),
   AUTH_BACKEND,
+  PORTAL_BACKEND,
   DATA_BACKENDS,
   VPS_API_BASE: optionalEnv("VITE_VPS_API_BASE", "https://api.sanitileserp.com"),
   IS_PRODUCTION: import.meta.env.PROD,

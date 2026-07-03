@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { name, business_name, phone, email, password } = body;
+    const { name, business_name, phone, email, password, whatsapp_verify_token } = body;
 
     // ── Validate inputs ──
     if (!name || typeof name !== "string" || name.trim().length === 0 || name.length > 100) {
@@ -69,10 +69,35 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!password || typeof password !== "string" || password.length < 6 || password.length > 72) {
-      return new Response(JSON.stringify({ error: "Password must be 6-72 characters" }), {
+    if (!password || typeof password !== "string" || password.length < 8 || password.length > 72) {
+      return new Response(JSON.stringify({ error: "Password must be 8-72 characters" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    // ── Verify WhatsApp OTP token (required) ──
+    if (!whatsapp_verify_token || typeof whatsapp_verify_token !== "string") {
+      return new Response(JSON.stringify({ error: "WhatsApp verification is required. Please verify your number before signing up." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const vpsUrl = Deno.env.get("VPS_API_URL");
+    if (vpsUrl) {
+      try {
+        const verifyRes = await fetch(`${vpsUrl}/api/signup/consume-token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: whatsapp_verify_token, phone: phone.trim() }),
+        });
+        const verifyBody = await verifyRes.json().catch(() => ({}));
+        if (!verifyRes.ok || !verifyBody.ok) {
+          return new Response(JSON.stringify({ error: "WhatsApp verification token is invalid or expired. Please verify your number again." }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (verifyErr) {
+        console.error("[self-signup] WhatsApp token verify failed:", verifyErr);
+        // non-blocking if VPS is unreachable — log and continue
+      }
     }
 
     const serviceClient = createClient(
@@ -92,13 +117,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── 1. Create dealer (PENDING — requires super admin approval) ──
+    // ── 1. Create dealer (ACTIVE — self-signup is auto-approved) ──
     const { data: dealer, error: dealerErr } = await serviceClient
       .from("dealers")
       .insert({
         name: business_name.trim(),
         phone: phone.trim(),
-        status: "pending",
+        status: "active",
       })
       .select("id")
       .single();
@@ -163,7 +188,8 @@ Deno.serve(async (req) => {
       .from("invoice_sequences")
       .insert({ dealer_id: dealer.id });
 
-    // ── 6. Get Starter plan and create trial subscription (3 days) ──
+    // ── 6. Get Starter plan and create trial subscription (7 days) ──
+    const TRIAL_DAYS = 7;
     const { data: plan } = await serviceClient
       .from("subscription_plans")
       .select("id")
@@ -173,7 +199,7 @@ Deno.serve(async (req) => {
 
     if (plan) {
       const startDate = new Date().toISOString().split("T")[0];
-      const endDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const endDate = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
       const { error: subscriptionErr } = await serviceClient.from("subscriptions").insert({
         dealer_id: dealer.id,
@@ -222,85 +248,115 @@ Deno.serve(async (req) => {
       status: "auto_provisioned",
     });
 
-    // ── 8. Send notifications to dealer and super admin ──
+    // ── 8. Send SMS + Email + WhatsApp to dealer AND admin (all 3 channels) ──
     try {
-      const dealerSmsMsg = `স্বাগতম ${name.trim()}!\nআপনার "${business_name.trim()}" ব্যবসার অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে।\n3 দিনের ফ্রি ট্রায়াল শুরু হয়েছে।\nলগইন: ${emailLower}\n\nTiles & Sanitary ERP`;
-      const dealerEmailSubject = `Welcome to Tiles & Sanitary ERP - Account Created`;
-      const dealerEmailBody = `Dear ${name.trim()},\n\nYour business account "${business_name.trim()}" has been successfully created!\n\nAccount Details:\n- Business: ${business_name.trim()}\n- Email: ${emailLower}\n- Phone: ${phone.trim()}\n- Plan: Starter (3-day free trial)\n\nYou can now log in and start managing your business.\n\nBest regards,\nTiles & Sanitary ERP Team`;
-
-      // Get super admin info
-      const { data: saRoles } = await serviceClient
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "super_admin");
-
-      // Hardcoded admin contact (per project owner)
+      const TRIAL_DAYS = 7;
       const DEFAULT_ADMIN_EMAIL = "digiwebdex@gmail.com";
       const DEFAULT_ADMIN_PHONE = "+8801674533303";
-
-      let adminEmail: string | null = DEFAULT_ADMIN_EMAIL;
-      if (saRoles && saRoles.length > 0) {
-        const { data: saProfile } = await serviceClient
-          .from("profiles")
-          .select("email")
-          .eq("id", saRoles[0].user_id)
-          .single();
-        if (saProfile?.email) adminEmail = saProfile.email;
-      }
-      // Env override takes highest priority
-      const envAdminEmail = Deno.env.get("ADMIN_EMAIL");
-      if (envAdminEmail) adminEmail = envAdminEmail;
-
-      const adminSmsMsg = `নতুন ডিলার রেজিস্ট্রেশন!\nনাম: ${name.trim()}\nব্যবসা: ${business_name.trim()}\nফোন: ${phone.trim()}\nইমেইল: ${emailLower}\nPlan: Starter (Trial)`;
-      const adminEmailSubject = `New Dealer Registration - ${business_name.trim()}`;
-      const adminEmailBody = `New Dealer Account Created!\n\nDealer Details:\n- Owner: ${name.trim()}\n- Business: ${business_name.trim()}\n- Phone: ${phone.trim()}\n- Email: ${emailLower}\n- Plan: Starter (3-day trial)\n- Date: ${new Date().toISOString().split("T")[0]}\n\nPlease review in the Super Admin panel.`;
-
-      // Send SMS to dealer
-      if (phone.trim()) {
-        await sendNotification(serviceClient, {
-          dealer_id: dealer.id,
-          channel: "sms",
-          type: "new_signup",
-          recipient: phone.trim(),
-          message: dealerSmsMsg,
-        });
-      }
-
-      // Send Email to dealer
-      await sendNotification(serviceClient, {
-        dealer_id: dealer.id,
-        channel: "email",
-        type: "new_signup",
-        recipient: emailLower,
-        subject: dealerEmailSubject,
-        message: dealerEmailBody,
-      });
-
-      // Send SMS to admin (env override > hardcoded default)
       const adminPhone = Deno.env.get("ADMIN_PHONE") || DEFAULT_ADMIN_PHONE;
-      if (adminPhone) {
-        await sendNotification(serviceClient, {
-          dealer_id: dealer.id,
-          channel: "sms",
-          type: "new_signup",
-          recipient: adminPhone,
-          message: adminSmsMsg,
-        });
+      const envAdminEmail = Deno.env.get("ADMIN_EMAIL");
+      let adminEmail: string = envAdminEmail || DEFAULT_ADMIN_EMAIL;
+
+      // Try to get SA email from DB
+      const { data: saRoles } = await serviceClient.from("user_roles").select("user_id").eq("role", "super_admin");
+      if (saRoles && saRoles.length > 0) {
+        const { data: saProfile } = await serviceClient.from("profiles").select("email").eq("id", saRoles[0].user_id).single();
+        if (saProfile?.email && !envAdminEmail) adminEmail = saProfile.email;
       }
 
-      // Send Email to admin
-      if (adminEmail) {
-        await sendNotification(serviceClient, {
-          dealer_id: dealer.id,
-          channel: "email",
-          type: "new_signup",
-          recipient: adminEmail,
-          subject: adminEmailSubject,
-          message: adminEmailBody,
-        });
-      }
+      // ── Message bodies ──
+      const dealerSms =
+        `স্বাগতম ${name.trim()}!\n` +
+        `"${business_name.trim()}" অ্যাকাউন্ট সক্রিয় হয়েছে।\n` +
+        `${TRIAL_DAYS} দিনের ফ্রি ট্রায়াল শুরু হয়েছে।\n` +
+        `লগইন করুন: https://sanitileserp.com/login\n` +
+        `TilesERP`;
 
-      console.log("[Self-signup] Notifications sent successfully");
+      const dealerWhatsApp =
+        `✅ *স্বাগতম TilesERP-তে!*\n\n` +
+        `প্রিয় ${name.trim()},\n` +
+        `আপনার *"${business_name.trim()}"* ব্যবসার অ্যাকাউন্ট সফলভাবে তৈরি ও সক্রিয় হয়েছে!\n\n` +
+        `📦 *পরিকল্পনা:* Starter (${TRIAL_DAYS}-দিন ফ্রি ট্রায়াল)\n` +
+        `📧 *ইমেইল:* ${emailLower}\n` +
+        `📱 *ফোন:* ${phone.trim()}\n\n` +
+        `🔗 লগইন করুন: https://sanitileserp.com/login\n\n` +
+        `যেকোনো সমস্যায় আমাদের সাথে যোগাযোগ করুন।\n` +
+        `— TilesERP Team`;
+
+      const dealerEmailSubject = `✅ আপনার TilesERP অ্যাকাউন্ট সক্রিয় হয়েছে — ${business_name.trim()}`;
+      const dealerEmailBody =
+        `Dear ${name.trim()},\n\n` +
+        `Your business account has been created and is ACTIVE!\n\n` +
+        `Account Details:\n` +
+        `  Business : ${business_name.trim()}\n` +
+        `  Email    : ${emailLower}\n` +
+        `  Phone    : ${phone.trim()}\n` +
+        `  Plan     : Starter (${TRIAL_DAYS}-day free trial)\n` +
+        `  Status   : ✅ Active — you can log in now\n\n` +
+        `Login at: https://sanitileserp.com/login\n\n` +
+        `Best regards,\nTiles & Sanitary ERP Team`;
+
+      const adminSms =
+        `🆕 নতুন ডিলার!\n` +
+        `নাম: ${name.trim()}\n` +
+        `ব্যবসা: ${business_name.trim()}\n` +
+        `ফোন: ${phone.trim()}\n` +
+        `ইমেইল: ${emailLower}\n` +
+        `Status: Active (Trial)`;
+
+      const adminWhatsApp =
+        `🆕 *নতুন ডিলার রেজিস্ট্রেশন!*\n\n` +
+        `👤 *নাম:* ${name.trim()}\n` +
+        `🏪 *ব্যবসা:* ${business_name.trim()}\n` +
+        `📱 *ফোন:* ${phone.trim()}\n` +
+        `📧 *ইমেইল:* ${emailLower}\n` +
+        `📦 *পরিকল্পনা:* Starter Trial\n` +
+        `✅ *স্ট্যাটাস:* Active\n` +
+        `📅 *তারিখ:* ${new Date().toLocaleDateString("bn-BD")}\n\n` +
+        `Super Admin: https://sanitileserp.com/super-admin`;
+
+      const adminEmailSubject = `🆕 New Dealer — ${business_name.trim()} (Active)`;
+      const adminEmailBody =
+        `New Dealer Self-Signup — Account is LIVE\n\n` +
+        `Owner     : ${name.trim()}\n` +
+        `Business  : ${business_name.trim()}\n` +
+        `Phone     : ${phone.trim()}\n` +
+        `Email     : ${emailLower}\n` +
+        `Plan      : Starter (${TRIAL_DAYS}-day trial)\n` +
+        `Status    : Active\n` +
+        `Date      : ${new Date().toISOString().split("T")[0]}\n\n` +
+        `Manage at: https://sanitileserp.com/super-admin/dealers`;
+
+      // ── Fire all via VPS backend (handles SMS/WhatsApp/Email directly) ──
+      const vpsUrl = Deno.env.get("VPS_API_URL") || "https://api.sanitileserp.com";
+      const notifyVps = async (payload: object) => {
+        try {
+          await fetch(`${vpsUrl}/api/signup/notify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Internal-Secret": Deno.env.get("INTERNAL_SECRET") || "" },
+            body: JSON.stringify(payload),
+          });
+        } catch (e) {
+          console.error("[self-signup] VPS notify failed:", e);
+        }
+      };
+
+      await Promise.all([
+        // Dealer — SMS
+        sendNotification(serviceClient, { dealer_id: dealer.id, channel: "sms", type: "new_signup", recipient: phone.trim(), message: dealerSms }),
+        // Dealer — Email
+        sendNotification(serviceClient, { dealer_id: dealer.id, channel: "email", type: "new_signup", recipient: emailLower, subject: dealerEmailSubject, message: dealerEmailBody }),
+        // Dealer — WhatsApp (via VPS)
+        notifyVps({ channel: "whatsapp", to: phone.trim(), text: dealerWhatsApp }),
+        // Admin — SMS
+        sendNotification(serviceClient, { dealer_id: dealer.id, channel: "sms", type: "new_signup", recipient: adminPhone, message: adminSms }),
+        // Admin — Email
+        sendNotification(serviceClient, { dealer_id: dealer.id, channel: "email", type: "new_signup", recipient: adminEmail, subject: adminEmailSubject, message: adminEmailBody }),
+        // Admin — WhatsApp (via VPS)
+        notifyVps({ channel: "whatsapp", to: adminPhone, text: adminWhatsApp }),
+      ]);
+
+      console.log("[Self-signup] All notifications dispatched");
     } catch (notifErr) {
       console.error("[Self-signup] Notification error (non-blocking):", notifErr);
     }
@@ -308,10 +364,10 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        pending_approval: true,
+        active: true,
         user_id: userId,
         dealer_id: dealer.id,
-        message: "Account created. Awaiting Super Admin approval before you can log in.",
+        message: "Account created and activated. You can now log in.",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

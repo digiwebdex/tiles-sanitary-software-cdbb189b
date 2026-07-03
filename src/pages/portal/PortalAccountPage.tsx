@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { usePortalAuth } from "@/contexts/PortalAuthContext";
 import { Loader2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { vpsAuthApi } from "@/lib/vpsAuthClient";
 
 export default function PortalAccountPage() {
   const { user, context } = usePortalAuth();
@@ -15,19 +15,13 @@ export default function PortalAccountPage() {
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const portalUserQ = useQuery({
-    queryKey: ["portal", "self", context?.portal_user_id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("portal_users")
-        .select("*")
-        .eq("id", context!.portal_user_id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!context?.portal_user_id,
-  });
+  const portalUserData = {
+    name: context?.name ?? null,
+    phone: context?.phone ?? null,
+    portal_role: context?.portal_role ?? null,
+    status: context?.status ?? "active",
+    last_login_at: context?.last_login_at ?? null,
+  };
 
   const updatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,8 +31,7 @@ export default function PortalAccountPage() {
     }
     setBusy(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: pw });
-      if (error) throw error;
+      await vpsAuthApi.changePassword(pw);
       toast({ title: "Password updated" });
       setPw("");
     } catch (err) {
@@ -55,12 +48,12 @@ export default function PortalAccountPage() {
           <CardTitle>My Account</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <Row k="Name" v={portalUserQ.data?.name ?? "—"} />
-          <Row k="Email" v={user?.email ?? "—"} />
-          <Row k="Phone" v={portalUserQ.data?.phone ?? "—"} />
-          <Row k="Account type" v={portalUserQ.data?.portal_role ?? "—"} />
-          <Row k="Status" v={portalUserQ.data?.status ?? "—"} />
-          <Row k="Last login" v={portalUserQ.data?.last_login_at ?? "—"} />
+          <Row k="Name" v={portalUserData?.name ?? "—"} />
+          <Row k="Email" v={user?.email ?? context?.email ?? "—"} />
+          <Row k="Phone" v={portalUserData?.phone ?? "—"} />
+          <Row k="Account type" v={portalUserData?.portal_role ?? "—"} />
+          <Row k="Status" v={portalUserData?.status ?? "—"} />
+          <Row k="Last login" v={portalUserData?.last_login_at ?? "—"} />
         </CardContent>
       </Card>
 
@@ -94,9 +87,9 @@ export default function PortalAccountPage() {
 
 function Row({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex justify-between border-b border-border last:border-0 pb-1.5">
+    <div className="flex justify-between gap-4">
       <span className="text-muted-foreground">{k}</span>
-      <span className="font-medium">{v}</span>
+      <span className="text-right">{v}</span>
     </div>
   );
 }

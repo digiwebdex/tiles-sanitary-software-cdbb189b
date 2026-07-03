@@ -40,6 +40,7 @@ import CreateReservationDialog from "./CreateReservationDialog";
 import ReservationListDialog from "./ReservationListDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
+import { useAuth } from "@/contexts/AuthContext";
 import { exportToExcel } from "@/lib/exportUtils";
 import { formatStockUnit } from "@/lib/units";
 
@@ -51,6 +52,8 @@ const PAGE_SIZE = 25;
 
 const ProductList = ({ dealerId }: ProductListProps) => {
   const permissions = usePermissions();
+  const { planFeatures, isSuperAdmin } = useAuth();
+  const barcodeEnabled = isSuperAdmin || !!(planFeatures?.barcodeEnabled);
   const { data: dealerInfo } = useDealerInfo();
   const reservationsEnabled = dealerInfo?.enable_reservations ?? false;
   const [search, setSearch] = useState("");
@@ -383,7 +386,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
               </Button>
             </>
           )}
-          {selected.size > 0 && (
+          {barcodeEnabled && selected.size > 0 && (
             <Button variant="outline" onClick={openBulkBarcode}>
               <Printer className="mr-2 h-4 w-4" /> Print Barcodes ({selected.size})
             </Button>
@@ -683,7 +686,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
         quantity={detailProduct ? (stockData?.get(detailProduct.id)?.total ?? 0) : 0}
         showCost={permissions.canViewCostPrice}
         onEdit={() => { if (detailProduct) { setDetailProduct(null); navigate(`/products/${detailProduct.id}/edit`); } }}
-        onPrintBarcode={() => { if (detailProduct) { setDetailProduct(null); openSingleBarcode(detailProduct); } }}
+        onPrintBarcode={barcodeEnabled ? () => { if (detailProduct) { setDetailProduct(null); openSingleBarcode(detailProduct); } } : undefined}
         onPurchase={() => { if (detailProduct) { setDetailProduct(null); navigate(`/purchases/new?product=${detailProduct.id}`); } }}
       />
 

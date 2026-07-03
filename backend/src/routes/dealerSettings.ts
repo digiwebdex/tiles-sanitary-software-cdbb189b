@@ -27,6 +27,7 @@ const SELECT_FIELDS = [
   'vat_enabled',
   'default_vat_rate',
   'tax_id',
+  'menu_mode',
 ] as const;
 
 function resolveDealer(req: Request, res: Response): string | null {
@@ -69,6 +70,7 @@ const patchSchema = z.object({
   dual_unit_enabled: z.boolean().optional(),
   vat_enabled: z.boolean().optional(),
   default_vat_rate: z.coerce.number().min(0).max(100).optional(),
+  menu_mode: z.enum(['simple', 'advanced']).optional(),
 });
 
 router.get('/', async (req: Request, res: Response) => {
@@ -91,6 +93,7 @@ router.get('/', async (req: Request, res: Response) => {
         vat_enabled: row.vat_enabled === true,
         default_vat_rate: Number(row.default_vat_rate ?? 15),
         tax_id: row.tax_id ?? null,
+        menu_mode: row.menu_mode === 'simple' ? 'simple' : 'advanced',
         enable_reservations: false,
       },
     });
@@ -128,6 +131,9 @@ router.patch('/', async (req: Request, res: Response) => {
     if (parsed.data.default_vat_rate !== undefined) {
       patch.default_vat_rate = parsed.data.default_vat_rate;
     }
+    if (parsed.data.menu_mode !== undefined) {
+      patch.menu_mode = parsed.data.menu_mode;
+    }
 
     if (Object.keys(patch).length <= 1) {
       res.status(400).json({ error: 'No settings to update' });
@@ -154,6 +160,7 @@ router.patch('/', async (req: Request, res: Response) => {
         vat_enabled: row.vat_enabled === true,
         default_vat_rate: Number(row.default_vat_rate ?? 15),
         tax_id: row.tax_id ?? null,
+        menu_mode: row.menu_mode === 'simple' ? 'simple' : 'advanced',
         enable_reservations: false,
       },
     });

@@ -42,6 +42,7 @@ export interface TrialBalance {
   total_debit: number;
   total_credit: number;
   difference: number;
+  data_source?: "legacy_subledgers" | "gl_spine";
   warnings?: string[];
 }
 
@@ -79,9 +80,14 @@ export const financialService = {
     if (!r.ok) throw new Error("Failed to load balance sheet");
     return r.json();
   },
-  async trialBalance(dealerId: string, asOf?: string): Promise<TrialBalance> {
+  async trialBalance(
+    dealerId: string,
+    asOf?: string,
+    source?: "auto" | "gl" | "legacy",
+  ): Promise<TrialBalance> {
     const qs = new URLSearchParams({ dealerId });
     if (asOf) qs.set("asOf", asOf);
+    if (source) qs.set("source", source);
     const r = await vpsAuthedFetch(`/api/financials/trial-balance?${qs}`);
     if (!r.ok) throw new Error("Failed to load trial balance");
     return r.json();

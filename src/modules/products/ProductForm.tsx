@@ -225,7 +225,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         </Button>
                       </div>
                       <FormDescription>
-                        You can scan your barcode or enter a unique product code
+                        Enter a unique product code (e.g. brand-size-grade)
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

@@ -16,6 +16,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
+import { notifyPaymentSubmitted } from '../services/subscriptionNotifyService';
 
 const router = Router();
 
@@ -254,6 +255,17 @@ router.post('/upgrade-request', async (req: Request, res: Response) => {
         collected_by: req.user?.userId ?? null,
       })
       .returning('*');
+
+    // WhatsApp: notify dealer that request was received
+    if (dealerId) {
+      await notifyPaymentSubmitted({
+        dealerId,
+        planName: plan.name,
+        amount,
+        billingCycle: cycle,
+        refNote: note ? String(note).slice(0, 200) : undefined,
+      });
+    }
 
     res.json({ payment: row });
   } catch (err: any) {

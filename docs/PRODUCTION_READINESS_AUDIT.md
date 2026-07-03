@@ -42,9 +42,9 @@ Severity legend: 🔴 Critical · 🟠 High · 🟡 Medium.
 | 🟠 | Reversed sales still counted in P&L / balance sheet / trial balance | Excluded reversed sales everywhere |
 | 🟠 | Revenue was VAT-inclusive; VAT had no liability account | Revenue reported ex-tax; VAT/SD split into Payable liabilities; profit on the taxable base (no change for VAT-off dealers) |
 | 🟠 | Challan item-edit dropped VAT and could go negative | Routed through the VAT engine; clamped at 0 |
-| 🟠 | Journal entries were hard-deleted (audit trail destroyed) | Soft-void (migration 066); excluded from balances |
+| 🟠 | Journal entries were hard-deleted (audit trail destroyed) | Soft-void (migration 081); excluded from balances |
 | 🟠 | convert-invoice silently masked reservation drift | Assert reservation covers the invoiced quantity |
-| 🟡 | No DB backstop on invoice/challan/delivery numbers | Partial UNIQUE indexes (migration 067) |
+| 🟡 | No DB backstop on invoice/challan/delivery numbers | Partial UNIQUE indexes (migration 082) |
 
 ## Fixed — hardening (P2) & frontend (P3)
 

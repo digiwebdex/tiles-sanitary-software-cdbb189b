@@ -1,123 +1,75 @@
 /**
- * Phase 3B — supplierService rewire integration test.
+ * supplierService — VPS API client tests (Phase 3U-17 cutover).
  *
- * Verifies:
- *   1. supplierService.list() (no search) routes through the dataClient
- *      adapter (so shadow mode actually fires when configured).
- *   2. supplierService.list() (with search) bypasses the adapter and uses
- *      the legacy Supabase OR-ilike path — preserving exact search
- *      behavior during the shadow window.
- *   3. supplierService.list() preserves the legacy `{ data, total }`
- *      response shape so no UI consumer breaks.
+ * supplierService is VPS-only; all reads/writes go through /api/suppliers.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-// vi.mock factories are hoisted, so any refs they capture must be hoisted too.
-const { adapterListMock, adapterGetByIdMock } = vi.hoisted(() => ({
-  adapterListMock: vi.fn(),
-  adapterGetByIdMock: vi.fn(),
+const { vpsAuthedFetchMock } = vi.hoisted(() => ({
+  vpsAuthedFetchMock: vi.fn(),
 }));
 
-vi.mock("@/lib/data/dataClient", () => ({
-  dataClient: () => ({
-    list: adapterListMock,
-    getById: adapterGetByIdMock,
-    create: vi.fn(),
-    update: vi.fn(),
-    remove: vi.fn(),
-  }),
-}));
-
-const {
-  supabaseRangeMock,
-  supabaseOrMock,
-  supabaseEqMock,
-  supabaseFromMock,
-  supabaseGetUserMock,
-} = vi.hoisted(() => {
-  const supabaseRangeMock = vi.fn();
-  const supabaseOrderMock = vi.fn(() => ({ range: supabaseRangeMock }));
-  const supabaseOrMock = vi.fn(() => ({ order: supabaseOrderMock }));
-  const supabaseEqMock = vi.fn(() => ({ or: supabaseOrMock }));
-  const supabaseSelectMock = vi.fn(() => ({ eq: supabaseEqMock }));
-  const supabaseFromMock = vi.fn(() => ({ select: supabaseSelectMock }));
-  const supabaseGetUserMock = vi.fn(async () => ({ data: { user: null } }));
-  return {
-    supabaseRangeMock,
-    supabaseOrMock,
-    supabaseEqMock,
-    supabaseFromMock,
-    supabaseGetUserMock,
-  };
-});
-
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: supabaseFromMock,
-    auth: { getUser: supabaseGetUserMock },
-  },
+vi.mock("@/lib/vpsAuthClient", () => ({
+  vpsAuthedFetch: (...args: unknown[]) => vpsAuthedFetchMock(...args),
+  vpsTokenStore: { user: null },
 }));
 
 import { supplierService } from "@/services/supplierService";
 
+function mockVpsOk(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  };
+}
+
+function mockVpsErr(error: string, status = 400) {
+  return {
+    ok: false,
+    status,
+    json: async () => ({ error }),
+  };
+}
+
 beforeEach(() => {
-  adapterListMock.mockReset();
-  adapterGetByIdMock.mockReset();
-  supabaseRangeMock.mockReset();
-  supabaseOrMock.mockClear();
-  supabaseEqMock.mockClear();
-  supabaseFromMock.mockClear();
+  vpsAuthedFetchMock.mockReset();
 });
 
-describe("Phase 3B — supplierService routes reads through dataClient", () => {
-  it("empty-search list → uses dataClient adapter (shadow-eligible path)", async () => {
-    adapterListMock.mockResolvedValueOnce({
-      rows: [{ id: "s1", name: "Alpha" }],
-      total: 1,
-    });
+describe("supplierService — VPS API client", () => {
+  it("list (no search) → GET /api/suppliers with paging params", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(
+      mockVpsOk({ rows: [{ id: "s1", name: "Alpha" }], total: 1 }),
+    );
 
     const result = await supplierService.list("dealer-1", "", 1);
 
-    expect(adapterListMock).toHaveBeenCalledTimes(1);
-    expect(adapterListMock).toHaveBeenCalledWith({
-      dealerId: "dealer-1",
-      page: 0, // 1-indexed UI → 0-indexed adapter
-      pageSize: 25,
-      orderBy: { column: "name", direction: "asc" },
-    });
-
-    // Legacy response shape preserved
+    expect(vpsAuthedFetchMock).toHaveBeenCalledTimes(1);
+    const [url] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toContain("/api/suppliers?");
+    expect(url).toContain("dealerId=dealer-1");
+    expect(url).toContain("page=0");
+    expect(url).toContain("pageSize=25");
+    expect(url).not.toContain("search=");
     expect(result).toEqual({ data: [{ id: "s1", name: "Alpha" }], total: 1 });
-
-    // Supabase direct path was NOT used
-    expect(supabaseFromMock).not.toHaveBeenCalled();
   });
 
-  it("search list → bypasses adapter, uses legacy Supabase OR-ilike path", async () => {
-    supabaseRangeMock.mockResolvedValueOnce({
-      data: [{ id: "s2", name: "Beta" }],
-      error: null,
-      count: 1,
-    });
+  it("search list → includes search query param", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(
+      mockVpsOk({ rows: [{ id: "s2", name: "Beta" }], total: 1 }),
+    );
 
     const result = await supplierService.list("dealer-1", "bet", 2);
 
-    // dataClient was bypassed
-    expect(adapterListMock).not.toHaveBeenCalled();
-
-    // Supabase direct path was used with correct dealer scope + range
-    expect(supabaseFromMock).toHaveBeenCalledWith("suppliers");
-    expect(supabaseEqMock).toHaveBeenCalledWith("dealer_id", "dealer-1");
-    expect(supabaseOrMock).toHaveBeenCalledWith(
-      "name.ilike.%bet%,contact_person.ilike.%bet%,phone.ilike.%bet%",
-    );
-    // page 2 → from=25, to=49
-    expect(supabaseRangeMock).toHaveBeenCalledWith(25, 49);
+    const [url] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toContain("search=bet");
+    expect(url).toContain("page=1");
     expect(result).toEqual({ data: [{ id: "s2", name: "Beta" }], total: 1 });
   });
 
-  it("propagates adapter errors from list (no silent swallow on primary)", async () => {
-    adapterListMock.mockRejectedValueOnce(new Error("network down"));
+  it("propagates API errors from list", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockVpsErr("network down", 503));
+
     await expect(supplierService.list("dealer-1", "", 1)).rejects.toThrow(
       "network down",
     );

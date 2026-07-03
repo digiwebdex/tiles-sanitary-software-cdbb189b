@@ -93,8 +93,9 @@ const PLANS = [
     ctaLink: "/get-started",
     monthlyPrice: 999,
     yearlyPrice: 10000,
+    isPremium: false,
     features: [
-      { icon: Users,       text: "Up to 2 users" },
+      { icon: Users,       text: "Up to 3 users" },
       { icon: Package,     text: "Inventory management" },
       { icon: BarChart2,   text: "Basic reports" },
       { icon: ShieldCheck, text: "Customer ledger" },
@@ -108,31 +109,79 @@ const PLANS = [
     badge: "Most Popular",
     cta: "Get Started",
     ctaLink: "/get-started",
-    monthlyPrice: 1500,
+    monthlyPrice: 2000,
     yearlyPrice: 20000,
+    isPremium: false,
     features: [
-      { icon: Users,           text: "Up to 5 users" },
+      { icon: Users,           text: "Up to 8 users" },
       { icon: Package,         text: "All Starter features" },
       { icon: TrendingUp,      text: "Advanced analytics" },
-      { icon: GitBranch,       text: "Multi-branch ready" },
+      { icon: GitBranch,       text: "Multi-branch (2 branches)" },
       { icon: HeadphonesIcon,  text: "Priority support" },
-      { icon: Mail,            text: "Email notifications" },
-      { icon: MessageCircle,   text: "SMS notifications" },
+      { icon: Mail,            text: "Email & SMS notifications" },
+      { icon: MessageCircle,   text: "Backorders management" },
+    ],
+  },
+  {
+    name: "Business",
+    tagline: "Full-featured for established businesses",
+    highlighted: false,
+    badge: null,
+    cta: "Get Started",
+    ctaLink: "/get-started",
+    monthlyPrice: 3000,
+    yearlyPrice: 30000,
+    isPremium: false,
+    features: [
+      { icon: Users,           text: "Unlimited users" },
+      { icon: Package,         text: "All Pro features" },
+      { icon: Building2,       text: "Up to 5 branches & warehouses" },
+      { icon: MessageCircle,   text: "WhatsApp notifications" },
+      { icon: ShieldCheck,     text: "HRM module" },
+      { icon: TrendingUp,      text: "Directors / Shareholder accounts" },
+      { icon: Bell,            text: "Campaigns & marketing" },
+    ],
+  },
+  {
+    name: "Premium Custom",
+    tagline: "All features + custom configuration per dealer",
+    highlighted: false,
+    badge: "All Inclusive",
+    cta: "Contact Sales",
+    ctaLink: "/contact",
+    monthlyPrice: 5000,
+    yearlyPrice: 50000,
+    isPremium: true,
+    features: [
+      { icon: Sparkles,        text: "Everything in Business" },
+      { icon: Building2,       text: "Unlimited branches & warehouses" },
+      { icon: Users,           text: "Unlimited staff users" },
+      { icon: ShieldCheck,     text: "Custom feature configuration" },
+      { icon: HeadphonesIcon,  text: "Dedicated account manager" },
+      { icon: MessageCircle,   text: "All notification channels" },
+      { icon: TrendingUp,      text: "All modules unlocked" },
     ],
   },
 ];
 
 /* ─── COMPARISON TABLE ─── */
 const COMPARISON = [
-  { feature: "Max Users",            starter: "2",   pro: "5" },
-  { feature: "Inventory Management", starter: true,  pro: true },
-  { feature: "Basic Reports",        starter: true,  pro: true },
-  { feature: "Customer Ledger",      starter: true,  pro: true },
-  { feature: "Email Notifications",  starter: true,  pro: true },
-  { feature: "Advanced Analytics",   starter: false, pro: true },
-  { feature: "Multi-Branch Ready",   starter: false, pro: true },
-  { feature: "SMS Notifications",    starter: false, pro: true },
-  { feature: "Priority Support",     starter: false, pro: true },
+  { feature: "Max Users",                 starter: "3",    pro: "8",    business: "Unlimited", premium: "Unlimited" },
+  { feature: "Warehouses",               starter: "1",    pro: "2",    business: "5",          premium: "Unlimited" },
+  { feature: "Branches",                 starter: "1",    pro: "2",    business: "5",          premium: "Unlimited" },
+  { feature: "Inventory Management",     starter: true,   pro: true,   business: true,         premium: true },
+  { feature: "Customer Ledger",          starter: true,   pro: true,   business: true,         premium: true },
+  { feature: "Email Notifications",      starter: true,   pro: true,   business: true,         premium: true },
+  { feature: "SMS Notifications",        starter: false,  pro: true,   business: true,         premium: true },
+  { feature: "WhatsApp Notifications",   starter: false,  pro: false,  business: true,         premium: true },
+  { feature: "Advanced Analytics",       starter: false,  pro: true,   business: true,         premium: true },
+  { feature: "Backorders",               starter: false,  pro: true,   business: true,         premium: true },
+  { feature: "HRM Module",               starter: false,  pro: false,  business: true,         premium: true },
+  { feature: "Campaigns & Marketing",    starter: false,  pro: false,  business: true,         premium: true },
+  { feature: "Customer Portal",          starter: false,  pro: true,   business: true,         premium: true },
+  { feature: "Directors / Shareholders", starter: false,  pro: false,  business: true,         premium: true },
+  { feature: "Custom Feature Config",    starter: false,  pro: false,  business: false,        premium: true },
+  { feature: "Dedicated Account Mgr",   starter: false,  pro: false,  business: false,        premium: true },
 ];
 
 const CellValue = ({ val, highlighted }: { val: boolean | string; highlighted?: boolean }) => {
@@ -187,68 +236,97 @@ const PricingPage = () => {
 
       {/* Pricing Cards */}
       <section className="py-16 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
             {PLANS.map((plan) => {
               const price = yearly ? plan.yearlyPrice : plan.monthlyPrice;
               const isHighlighted = plan.highlighted;
+              const isPremium = plan.isPremium;
 
               return (
                 <div
                   key={plan.name}
-                  className={`relative rounded-2xl border p-8 flex flex-col gap-6 transition-all ${
-                    isHighlighted
+                  className={`relative rounded-2xl border p-6 flex flex-col gap-5 transition-all ${
+                    isPremium
+                      ? "border-amber-400 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 shadow-xl"
+                      : isHighlighted
                       ? "border-primary bg-primary text-primary-foreground shadow-2xl scale-[1.02]"
                       : "border-border bg-card"
                   }`}
                 >
                   {plan.badge && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-foreground text-primary text-xs px-3 gap-1 shadow-md">
-                      <Zap className="h-3 w-3" /> {plan.badge}
+                    <Badge className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs px-3 gap-1 shadow-md ${
+                      isPremium
+                        ? "bg-amber-500 text-white border-amber-600"
+                        : "bg-primary-foreground text-primary"
+                    }`}>
+                      {isPremium ? <Sparkles className="h-3 w-3" /> : <Zap className="h-3 w-3" />} {plan.badge}
                     </Badge>
                   )}
 
                   {/* Plan name + tagline */}
                   <div>
-                    <p className={`text-xs font-semibold uppercase tracking-widest mb-1 ${isHighlighted ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-widest mb-1 ${
+                      isPremium ? "text-amber-600 dark:text-amber-400" :
+                      isHighlighted ? "text-primary-foreground/60" : "text-muted-foreground"
+                    }`}>
                       {plan.name}
                     </p>
-                    <p className={`text-sm mb-4 ${isHighlighted ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                    <p className={`text-sm mb-4 ${
+                      isPremium ? "text-amber-800 dark:text-amber-300" :
+                      isHighlighted ? "text-primary-foreground/70" : "text-muted-foreground"
+                    }`}>
                       {plan.tagline}
                     </p>
 
                     {/* Price block */}
                     <div className="flex items-end gap-1 mb-1">
-                      <span className={`text-sm font-semibold ${isHighlighted ? "text-primary-foreground/80" : "text-foreground"}`}>৳</span>
-                      <span className="text-5xl font-bold leading-none">{price.toLocaleString()}</span>
-                      <span className={`text-sm mb-0.5 ${isHighlighted ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                      <span className={`text-sm font-semibold ${
+                        isPremium ? "text-amber-700 dark:text-amber-400" :
+                        isHighlighted ? "text-primary-foreground/80" : "text-foreground"
+                      }`}>৳</span>
+                      <span className={`text-4xl font-bold leading-none ${
+                        isPremium ? "text-amber-900 dark:text-amber-100" : ""
+                      }`}>{price.toLocaleString()}</span>
+                      <span className={`text-sm mb-0.5 ${
+                        isPremium ? "text-amber-600 dark:text-amber-400" :
+                        isHighlighted ? "text-primary-foreground/60" : "text-muted-foreground"
+                      }`}>
                         {yearly ? "/year" : "/month"}
                       </span>
                     </div>
 
-                    {/* Yearly savings badge */}
                     {yearly ? (
                       <div className="flex items-center gap-2 mt-2">
-                        <Badge className={`text-[10px] px-2 py-0.5 gap-1 ${isHighlighted ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground"}`}>
+                        <Badge className={`text-[10px] px-2 py-0.5 gap-1 ${
+                          isPremium ? "bg-amber-500 text-white" :
+                          isHighlighted ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground"
+                        }`}>
                           <Sparkles className="h-3 w-3" /> Save 2 months
                         </Badge>
-                        <span className={`text-xs ${isHighlighted ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                          vs monthly billing
-                        </span>
                       </div>
                     ) : (
-                      <p className={`text-xs mt-1 ${isHighlighted ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                      <p className={`text-xs mt-1 ${
+                        isPremium ? "text-amber-600 dark:text-amber-400" :
+                        isHighlighted ? "text-primary-foreground/60" : "text-muted-foreground"
+                      }`}>
                         Switch to yearly to save 2 months
                       </p>
                     )}
                   </div>
 
                   {/* Features list */}
-                  <ul className="space-y-2.5 flex-1">
+                  <ul className="space-y-2 flex-1">
                     {plan.features.map((f, fi) => (
                       <li key={fi} className="flex items-start gap-2 text-sm">
-                        <CheckCircle2 className={`h-4 w-4 mt-0.5 shrink-0 ${isHighlighted ? "text-primary-foreground/70" : "text-primary"}`} />
-                        <span className={isHighlighted ? "text-primary-foreground/90" : "text-foreground"}>{f.text}</span>
+                        <CheckCircle2 className={`h-4 w-4 mt-0.5 shrink-0 ${
+                          isPremium ? "text-amber-500" :
+                          isHighlighted ? "text-primary-foreground/70" : "text-primary"
+                        }`} />
+                        <span className={
+                          isPremium ? "text-amber-900 dark:text-amber-100" :
+                          isHighlighted ? "text-primary-foreground/90" : "text-foreground"
+                        }>{f.text}</span>
                       </li>
                     ))}
                   </ul>
@@ -256,8 +334,8 @@ const PricingPage = () => {
                   {/* CTA */}
                   <Link to={plan.ctaLink}>
                     <Button
-                      className="w-full h-11"
-                      variant={isHighlighted ? "secondary" : "default"}
+                      className={`w-full h-11 ${isPremium ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-600" : ""}`}
+                      variant={isHighlighted ? "secondary" : isPremium ? "default" : "default"}
                     >
                       {plan.cta}
                     </Button>
@@ -277,32 +355,35 @@ const PricingPage = () => {
 
       {/* Comparison Table */}
       <section className="py-16 bg-muted/20 px-4">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <div className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Compare Plans</h2>
             <p className="text-muted-foreground">See exactly what's included in each plan.</p>
           </div>
 
-          <div className="rounded-2xl border border-border overflow-hidden bg-card">
-            <div className="grid grid-cols-3 bg-muted/50 border-b border-border">
-              <div className="p-4 text-sm font-semibold text-foreground">Feature</div>
-              <div className="p-4 text-center text-sm font-semibold text-foreground">Starter</div>
-              <div className="p-4 text-center text-sm font-semibold bg-primary text-primary-foreground">Pro</div>
-            </div>
-            {COMPARISON.map((row, i) => (
-              <div
-                key={i}
-                className={`grid grid-cols-3 border-b border-border last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/20"}`}
-              >
-                <div className="p-4 text-sm text-foreground">{row.feature}</div>
-                <div className="p-4 flex items-center justify-center">
-                  <CellValue val={row.starter} />
-                </div>
-                <div className="p-4 flex items-center justify-center bg-primary/5">
-                  <CellValue val={row.pro} highlighted />
-                </div>
-              </div>
-            ))}
+          <div className="rounded-2xl border border-border overflow-hidden bg-card overflow-x-auto">
+            <table className="w-full min-w-[600px]">
+              <thead>
+                <tr className="bg-muted/50 border-b border-border">
+                  <th className="p-4 text-left text-sm font-semibold text-foreground w-1/3">Feature</th>
+                  <th className="p-4 text-center text-sm font-semibold text-foreground">Starter</th>
+                  <th className="p-4 text-center text-sm font-semibold bg-primary text-primary-foreground">Pro</th>
+                  <th className="p-4 text-center text-sm font-semibold text-foreground">Business</th>
+                  <th className="p-4 text-center text-sm font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">Premium</th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON.map((row, i) => (
+                  <tr key={i} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/20"}`}>
+                    <td className="p-4 text-sm text-foreground">{row.feature}</td>
+                    <td className="p-4 text-center"><CellValue val={row.starter} /></td>
+                    <td className="p-4 text-center bg-primary/5"><CellValue val={row.pro} highlighted /></td>
+                    <td className="p-4 text-center"><CellValue val={row.business} /></td>
+                    <td className="p-4 text-center bg-amber-50/50 dark:bg-amber-950/20"><CellValue val={row.premium} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -366,7 +447,7 @@ const PricingPage = () => {
             {[
               { q: "How does yearly billing work?", a: "When you choose yearly billing, you pay for 10 months and get 12 — effectively saving 2 months compared to monthly billing. Billed as a single annual payment." },
               { q: "Can I change plans later?", a: "Yes, you can upgrade or downgrade your plan at any time. Changes take effect at the start of the next billing period." },
-              { q: "Is there a free trial?", a: "Yes! All plans come with a trial period so you can explore the system before committing." },
+              { q: "Is there a free trial?", a: "Yes! Every new dealer gets a 7-day free trial after account approval so you can complete a full purchase → sale → collection cycle before paying." },
               { q: "What payment methods are accepted?", a: "Mobile Banking: bKash/Nagad (Personal) — 01674533303, Rocket — 016745333033. Bank Transfer: Md. Iqbal Hossain, Savings A/C 2706101077904, Routing 175260162, Pubali Bank Ltd, Asad Avenue, Mohammadpur, Dhaka-1207." },
               { q: "What does Multi-branch ready mean?", a: "Pro plan supports managing multiple store locations or branches from a single dashboard, with consolidated reporting." },
               { q: "Is my data safe?", a: "Absolutely. All data is encrypted, backed up daily, and isolated per dealer account with role-based access control." },
@@ -381,14 +462,14 @@ const PricingPage = () => {
       </section>
 
       {/* Contact Sales */}
-      <section id="contact-sales" className="py-20 bg-primary">
+      <section id="contact-sales" className="py-20 bg-gradient-to-br from-amber-500 to-orange-500">
         <div className="max-w-3xl mx-auto px-4 text-center">
-          <MessageCircle className="h-12 w-12 text-primary-foreground/70 mx-auto mb-4" />
-          <h2 className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4">
-            Need a Custom Plan?
+          <Sparkles className="h-12 w-12 text-white/80 mx-auto mb-4" />
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            Premium Custom Plan
           </h2>
-          <p className="text-primary-foreground/70 text-lg mb-8">
-            Running a large business or chain of outlets? Let's talk — we'll build a plan around your needs.
+          <p className="text-white/80 text-lg mb-8">
+            Get every feature unlocked at ৳5,000/month. We customise individual modules — turn on/off exactly what your business needs.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <a href="mailto:support@yourdomain.com">

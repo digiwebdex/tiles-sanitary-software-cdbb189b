@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useDealerId } from "@/hooks/useDealerId";
-import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
+import { vpsAuthedFetch, vpsAuthApi } from "@/lib/vpsAuthClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Settings, AlertTriangle, Package, ShieldCheck, Calculator, Tags, ArrowRight, FileSpreadsheet } from "lucide-react";
+import { Settings, AlertTriangle, Package, ShieldCheck, Calculator, Tags, ArrowRight, FileSpreadsheet, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/contexts/AuthContext";
 import { ApprovalSettingsCard } from "@/components/approval/ApprovalSettingsCard";
 import { DemandPlanningSettingsCard } from "@/components/DemandPlanningSettingsCard";
 import WhatsAppSettingsCard from "@/components/whatsapp/WhatsAppSettingsCard";
@@ -27,6 +28,7 @@ type DealerSettingsRow = {
   vat_enabled: boolean;
   default_vat_rate: number;
   tax_id: string | null;
+  menu_mode: "simple" | "advanced";
 };
 
 async function fetchDealerSettings(dealerId: string): Promise<DealerSettingsRow> {
@@ -41,7 +43,7 @@ async function fetchDealerSettings(dealerId: string): Promise<DealerSettingsRow>
 
 async function patchDealerSettings(
   dealerId: string,
-  patch: Partial<Pick<DealerSettingsRow, "allow_backorder" | "default_wastage_pct" | "dual_unit_enabled" | "vat_enabled" | "default_vat_rate">>,
+  patch: Partial<Pick<DealerSettingsRow, "allow_backorder" | "default_wastage_pct" | "dual_unit_enabled" | "vat_enabled" | "default_vat_rate" | "menu_mode">>,
 ): Promise<DealerSettingsRow> {
   const res = await vpsAuthedFetch(`/api/dealer-settings`, {
     method: "PATCH",
@@ -58,6 +60,8 @@ async function patchDealerSettings(
 
 const SettingsPage = () => {
   const { isDealerAdmin } = usePermissions();
+  const { planFeatures, isSuperAdmin } = useAuth();
+  const backordersEnabled = isSuperAdmin || !!(planFeatures?.backordersEnabled);
   const dealerId = useDealerId();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -85,6 +89,22 @@ const SettingsPage = () => {
     queryClient.invalidateQueries({ queryKey: ["dealer-settings"] });
     queryClient.invalidateQueries({ queryKey: ["dealer-info"] });
   };
+
+  const setMenuMode = useMutation({
+    mutationFn: (mode: "simple" | "advanced") => patchDealerSettings(dealerId, { menu_mode: mode }),
+    onSuccess: async (_, mode) => {
+      invalidate();
+      // Refresh the auth payload so the sidebar re-filters immediately.
+      await vpsAuthApi.me().catch(() => {});
+      window.dispatchEvent(new Event("vps-auth-change"));
+      toast.success(
+        mode === "simple"
+          ? "Simple menu enabled — only core daily modules are shown"
+          : "Advanced menu enabled — all modules are visible",
+      );
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
   const toggleBackorder = useMutation({
     mutationFn: (enabled: boolean) => patchDealerSettings(dealerId, { allow_backorder: enabled }),
@@ -160,8 +180,72 @@ const SettingsPage = () => {
         <p className="text-muted-foreground">Loading…</p>
       ) : (
         <>
-          {/* Stock & Backorder Settings */}
-          <Card>
+          {/* Menu Mode — Simple vs Advanced */}
+          <Card className="border-primary/30">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4" />
+                Menu Mode
+              </CardTitle>
+              <CardDescription>
+                Choose how many modules your team sees. Start <strong>Simple</strong> for daily
+                operations; switch to <strong>Advanced</strong> to unlock growth, HRM and advanced finance.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => dealer?.menu_mode !== "simple" && setMenuMode.mutate("simple")}
+                  disabled={setMenuMode.isPending}
+                  className={`rounded-lg border p-4 text-left transition-colors ${
+                    dealer?.menu_mode === "simple"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold">Simple</span>
+                    {dealer?.menu_mode === "simple" && (
+                      <Badge variant="default" className="text-[10px]">Active</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Core daily work only — Sales, POS, Purchase, Inventory, Collections,
+                    Ledger, VAT, Reports.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => dealer?.menu_mode !== "advanced" && setMenuMode.mutate("advanced")}
+                  disabled={setMenuMode.isPending}
+                  className={`rounded-lg border p-4 text-left transition-colors ${
+                    dealer?.menu_mode === "advanced"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold">Advanced</span>
+                    {dealer?.menu_mode === "advanced" && (
+                      <Badge variant="default" className="text-[10px]">Active</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Everything — adds Leads, Projects, Quotations, Campaigns, HRM,
+                    EMI, Directors, Journal and more.
+                  </p>
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This applies to your whole team. Staff also only see screens relevant to their role.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Stock & Backorder Settings — Pro+ plan only */}
+          {backordersEnabled && <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Package className="h-4 w-4" />
@@ -235,7 +319,7 @@ const SettingsPage = () => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card>}
 
           {/* VAT / Mushak */}
           <Card>

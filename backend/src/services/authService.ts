@@ -1,9 +1,12 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import speakeasy from 'speakeasy';
 import { db } from '../db/connection';
 import { env } from '../config/env';
 import { dispatchSignupNotifications } from './notificationService';
+import { defaultSubscriptionEndDate } from '../lib/subscriptionEndDate';
+import { DEFAULT_SIGNUP_TRIAL_DAYS } from '../lib/trialConstants';
 
 const SALT_ROUNDS = 12;
 
@@ -20,12 +23,31 @@ export interface TokenPair {
   refreshToken: string;
 }
 
+export interface PlanFeatures {
+  maxWarehouses: number;
+  maxBranches: number;
+  maxStaffUsers: number;
+  whatsappEnabled: boolean;
+  hrmEnabled: boolean;
+  campaignsEnabled: boolean;
+  portalEnabled: boolean;
+  advancedFinanceEnabled: boolean;
+  advancedReportsEnabled: boolean;
+  posEnabled: boolean;
+  barcodeEnabled: boolean;
+  leadsEnabled: boolean;
+  projectsEnabled: boolean;
+  quotationsEnabled: boolean;
+  backordersEnabled: boolean;
+}
+
 export interface JwtPayload {
   userId: string;
   email: string;
   dealerId: string | null;
   roles: string[];
   isDemo?: boolean;
+  menuMode?: 'simple' | 'advanced';
   subscription?: {
     id: string;
     planId: string;
@@ -33,6 +55,19 @@ export interface JwtPayload {
     startDate: string;
     endDate: string | null;
   } | null;
+  planFeatures?: PlanFeatures | null;
+  saPermissions?: SaEmployeePermissions | null;
+}
+
+export interface SaEmployeePermissions {
+  designation: string | null;
+  can_manage_dealers: boolean;
+  can_manage_subscriptions: boolean;
+  can_view_financials: boolean;
+  can_send_reminders: boolean;
+  can_view_audit_log: boolean;
+  can_manage_announcements: boolean;
+  can_view_dealer_users: boolean;
 }
 
 export interface LockStatus {
@@ -82,25 +117,85 @@ async function buildJwtPayload(userId: string): Promise<JwtPayload> {
   const roles = await db('user_roles').where({ user_id: userId }).select('role');
   const roleNames = roles.map((r: any) => r.role);
   let subscription: JwtPayload['subscription'] = null;
+  let planFeatures: PlanFeatures | null = null;
   let isDemo = false;
+  // Menu mode applies to every dealer-scoped user (so managers/accountants/
+  // salesmen all share the dealer's simple/advanced choice).
+  let menuMode: 'simple' | 'advanced' = 'advanced';
 
-  if (profile?.dealer_id && roleNames.some((r: string) => r === 'dealer_admin' || r === 'salesman')) {
+  if (profile?.dealer_id) {
     const dealer = await db('dealers').where({ id: profile.dealer_id }).first();
     isDemo = !!dealer?.is_demo;
+    menuMode = dealer?.menu_mode === 'simple' ? 'simple' : 'advanced';
 
-    const sub = await db('subscriptions')
-      .where({ dealer_id: profile.dealer_id })
-      .orderBy('start_date', 'desc')
-      .orderBy('created_at', 'desc')
-      .first();
+    if (roleNames.some((r: string) => r === 'dealer_admin' || r === 'salesman')) {
+      const sub = await db('subscriptions as s')
+        .leftJoin('plans as p', 'p.id', 's.plan_id')
+        .where({ 's.dealer_id': profile.dealer_id })
+        .orderBy('s.start_date', 'desc')
+        .orderBy('s.created_at', 'desc')
+        .select(
+          's.id', 's.plan_id', 's.status', 's.start_date', 's.end_date',
+          'p.max_warehouses', 'p.max_branches', 'p.max_staff_users',
+          'p.whatsapp_enabled', 'p.hrm_enabled', 'p.campaigns_enabled',
+          'p.portal_enabled', 'p.advanced_finance_enabled', 'p.advanced_reports_enabled',
+          'p.pos_enabled', 'p.barcode_enabled', 'p.leads_enabled',
+          'p.projects_enabled', 'p.quotations_enabled', 'p.backorders_enabled',
+          's.custom_features',
+        )
+        .first();
 
-    if (sub) {
-      subscription = {
-        id: sub.id,
-        planId: sub.plan_id,
-        status: sub.status,
-        startDate: dateOnly(sub.start_date) ?? '',
-        endDate: dateOnly(sub.end_date),
+      if (sub) {
+        subscription = {
+          id: sub.id,
+          planId: sub.plan_id,
+          status: sub.status,
+          startDate: dateOnly(sub.start_date) ?? '',
+          endDate: dateOnly(sub.end_date),
+        };
+        // Base features from plan
+        const base: PlanFeatures = {
+          maxWarehouses: sub.max_warehouses ?? 1,
+          maxBranches: sub.max_branches ?? 1,
+          maxStaffUsers: sub.max_staff_users ?? 3,
+          whatsappEnabled: !!sub.whatsapp_enabled,
+          hrmEnabled: !!sub.hrm_enabled,
+          campaignsEnabled: !!sub.campaigns_enabled,
+          portalEnabled: !!sub.portal_enabled,
+          advancedFinanceEnabled: !!sub.advanced_finance_enabled,
+          advancedReportsEnabled: !!sub.advanced_reports_enabled,
+          posEnabled: !!sub.pos_enabled,
+          barcodeEnabled: !!sub.barcode_enabled,
+          leadsEnabled: !!sub.leads_enabled,
+          projectsEnabled: !!sub.projects_enabled,
+          quotationsEnabled: !!sub.quotations_enabled,
+          backordersEnabled: !!sub.backorders_enabled,
+        };
+        // Merge per-dealer overrides from subscription.custom_features (Premium Custom)
+        const overrides: Partial<PlanFeatures> =
+          sub.custom_features
+            ? (typeof sub.custom_features === 'string'
+                ? JSON.parse(sub.custom_features)
+                : sub.custom_features)
+            : {};
+        planFeatures = { ...base, ...overrides };
+      }
+    }
+  }
+
+  let saPermissions: SaEmployeePermissions | null = null;
+  if (roleNames.includes('sa_employee')) {
+    const ep = await db('sa_employee_permissions').where({ user_id: userId }).first();
+    if (ep) {
+      saPermissions = {
+        designation: ep.designation ?? null,
+        can_manage_dealers: !!ep.can_manage_dealers,
+        can_manage_subscriptions: !!ep.can_manage_subscriptions,
+        can_view_financials: !!ep.can_view_financials,
+        can_send_reminders: !!ep.can_send_reminders,
+        can_view_audit_log: !!ep.can_view_audit_log,
+        can_manage_announcements: !!ep.can_manage_announcements,
+        can_view_dealer_users: !!ep.can_view_dealer_users,
       };
     }
   }
@@ -111,7 +206,10 @@ async function buildJwtPayload(userId: string): Promise<JwtPayload> {
     dealerId: profile?.dealer_id ?? null,
     roles: roleNames,
     isDemo,
+    menuMode,
     subscription,
+    planFeatures,
+    saPermissions,
   };
 }
 
@@ -210,22 +308,32 @@ export const authService = {
     email: string,
     password: string,
     ip?: string,
-  ): Promise<TokenPair & { user: JwtPayload; lock: LockStatus }> {
+    totpCode?: string,
+  ): Promise<TokenPair & { user: JwtPayload; lock: LockStatus; totpRequired?: boolean }> {
     const normalized = email.toLowerCase().trim();
 
-    // 1. Lock check
-    const lock = await checkLockStatus(normalized);
-    if (lock.locked) {
-      const err: any = new Error('Account is locked');
-      err.code = 'LOCKED';
-      err.lock = lock;
-      throw err;
+    // 1. Lookup first so we know the role before applying lockout
+    const user = await db('users').where({ email: normalized }).first();
+
+    // Check roles to decide if lockout applies
+    const roles = user
+      ? (await db('user_roles').where({ user_id: user.id }).pluck('role') as string[])
+      : [];
+    const isSuperAdmin = roles.includes('super_admin');
+
+    // Lockout check — skip entirely for super_admin (TOTP is their protection)
+    if (!isSuperAdmin) {
+      const lock = await checkLockStatus(normalized);
+      if (lock.locked) {
+        const err: any = new Error('Account is locked');
+        err.code = 'LOCKED';
+        err.lock = lock;
+        throw err;
+      }
     }
 
-    // 2. Lookup
-    const user = await db('users').where({ email: normalized }).first();
     if (!user) {
-      const after = await recordFailedAttempt(normalized, ip);
+      const after = isSuperAdmin ? { locked: false } : await recordFailedAttempt(normalized, ip);
       const err: any = new Error('Invalid email or password');
       err.code = 'INVALID_CREDENTIALS';
       err.lock = after;
@@ -242,9 +350,16 @@ export const authService = {
       throw err;
     }
 
-    // 3. Password verify
+    // 2. Password verify
     const valid = await this.verifyPassword(password, user.password_hash);
     if (!valid) {
+      if (isSuperAdmin) {
+        // No lockout for super_admin — just reject silently
+        const err: any = new Error('Invalid email or password');
+        err.code = 'INVALID_CREDENTIALS';
+        err.lock = { locked: false };
+        throw err;
+      }
       const after = await recordFailedAttempt(normalized, ip);
       const err: any = new Error('Invalid email or password');
       err.code = after.locked ? 'LOCKED' : 'INVALID_CREDENTIALS';
@@ -252,8 +367,31 @@ export const authService = {
       throw err;
     }
 
-    // 4. Success — clear attempts, issue tokens
-    await clearAttempts(normalized);
+    // 3. TOTP check (super_admin only)
+    if (isSuperAdmin && user.totp_enabled && user.totp_secret) {
+      if (!totpCode) {
+        // Password OK but TOTP not provided — signal the frontend
+        const err: any = new Error('TOTP code required');
+        err.code = 'TOTP_REQUIRED';
+        err.lock = { locked: false };
+        throw err;
+      }
+      const tokenValid = speakeasy.totp.verify({
+        secret: user.totp_secret,
+        encoding: 'base32',
+        token: totpCode,
+        window: 1,
+      });
+      if (!tokenValid) {
+        const err: any = new Error('Invalid authenticator code');
+        err.code = 'TOTP_INVALID';
+        err.lock = { locked: false };
+        throw err;
+      }
+    }
+
+    // 4. Success — clear attempts (non-SA), issue tokens
+    if (!isSuperAdmin) await clearAttempts(normalized);
 
     const payload = await buildJwtPayload(user.id);
     const accessToken = signAccessToken(payload);
@@ -265,7 +403,6 @@ export const authService = {
       expires_at: expiresAt,
     });
 
-    // Cleanup expired tokens for this user (housekeeping)
     await db('refresh_tokens')
       .where('user_id', user.id)
       .where('expires_at', '<', new Date())
@@ -422,6 +559,24 @@ export const authService = {
     });
   },
 
+  /** Set password for authenticated user (portal / account settings). */
+  async verifyCurrentPassword(userId: string, currentPassword: string): Promise<boolean> {
+    const user = await db('users').where({ id: userId }).select('password_hash').first();
+    if (!user?.password_hash) return false;
+    return this.verifyPassword(currentPassword, user.password_hash);
+  },
+
+  async setPassword(userId: string, newPassword: string): Promise<void> {
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters');
+    }
+    const passwordHash = await this.hashPassword(newPassword);
+    await db('users').where({ id: userId }).update({
+      password_hash: passwordHash,
+      updated_at: new Date(),
+    });
+  },
+
   async createUser(data: {
     email: string;
     password: string;
@@ -462,8 +617,41 @@ export const authService = {
     return user;
   },
 
+  /** Portal-only identity — no dealer_id, no app roles. */
+  async createPortalIdentity(data: { email: string; password: string; name: string }) {
+    const normalized = data.email.toLowerCase().trim();
+    const existing = await db('users').where({ email: normalized }).first();
+    if (existing) {
+      const err: any = new Error('A user with this email already exists');
+      err.code = 'EMAIL_TAKEN';
+      throw err;
+    }
+
+    const hash = await this.hashPassword(data.password);
+    return db.transaction(async (trx) => {
+      const [createdUser] = await trx('users')
+        .insert({
+          email: normalized,
+          password_hash: hash,
+          name: data.name.trim(),
+          status: 'active',
+        })
+        .returning('*');
+
+      await trx('profiles').insert({
+        id: createdUser.id,
+        name: data.name.trim(),
+        email: normalized,
+        dealer_id: null,
+        status: 'active',
+      });
+
+      return createdUser;
+    });
+  },
+
   /**
-   * Self-signup: provision a brand-new dealer + admin user + 3-day trial,
+   * Self-signup: provision a brand-new dealer + admin user + 7-day trial,
    * but leave both the dealer and the admin user in 'pending' state until
    * a Super Admin approves them. We DO NOT issue tokens here — login is
    * blocked until approval. The login route translates the 'pending'
@@ -479,7 +667,7 @@ export const authService = {
     email: string;
     password: string;
     ip?: string;
-  }): Promise<{ dealerId: string; userId: string; pending: true }> {
+  }): Promise<{ dealerId: string; userId: string; accessToken: string; refreshToken: string; user: JwtPayload }> {
     const name = input.name.trim();
     const businessName = input.business_name.trim();
     const phone = input.phone.trim();
@@ -497,15 +685,17 @@ export const authService = {
     const passwordHash = await this.hashPassword(password);
 
     const { dealerId, userId } = await db.transaction(async (trx) => {
-      // 1. Dealer in PENDING state — invisible to login flows until approved.
+      // 1. Dealer ACTIVE — self-signup is auto-approved, no admin action needed.
+      //    New dealers start in 'simple' menu mode (uncluttered onboarding);
+      //    the owner can switch to 'advanced' from Settings.
       const [dealer] = await trx('dealers')
-        .insert({ name: businessName, phone, status: 'pending' })
+        .insert({ name: businessName, phone, status: 'active', menu_mode: 'simple' })
         .returning('id');
       const dId: string = dealer.id ?? dealer;
 
-      // 2. User in PENDING state — login throws PENDING_APPROVAL until SA approves.
+      // 2. User ACTIVE — can log in immediately after signup.
       const [user] = await trx('users')
-        .insert({ email, password_hash: passwordHash, name, status: 'pending' })
+        .insert({ email, password_hash: passwordHash, name, status: 'active' })
         .returning('*');
 
       // 3. Profile (linked to dealer)
@@ -529,20 +719,30 @@ export const authService = {
         next_challan_no: 1,
       }).onConflict('dealer_id').ignore();
 
-      // 6. 3-day trial subscription on the cheapest active plan.
-      //    Falls back to creating a "Free Trial" plan row if no plans exist yet.
-      let plan = await trx('plans').orderBy('price_monthly', 'asc').first();
+      // 6. Trial subscription on the Free Trial plan (or cheapest active plan).
+      let plan =
+        (await trx('plans')
+          .where({ is_trial: true, is_active: true })
+          .orderBy('sort_order', 'asc')
+          .first()) ??
+        (await trx('plans').where({ is_active: true }).orderBy('price_monthly', 'asc').first());
       if (!plan) {
         const [created] = await trx('plans')
-          .insert({ name: 'Free Trial', price_monthly: 0, price_yearly: 0, max_users: 1 })
+          .insert({
+            name: 'Free Trial',
+            price_monthly: 0,
+            price_yearly: 0,
+            max_users: 1,
+            is_trial: true,
+            trial_days: DEFAULT_SIGNUP_TRIAL_DAYS,
+            is_active: true,
+          })
           .returning('*');
         plan = created;
       }
 
       const startDate = new Date().toISOString().split('T')[0];
-      const endDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0];
+      const endDate = await defaultSubscriptionEndDate(plan.id, trx);
 
       await trx('subscriptions').insert({
         dealer_id: dId,
@@ -585,7 +785,66 @@ export const authService = {
       console.error('[register] signup notification dispatch failed:', err);
     });
 
-    return { dealerId, userId, pending: true };
+    // Issue tokens immediately — dealer is active, can log in right away.
+    const payload = await buildJwtPayload(userId);
+    const accessToken = signAccessToken(payload);
+    const { token: refreshToken, hash, expiresAt } = generateRefreshToken();
+    await db('refresh_tokens').insert({ user_id: userId, token_hash: hash, expires_at: expiresAt });
+
+    return { dealerId, userId, accessToken, refreshToken, user: payload };
+  },
+
+  // ── TOTP management (super_admin only) ─────────────────────────────────
+
+  /** Generate a new TOTP secret and return the otpauth URL for QR display. */
+  async totpGenerateSecret(userId: string): Promise<{ secret: string; otpauthUrl: string }> {
+    const user = await db('users').where({ id: userId }).first();
+    if (!user) throw new Error('User not found');
+    const generated = speakeasy.generateSecret({
+      name: `TilesERP (${user.email})`,
+      issuer: 'TilesERP Super Admin',
+      length: 20,
+    });
+    // Persist the secret (not yet enabled — enabled only after verify)
+    await db('users').where({ id: userId }).update({ totp_secret: generated.base32, totp_enabled: false });
+    return {
+      secret: generated.base32,
+      otpauthUrl: generated.otpauth_url!,
+    };
+  },
+
+  /** Verify a TOTP code and mark 2FA as enabled. */
+  async totpEnable(userId: string, code: string): Promise<void> {
+    const user = await db('users').where({ id: userId }).first();
+    if (!user || !user.totp_secret) throw new Error('Run setup first');
+    const valid = speakeasy.totp.verify({
+      secret: user.totp_secret,
+      encoding: 'base32',
+      token: code,
+      window: 1,
+    });
+    if (!valid) throw new Error('Invalid code — check your authenticator app');
+    await db('users').where({ id: userId }).update({ totp_enabled: true, totp_enabled_at: new Date() });
+  },
+
+  /** Disable TOTP for a super_admin user (requires valid TOTP code as confirmation). */
+  async totpDisable(userId: string, code: string): Promise<void> {
+    const user = await db('users').where({ id: userId }).first();
+    if (!user || !user.totp_secret || !user.totp_enabled) throw new Error('TOTP is not enabled');
+    const valid = speakeasy.totp.verify({
+      secret: user.totp_secret,
+      encoding: 'base32',
+      token: code,
+      window: 1,
+    });
+    if (!valid) throw new Error('Invalid code');
+    await db('users').where({ id: userId }).update({ totp_secret: null, totp_enabled: false, totp_enabled_at: null });
+  },
+
+  /** Return TOTP status for a user. */
+  async totpStatus(userId: string): Promise<{ enabled: boolean; enabledAt: string | null }> {
+    const user = await db('users').where({ id: userId }).select('totp_enabled', 'totp_enabled_at').first();
+    return { enabled: !!user?.totp_enabled, enabledAt: user?.totp_enabled_at ?? null };
   },
 };
 

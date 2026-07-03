@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Link, useSearchParams } from "react-router-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -68,6 +69,8 @@ interface PurchaseFormProps {
 
 
 const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDrafts }: PurchaseFormProps) => {
+  const { planFeatures, isSuperAdmin } = useAuth();
+  const barcodeEnabled = isSuperAdmin || !!(planFeatures?.barcodeEnabled);
   const [searchParams] = useSearchParams();
   const prefillProductId = searchParams.get("product");
   const prefilledRef = useRef(false);
@@ -435,7 +438,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
         {/* Product search + barcode scanner */}
         <Card>
           <CardContent className="pt-5 space-y-3">
-            <BarcodeScanInput onScan={handleBarcodeScan} disabled={!watchSupplierId} />
+            {barcodeEnabled && <BarcodeScanInput onScan={handleBarcodeScan} disabled={!watchSupplierId} />}
             <div className="relative">
               <div className="flex items-center gap-2 rounded-md border bg-background">
                 <Package className="ml-3 h-5 w-5 text-muted-foreground" />

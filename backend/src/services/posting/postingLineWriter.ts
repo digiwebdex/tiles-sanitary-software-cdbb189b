@@ -4,6 +4,8 @@ import type {
   PostingBatchResult,
   PostingLineInput,
 } from './types';
+import { isGlSpineEnabled } from '../gl/glConfig';
+import { mirrorPostingBatchToGl } from '../gl/glJournalWriter';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -93,5 +95,30 @@ export async function persistPostingBatch(
 ): Promise<PostingBatchResult> {
   const batchId = await createPostingBatch(trx, batch);
   const lineIds = await insertPostingLines(trx, batch.dealerId, batchId, lines);
+
+  if (isGlSpineEnabled() && lineIds.length) {
+    const postingRows = await trx('posting_lines').whereIn('id', lineIds);
+    const entryDate = lines[0]?.entryDate ?? new Date().toISOString().slice(0, 10);
+    await mirrorPostingBatchToGl(trx, {
+      dealerId: batch.dealerId,
+      postingBatchId: batchId,
+      entryDate,
+      documentType: batch.documentType,
+      documentId: batch.documentId,
+      description: batch.notes ?? null,
+      postingLineIds: lineIds,
+      postingLines: postingRows.map((r) => ({
+        id: r.id as string,
+        line_domain: r.line_domain as string,
+        line_type: r.line_type as string,
+        amount: Number(r.amount),
+        metadata:
+          typeof r.metadata === 'string'
+            ? (JSON.parse(r.metadata) as Record<string, unknown>)
+            : ((r.metadata as Record<string, unknown>) ?? {}),
+      })),
+    });
+  }
+
   return { batchId, lineIds };
 }

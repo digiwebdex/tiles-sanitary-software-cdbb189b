@@ -27,6 +27,7 @@ import { Knex } from 'knex';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { adjustSellableStock } from '../services/sellableStockAdjust';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -97,26 +98,27 @@ async function writeAudit(
   }
 }
 
-/** Adjust products.current_stock atomically. Throws on insufficient stock for deduct. */
+/** Deduct or add sellable stock via canonical `stock` table (P3-08). */
 async function adjustProductStock(
   trx: Knex.Transaction,
   dealerId: string,
   productId: string,
   quantity: number,
   type: 'add' | 'deduct',
+  txnType: string,
+  userId: string | null,
+  referenceId?: string | null,
 ) {
-  // Lock the row first
-  const product = await trx('products')
-    .where({ id: productId, dealer_id: dealerId })
-    .forUpdate()
-    .first('id', 'current_stock');
-  if (!product) throw new Error('Product not found');
-  const cur = Number(product.current_stock) || 0;
-  const next = type === 'add' ? cur + quantity : cur - quantity;
-  if (next < 0) throw new Error(`Insufficient stock (have ${cur}, need ${quantity})`);
-  await trx('products')
-    .where({ id: productId, dealer_id: dealerId })
-    .update({ current_stock: next, updated_at: trx.fn.now() });
+  await adjustSellableStock(trx, {
+    dealerId,
+    productId,
+    quantity,
+    type,
+    userId,
+    txnType,
+    referenceTable: 'display_stock',
+    referenceId: referenceId ?? null,
+  });
 }
 
 async function getOrCreateDisplayRow(
@@ -180,7 +182,15 @@ router.post('/move-to-display', async (req: Request, res: Response) => {
     }
     const { product_id, quantity, notes } = parsed.data;
     const result = await db.transaction(async (trx) => {
-      await adjustProductStock(trx, dealerId, product_id, quantity, 'deduct');
+      await adjustProductStock(
+        trx,
+        dealerId,
+        product_id,
+        quantity,
+        'deduct',
+        'display_move_out',
+        req.user?.userId ?? null,
+      );
       const row = await getOrCreateDisplayRow(trx, dealerId, product_id);
       const newQty = Number(row.display_qty) + quantity;
       await trx('display_stock')
@@ -224,7 +234,15 @@ router.post('/move-back', async (req: Request, res: Response) => {
       if (Number(row.display_qty) < quantity) {
         throw new Error(`Insufficient display stock (have ${row.display_qty}, need ${quantity})`);
       }
-      await adjustProductStock(trx, dealerId, product_id, quantity, 'add');
+      await adjustProductStock(
+        trx,
+        dealerId,
+        product_id,
+        quantity,
+        'add',
+        'display_move_in',
+        req.user?.userId ?? null,
+      );
       const newQty = Number(row.display_qty) - quantity;
       await trx('display_stock')
         .where({ id: row.id })
@@ -303,7 +321,15 @@ router.post('/replace', async (req: Request, res: Response) => {
     }
     const { product_id, quantity, notes } = parsed.data;
     const result = await db.transaction(async (trx) => {
-      await adjustProductStock(trx, dealerId, product_id, quantity, 'deduct');
+      await adjustProductStock(
+        trx,
+        dealerId,
+        product_id,
+        quantity,
+        'deduct',
+        'display_move_out',
+        req.user?.userId ?? null,
+      );
       const row = await getOrCreateDisplayRow(trx, dealerId, product_id);
       await trx('display_stock').where({ id: row.id }).update({ updated_at: trx.fn.now() });
       await trx('display_movements').insert({

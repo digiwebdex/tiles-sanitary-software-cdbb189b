@@ -134,6 +134,54 @@ export async function sendSms(opts: {
   }
 }
 
+/** Normalize a phone number to WhatsApp E.164 format (+8801XXXXXXXXX). */
+function normalizeE164(phone: string): string {
+  const digits = phone.replace(/\D+/g, '');
+  if (digits.startsWith('880') && digits.length === 13) return `+${digits}`;
+  if (digits.startsWith('0') && digits.length === 11) return `+88${digits}`;
+  if (digits.length === 10) return `+880${digits}`;
+  return digits.startsWith('+') ? phone : `+${digits}`; // best effort
+}
+
+/**
+ * Send a WhatsApp text message via WasenderAPI.
+ * Best-effort: returns false on missing config / non-2xx / network error,
+ * never throws. Note: the free trial is rate-limited to ~1 request/minute,
+ * so callers fanning out to many recipients should pace their sends.
+ */
+export async function sendWhatsApp(opts: {
+  to: string;
+  text: string;
+}): Promise<boolean> {
+  if (!env.WASENDER_API_TOKEN) {
+    console.warn('[notify] WasenderAPI not configured — skipping WhatsApp to', opts.to);
+    return false;
+  }
+  const url = env.WASENDER_API_URL || 'https://wasenderapi.com/api/send-message';
+  const to = normalizeE164(opts.to);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.WASENDER_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ to, text: opts.text }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error('[notify] WhatsApp send failed', res.status, body.slice(0, 200));
+      return false;
+    }
+    console.log('[notify] WhatsApp sent to', to);
+    return true;
+  } catch (err) {
+    console.error('[notify] WhatsApp send error to', opts.to, (err as Error).message);
+    return false;
+  }
+}
+
 /**
  * Fan-out helper: fires SMS + Email to dealer and to admin in parallel.
  * Never throws — caller can ignore the result safely.
@@ -146,58 +194,88 @@ export async function dispatchSignupNotifications(input: {
   adminPhone?: string;
   adminEmail?: string;
 }): Promise<void> {
-  const {
-    dealerName,
-    businessName,
-    dealerPhone,
-    dealerEmail,
-    adminPhone,
-    adminEmail,
-  } = input;
+  const { dealerName, businessName, dealerPhone, dealerEmail, adminPhone, adminEmail } = input;
+  const today = new Date().toLocaleDateString('bn-BD');
+  const loginUrl = 'https://sanitileserp.com/login';
 
-  // Bengali SMS to dealer
+  // ── Dealer messages ──────────────────────────────────────────────────
   const dealerSms =
     `স্বাগতম ${dealerName}!\n` +
-    `আপনার "${businessName}" অ্যাকাউন্ট তৈরি হয়েছে।\n` +
-    `Super Admin অনুমোদনের অপেক্ষায় আছে। অনুমোদনের পর আপনাকে জানানো হবে।\n\n` +
-    `Tiles & Sanitary ERP`;
+    `"${businessName}" অ্যাকাউন্ট সক্রিয় হয়েছে।\n` +
+    `7 দিনের ফ্রি ট্রায়াল শুরু হয়েছে।\n` +
+    `লগইন: ${loginUrl}\n` +
+    `TilesERP`;
 
-  // Welcome email to dealer (pending state — sets expectation)
-  const dealerEmailSubject = 'Account Received — Awaiting Approval';
+  const dealerWhatsApp =
+    `✅ *স্বাগতম TilesERP-তে!*\n\n` +
+    `প্রিয় ${dealerName},\n` +
+    `আপনার *"${businessName}"* অ্যাকাউন্ট সফলভাবে তৈরি ও সক্রিয় হয়েছে!\n\n` +
+    `📦 *পরিকল্পনা:* Starter (7-দিন ফ্রি ট্রায়াল)\n` +
+    `📧 *ইমেইল:* ${dealerEmail}\n` +
+    `📱 *ফোন:* ${dealerPhone}\n\n` +
+    `🔗 এখনই লগইন করুন: ${loginUrl}\n\n` +
+    `যেকোনো সমস্যায় যোগাযোগ করুন: +880 1674 533303\n` +
+    `— TilesERP Team`;
+
+  const dealerEmailSubject = `✅ আপনার TilesERP অ্যাকাউন্ট সক্রিয় — ${businessName}`;
   const dealerEmailText =
     `Dear ${dealerName},\n\n` +
-    `Thank you for signing up for Tiles & Sanitary ERP.\n` +
-    `Your business account "${businessName}" has been received and is now awaiting Super Admin approval.\n\n` +
-    `What happens next:\n` +
-    `  • Our team will review your registration shortly.\n` +
-    `  • You will be notified by email and SMS once your account is approved.\n` +
-    `  • You will then be able to log in and start a 3-day free trial.\n\n` +
-    `Need it faster? Call us at +880 1674 533303.\n\n` +
+    `Your business account has been created and is ACTIVE!\n\n` +
+    `Business : ${businessName}\n` +
+    `Email    : ${dealerEmail}\n` +
+    `Phone    : ${dealerPhone}\n` +
+    `Plan     : Starter (7-day free trial)\n` +
+    `Status   : ✅ Active — log in now\n\n` +
+    `Login at: ${loginUrl}\n\n` +
+    `Need help? Call +880 1674 533303 or reply to this email.\n\n` +
     `Best regards,\nTiles & Sanitary ERP Team`;
 
-  // Bengali SMS to admin
+  // ── Admin messages ───────────────────────────────────────────────────
   const adminSms =
-    `নতুন ডিলার রেজিস্ট্রেশন (অনুমোদনের অপেক্ষায়)!\n` +
+    `🆕 নতুন ডিলার!\n` +
     `নাম: ${dealerName}\n` +
     `ব্যবসা: ${businessName}\n` +
     `ফোন: ${dealerPhone}\n` +
-    `ইমেইল: ${dealerEmail}`;
+    `ইমেইল: ${dealerEmail}\n` +
+    `Status: Active (Trial)`;
 
-  // Email to admin
-  const adminEmailSubject = `New Dealer Registration — ${businessName}`;
+  const adminWhatsApp =
+    `🆕 *নতুন ডিলার রেজিস্ট্রেশন!*\n\n` +
+    `👤 *নাম:* ${dealerName}\n` +
+    `🏪 *ব্যবসা:* ${businessName}\n` +
+    `📱 *ফোন:* ${dealerPhone}\n` +
+    `📧 *ইমেইল:* ${dealerEmail}\n` +
+    `📦 *পরিকল্পনা:* Starter Trial\n` +
+    `✅ *স্ট্যাটাস:* Active\n` +
+    `📅 *তারিখ:* ${today}\n\n` +
+    `Super Admin: https://sanitileserp.com/super-admin`;
+
+  const adminEmailSubject = `🆕 New Dealer — ${businessName} (Active)`;
   const adminEmailText =
-    `A new dealer has signed up and is awaiting your approval.\n\n` +
-    `Owner: ${dealerName}\n` +
-    `Business: ${businessName}\n` +
-    `Phone: ${dealerPhone}\n` +
-    `Email: ${dealerEmail}\n` +
-    `Date: ${new Date().toISOString().split('T')[0]}\n\n` +
-    `Approve or reject from Super Admin → Dealers.`;
+    `New dealer self-signup — account is LIVE\n\n` +
+    `Owner    : ${dealerName}\n` +
+    `Business : ${businessName}\n` +
+    `Phone    : ${dealerPhone}\n` +
+    `Email    : ${dealerEmail}\n` +
+    `Plan     : Starter (7-day trial)\n` +
+    `Status   : Active\n` +
+    `Date     : ${new Date().toISOString().split('T')[0]}\n\n` +
+    `Manage at: https://sanitileserp.com/super-admin/dealers`;
 
   const tasks: Promise<unknown>[] = [];
-  if (dealerPhone) tasks.push(sendSms({ to: dealerPhone, message: dealerSms }));
+
+  // Dealer — SMS + WhatsApp + Email
+  if (dealerPhone) {
+    tasks.push(sendSms({ to: dealerPhone, message: dealerSms }));
+    tasks.push(sendWhatsApp({ to: dealerPhone, text: dealerWhatsApp }));
+  }
   if (dealerEmail) tasks.push(sendEmail({ to: dealerEmail, subject: dealerEmailSubject, text: dealerEmailText }));
-  if (adminPhone) tasks.push(sendSms({ to: adminPhone, message: adminSms }));
+
+  // Admin — SMS + WhatsApp + Email
+  if (adminPhone) {
+    tasks.push(sendSms({ to: adminPhone, message: adminSms }));
+    tasks.push(sendWhatsApp({ to: adminPhone, text: adminWhatsApp }));
+  }
   if (adminEmail) tasks.push(sendEmail({ to: adminEmail, subject: adminEmailSubject, text: adminEmailText }));
 
   await Promise.allSettled(tasks);
@@ -222,7 +300,7 @@ export async function dispatchApprovalNotification(input: {
   const text =
     `Dear ${dealerName},\n\n` +
     `Great news! Your business account "${businessName}" has been approved.\n\n` +
-    `You can now log in and start your 3-day free trial:\n` +
+    `You can now log in and start your 7-day free trial:\n` +
     `  https://app.sanitileserp.com/login\n\n` +
     `If you need help getting started, reply to this email or call +880 1674 533303.\n\n` +
     `Best regards,\nTiles & Sanitary ERP Team`;

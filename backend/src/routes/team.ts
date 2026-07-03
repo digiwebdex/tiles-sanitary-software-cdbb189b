@@ -107,6 +107,28 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
+  // Enforce per-plan staff user limit
+  const sub = await db('subscriptions as s')
+    .leftJoin('plans as p', 'p.id', 's.plan_id')
+    .where({ 's.dealer_id': dealerId })
+    .orderBy('s.start_date', 'desc')
+    .select('p.max_staff_users')
+    .first();
+  const maxStaff: number = sub?.max_staff_users ?? 3;
+  const currentStaff: number = await db('profiles')
+    .where({ dealer_id: dealerId })
+    .count('id as cnt')
+    .then((r: any[]) => Number(r[0]?.cnt ?? 0));
+  // 9999 = unlimited (Business plan)
+  if (maxStaff < 9999 && currentStaff >= maxStaff) {
+    res.status(403).json({
+      error: `Your plan allows a maximum of ${maxStaff} staff user(s). Please upgrade to add more.`,
+      code: 'PLAN_LIMIT_USERS',
+      limit: maxStaff,
+    });
+    return;
+  }
+
   const { name, email, password, role } = parsed.data;
 
   // Email must be unique
