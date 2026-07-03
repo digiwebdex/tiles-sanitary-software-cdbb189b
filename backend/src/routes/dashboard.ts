@@ -234,6 +234,11 @@ router.get('/', async (req: Request, res: Response) => {
       amount: round2(r.amount),
     }));
 
+    // Cash in hand — running balance of the cash ledger (signed amounts:
+    // receipts positive, payments/refunds negative). Replaces the hardcoded 0.
+    const cashRow = await db('cash_ledger').where({ dealer_id: dealerId }).sum({ s: 'amount' }).first();
+    const cashInHand = round2((cashRow as any)?.s);
+
     res.json({
       todaySales: round2(todayAgg?.sales),
       todayCollection: round2(todayColl?.s),
@@ -245,7 +250,7 @@ router.get('/', async (req: Request, res: Response) => {
       monthlyPurchase: round2(monthPurchase?.s),
       totalCustomerDue,
       totalSupplierPayable: round2(supplierPayable),
-      cashInHand: 0, // computed elsewhere; left at 0 until cash_ledger endpoint lands
+      cashInHand,
       totalStockValue,
       lowStockItems,
       overdueCustomerCount: Number(overdueRow.rows?.[0]?.c ?? 0),
