@@ -245,4 +245,37 @@ router.delete('/:userId', async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// ── GET /login-history — security view for the dealer's team ──
+// Successful logins come from refresh_tokens (one row per login); failed
+// attempts / lockouts from login_attempts. Both scoped to this dealer's users.
+router.get('/login-history', async (req: Request, res: Response) => {
+  const dealerId = ensureDealer(req, res);
+  if (!dealerId) return;
+
+  const logins = await db('refresh_tokens as rt')
+    .join('profiles as p', 'p.id', 'rt.user_id')
+    .where('p.dealer_id', dealerId)
+    .orderBy('rt.created_at', 'desc')
+    .limit(50)
+    .select(
+      'p.name',
+      'p.email',
+      'rt.created_at as login_at',
+      'rt.revoked_at',
+      'rt.expires_at',
+      db.raw('(rt.revoked_at IS NULL AND rt.expires_at > now()) as active'),
+    );
+
+  const emails: string[] = await db('profiles').where({ dealer_id: dealerId }).pluck('email');
+  const failed = emails.length
+    ? await db('login_attempts')
+        .whereIn('email', emails.map((e) => (e || '').toLowerCase()))
+        .orderBy('attempted_at', 'desc')
+        .limit(50)
+        .select('email', 'ip_address', 'attempted_at', 'is_locked', 'locked_until')
+    : [];
+
+  res.json({ logins, failed });
+});
+
 export default router;
