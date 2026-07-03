@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Mail, MessageSquare, Clock, Users, Check, X } from "lucide-react";
+import { Plus, Pencil, Users, Check, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
@@ -26,26 +26,50 @@ async function vpsJson<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+// Every feature the Super Admin can enable/disable per package. Keep in sync
+// with backend FEATURE_FLAGS. Grouped only for readability in the dialog.
+const FEATURE_DEFS: { key: string; label: string }[] = [
+  { key: "pos_enabled", label: "POS (Point of Sale)" },
+  { key: "quotations_enabled", label: "Quotations" },
+  { key: "leads_enabled", label: "Leads / CRM" },
+  { key: "projects_enabled", label: "Projects" },
+  { key: "backorders_enabled", label: "Backorders" },
+  { key: "barcode_enabled", label: "Barcode" },
+  { key: "hrm_enabled", label: "HRM / Payroll" },
+  { key: "campaigns_enabled", label: "Campaigns (SMS/WhatsApp/Referrals)" },
+  { key: "portal_enabled", label: "Customer Portal" },
+  { key: "advanced_finance_enabled", label: "Advanced Finance (Journal, EMI, Directors)" },
+  { key: "advanced_reports_enabled", label: "Advanced Reports" },
+  { key: "email_enabled", label: "Email Notifications" },
+  { key: "sms_enabled", label: "SMS Notifications" },
+  { key: "whatsapp_enabled", label: "WhatsApp" },
+  { key: "daily_summary_enabled", label: "Daily Summary" },
+];
+
+// Capacity limits. `def` is the value used for new plans / when missing.
+const LIMIT_DEFS: { key: string; label: string; def: number; min: number }[] = [
+  { key: "max_users", label: "Max Users", def: 1, min: 1 },
+  { key: "max_staff_users", label: "Max Staff Users", def: 0, min: 0 },
+  { key: "max_branches", label: "Max Branches", def: 0, min: 0 },
+  { key: "max_warehouses", label: "Max Warehouses", def: 0, min: 0 },
+];
+
 interface PlanForm {
   name: string;
   monthly_price: string;
   yearly_price: string;
-  max_users: string;
-  email_enabled: boolean;
-  sms_enabled: boolean;
-  daily_summary_enabled: boolean;
   is_active: boolean;
+  flags: Record<string, boolean>;
+  limits: Record<string, string>;
 }
 
 const emptyForm: PlanForm = {
   name: "",
   monthly_price: "0",
   yearly_price: "0",
-  max_users: "1",
-  email_enabled: false,
-  sms_enabled: false,
-  daily_summary_enabled: false,
   is_active: true,
+  flags: Object.fromEntries(FEATURE_DEFS.map((f) => [f.key, false])),
+  limits: Object.fromEntries(LIMIT_DEFS.map((l) => [l.key, String(l.def)])),
 };
 
 const PlanManagement = () => {
@@ -66,16 +90,14 @@ const PlanManagement = () => {
   const upsertMutation = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error("Plan name is required");
-      const payload = {
+      const payload: Record<string, any> = {
         name: form.name,
         monthly_price: Number(form.monthly_price) || 0,
         yearly_price: Number(form.yearly_price) || 0,
-        max_users: Number(form.max_users) || 1,
-        email_enabled: form.email_enabled,
-        sms_enabled: form.sms_enabled,
-        daily_summary_enabled: form.daily_summary_enabled,
         is_active: form.is_active,
       };
+      for (const f of FEATURE_DEFS) payload[f.key] = !!form.flags[f.key];
+      for (const l of LIMIT_DEFS) payload[l.key] = Number(form.limits[l.key]) || l.def;
       if (editId) {
         await vpsJson(`/api/plans/${editId}`, { method: "PATCH", body: JSON.stringify(payload) });
       } else {
@@ -110,11 +132,9 @@ const PlanManagement = () => {
       name: plan.name,
       monthly_price: String(plan.monthly_price),
       yearly_price: String(plan.yearly_price),
-      max_users: String(plan.max_users),
-      email_enabled: plan.email_enabled,
-      sms_enabled: plan.sms_enabled,
-      daily_summary_enabled: plan.daily_summary_enabled,
       is_active: plan.is_active,
+      flags: Object.fromEntries(FEATURE_DEFS.map((f) => [f.key, !!plan[f.key]])),
+      limits: Object.fromEntries(LIMIT_DEFS.map((l) => [l.key, String(plan[l.key] ?? l.def)])),
     });
     setDialogOpen(true);
   };
@@ -125,6 +145,9 @@ const PlanManagement = () => {
     ) : (
       <X className="h-4 w-4 text-muted-foreground/40" />
     );
+
+  // Count of enabled features shown in the table for a quick overview.
+  const enabledCount = (p: any) => FEATURE_DEFS.filter((f) => !!p[f.key]).length;
 
   return (
     <Card>
@@ -150,21 +173,8 @@ const PlanManagement = () => {
                       <Users className="h-3.5 w-3.5" /> Users
                     </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Mail className="h-3.5 w-3.5" /> Email
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <MessageSquare className="h-3.5 w-3.5" /> SMS
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Clock className="h-3.5 w-3.5" /> Daily Summary
-                    </div>
-                  </TableHead>
+                  <TableHead className="text-center">Quotations</TableHead>
+                  <TableHead className="text-center">Features on</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="w-20">Actions</TableHead>
                 </TableRow>
@@ -172,7 +182,7 @@ const PlanManagement = () => {
               <TableBody>
                 {plans.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground">
                       No plans created yet
                     </TableCell>
                   </TableRow>
@@ -184,13 +194,10 @@ const PlanManagement = () => {
                       <TableCell>{formatCurrency(p.yearly_price)}</TableCell>
                       <TableCell className="text-center">{p.max_users}</TableCell>
                       <TableCell className="text-center">
-                        <div className="flex justify-center"><FeatureIcon enabled={p.email_enabled} /></div>
+                        <div className="flex justify-center"><FeatureIcon enabled={!!p.quotations_enabled} /></div>
                       </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center"><FeatureIcon enabled={p.sms_enabled} /></div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center"><FeatureIcon enabled={p.daily_summary_enabled} /></div>
+                      <TableCell className="text-center text-muted-foreground">
+                        {enabledCount(p)}/{FEATURE_DEFS.length}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant={p.is_active ? "default" : "secondary"} className="text-xs">
@@ -212,7 +219,7 @@ const PlanManagement = () => {
       </CardContent>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editId ? "Edit Plan" : "Create Plan"}</DialogTitle>
           </DialogHeader>
@@ -231,34 +238,38 @@ const PlanManagement = () => {
                 <Input type="number" value={form.yearly_price} onChange={(e) => setForm({ ...form, yearly_price: e.target.value })} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Max Users</Label>
-              <Input type="number" value={form.max_users} onChange={(e) => setForm({ ...form, max_users: e.target.value })} />
+
+            {/* Capacity limits */}
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+              {LIMIT_DEFS.map((l) => (
+                <div className="space-y-2" key={l.key}>
+                  <Label>{l.label}</Label>
+                  <Input
+                    type="number"
+                    min={l.min}
+                    value={form.limits[l.key] ?? ""}
+                    onChange={(e) => setForm({ ...form, limits: { ...form.limits, [l.key]: e.target.value } })}
+                  />
+                </div>
+              ))}
             </div>
+
+            {/* Feature toggles — enable/disable each per package */}
             <div className="space-y-3 pt-2 border-t">
-              <Label className="text-sm font-semibold">Features</Label>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <Label className="font-normal">Email Notifications</Label>
-                </div>
-                <Switch checked={form.email_enabled} onCheckedChange={(v) => setForm({ ...form, email_enabled: v })} />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  <Label className="font-normal">SMS Notifications</Label>
-                </div>
-                <Switch checked={form.sms_enabled} onCheckedChange={(v) => setForm({ ...form, sms_enabled: v })} />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <Label className="font-normal">Daily Summary</Label>
-                </div>
-                <Switch checked={form.daily_summary_enabled} onCheckedChange={(v) => setForm({ ...form, daily_summary_enabled: v })} />
+              <Label className="text-sm font-semibold">Features (enable / disable per package)</Label>
+              <div className="grid grid-cols-1 gap-2">
+                {FEATURE_DEFS.map((f) => (
+                  <div className="flex items-center justify-between" key={f.key}>
+                    <Label className="font-normal">{f.label}</Label>
+                    <Switch
+                      checked={!!form.flags[f.key]}
+                      onCheckedChange={(v) => setForm({ ...form, flags: { ...form.flags, [f.key]: v } })}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
+
             <div className="flex items-center justify-between pt-2 border-t">
               <Label className="font-normal">Plan Active</Label>
               <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
