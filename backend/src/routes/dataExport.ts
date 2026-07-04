@@ -22,6 +22,7 @@ import {
   sumCustomerOutstandingFromSales,
   sumSupplierPayable,
   sumInventoryValuationWac,
+  getCustomerOutstandingMapFromReadModel,
 } from '../services/reportQueryService';
 
 const router = Router();
@@ -276,10 +277,27 @@ router.get('/full-backup.xlsx', async (req: Request, res: Response) => {
     if (dateCol && from) q = q.where(dateCol, '>=', from);
     return (await q.sum({ s: col }).first() as any)?.s;
   });
+  // Low-stock count — same reorder rule as the app dashboard.
+  const lowStock = async (): Promise<number | null> => {
+    try {
+      const r: any = await db.raw(
+        `SELECT COUNT(*)::int AS c
+         FROM products p
+         LEFT JOIN stock s ON s.product_id = p.id AND s.dealer_id = p.dealer_id
+         WHERE p.dealer_id = ?
+           AND COALESCE(p.reorder_level, 0) > 0
+           AND (CASE WHEN p.unit_type = 'box_sft' THEN COALESCE(s.box_qty, 0)
+                     ELSE COALESCE(s.piece_qty, 0) END) <= COALESCE(p.reorder_level, 0)`,
+        [dealerId],
+      );
+      return Number(r.rows?.[0]?.c ?? 0);
+    } catch { return null; }
+  };
 
   const [
     monthSales, monthProfit, monthColl, monthPurch, todaySales, yearSales,
     custDue, supPay, cash, stockVal, nCust, nSup, nProd, nSales,
+    monthExpenses, lowStockCount,
   ] = await Promise.all([
     sumCol('sales', 'total_amount', 'sale_date', monthStart),
     sumCol('sales', 'net_profit', 'sale_date', monthStart),
@@ -292,13 +310,28 @@ router.get('/full-backup.xlsx', async (req: Request, res: Response) => {
     money(async () => (await db('cash_ledger').where({ dealer_id: dealerId }).sum({ s: 'amount' }).first() as any)?.s),
     money(() => sumInventoryValuationWac(dealerId)),
     count('customers'), count('suppliers'), count('products'), count('sales'),
+    sumCol('expenses', 'amount', 'expense_date', monthStart),
+    lowStock(),
   ]);
+
+  // Top 5 customers by outstanding dues — same read model as the total above.
+  let topDues: Array<[string, number]> = [];
+  try {
+    const dueMap = await getCustomerOutstandingMapFromReadModel(dealerId);
+    const top = [...dueMap.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    if (top.length) {
+      const rows = await db('customers').whereIn('id', top.map(([id]) => id)).select('id', 'name');
+      const nameById = new Map((rows as any[]).map((c) => [c.id, c.name]));
+      topDues = top.map(([id, v]) => [nameById.get(id) || 'Unknown', round2(v)]);
+    }
+  } catch { topDues = []; }
 
   section('THIS MONTH (Tk)');
   kpi('Sales', monthSales);
   kpi('Profit', monthProfit);
   kpi('Collections received', monthColl);
   kpi('Purchases', monthPurch);
+  kpi('Expenses', monthExpenses);
   dash.addRow([]);
   section('TODAY (Tk)');
   kpi("Today's sales", todaySales);
@@ -315,6 +348,18 @@ router.get('/full-backup.xlsx', async (req: Request, res: Response) => {
   kpi('Suppliers', nSup, false);
   kpi('Products', nProd, false);
   kpi('Sales invoices', nSales, false);
+  kpi('Low-stock items (re-order now)', lowStockCount, false);
+  dash.addRow([]);
+  section('TOP 5 CUSTOMERS BY DUES (Tk)');
+  if (topDues.length === 0) {
+    dash.addRow(['(no outstanding dues)', '']);
+  } else {
+    for (const [name, amt] of topDues) {
+      const r = dash.addRow([name, amt]);
+      r.getCell(2).numFmt = MONEY_FMT;
+      r.getCell(2).alignment = { horizontal: 'right' };
+    }
+  }
   dash.addRow([]);
 
   // ─── One sheet per data area, with friendly headers ───
