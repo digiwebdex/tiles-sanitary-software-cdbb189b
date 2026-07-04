@@ -284,6 +284,7 @@ const WhyChooseUsSection = () => {
     { icon: AlertCircle, title: "Smart Credit Monitoring", description: "Set credit limits per customer, get overdue alerts automatically." },
     { icon: Receipt, title: "Profit Per Invoice", description: "See net profit on every sale including COGS, discount, and landed costs." },
     { icon: Bell, title: "Daily SMS & Email Summary", description: "Automated daily business summaries so you stay informed offline." },
+    { icon: Database, title: "Automatic Google Drive Backup", description: "One-click Excel export plus nightly auto-backup to your own Google Drive — your data is always safe." },
     { icon: Store, title: "Online Store Ready", description: "Future-proof with built-in catalog and order management capabilities." },
   ];
 
@@ -394,14 +395,15 @@ const PRICING_PLANS = [
     monthlyPrice: 999,
     yearlyPrice: 10000,
     features: [
-      "1 user",
+      "Up to 5 users",
       "Full inventory management",
       "Sales & purchase tracking",
       "Customer & supplier ledger",
       "Basic reports & P/L",
-      "Barcode generation",
+      "Cashbook & day-end closing",
       "Email notifications",
       "Challan & invoice printing",
+      "Excel backup & Google Drive auto-backup",
     ],
   },
   {
@@ -410,7 +412,7 @@ const PRICING_PLANS = [
     monthlyPrice: 2000,
     yearlyPrice: 20000,
     features: [
-      "Up to 2 users",
+      "Up to 8 users",
       "All Starter features",
       "Advanced analytics & dashboards",
       "Credit limit management",
@@ -427,9 +429,9 @@ const PRICING_PLANS = [
     monthlyPrice: 3000,
     yearlyPrice: 30000,
     features: [
-      "Up to 5 users",
+      "Up to 20 users",
       "All Pro features",
-      "Multi-branch ready",
+      "Up to 10 branches & 5 warehouses",
       "Role-based access control",
       "Full audit logs",
       "Campaign & gift management",
