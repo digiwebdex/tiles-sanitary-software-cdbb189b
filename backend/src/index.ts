@@ -7,6 +7,7 @@ import { checkDbConnection } from './db/connection';
 import { optionalAuth } from './middleware/auth';
 import { demoReadOnly } from './middleware/demoReadOnly';
 import { requireActiveSubscription } from './middleware/subscription';
+import { enforcePlanFeatures } from './middleware/requireFeature';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -208,6 +209,12 @@ app.use('/api', optionalAuth, demoReadOnly);
 // subscription. Runs after optionalAuth so req.user is available; reads and
 // auth/renewal endpoints stay open (see middleware allowlist).
 app.use('/api', requireActiveSubscription);
+
+// ── Plan / feature enforcement (V2 Sprint 1) ──
+// Central path→feature gate. Ships in DRY-RUN ('log') mode by default so it
+// changes NO behaviour until FEATURE_ENFORCEMENT=enforce is set. super_admin/
+// sa_employee bypass; reads always allowed; fails open.
+app.use('/api', enforcePlanFeatures);
 
 // ── Routes ──
 app.use('/api/health', healthRoutes);
