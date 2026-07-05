@@ -685,6 +685,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
         lastCost={detailProduct && permissions.canViewCostPrice ? (lastCostData?.get(detailProduct.id) ?? 0) : 0}
         quantity={detailProduct ? (stockData?.get(detailProduct.id)?.total ?? 0) : 0}
         showCost={permissions.canViewCostPrice}
+        dealerId={dealerId}
         onEdit={() => { if (detailProduct) { setDetailProduct(null); navigate(`/products/${detailProduct.id}/edit`); } }}
         onPrintBarcode={barcodeEnabled ? () => { if (detailProduct) { setDetailProduct(null); openSingleBarcode(detailProduct); } } : undefined}
         onPurchase={() => { if (detailProduct) { setDetailProduct(null); navigate(`/purchases/new?product=${detailProduct.id}`); } }}

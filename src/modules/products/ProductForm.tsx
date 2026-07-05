@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { productSchema, type ProductFormValues } from "@/modules/products/productSchema";
 import { computeSqftPerPiece, computeSqftPerBox } from "@/lib/tileUnits";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
 import {
   Form,
@@ -32,6 +32,7 @@ import { productService } from "@/services/productService";
 import { uploadProductImage, resolveImageUrl } from "@/lib/uploads";
 import { toast } from "sonner";
 import MigrateToSqftButton from "@/modules/products/MigrateToSqftButton";
+import PriceLevelsPanel from "@/modules/products/PriceLevelsPanel";
 
 interface ProductFormProps {
   defaultValues?: Partial<ProductFormValues>;
@@ -106,6 +107,17 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
       weight: "",
       warranty: "",
       image_url: "",
+      // V2 Sprint 2 — Product Master taxonomy
+      series: "",
+      collection_name: "",
+      tile_type: "",
+      finish: "",
+      surface: "",
+      shade_family: "",
+      caliber_spec: "",
+      thickness_mm: null,
+      country_of_origin: "",
+      default_rack: "",
       ...defaultValues,
     },
   });
@@ -276,8 +288,9 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="product_group"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Product Group</FormLabel>
-                        <FormControl><Input placeholder="e.g. Floor, Wall, Vitrified" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormLabel>Sub Category</FormLabel>
+                        <FormControl><Input placeholder="e.g. Floor, Wall, Outdoor" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormDescription>Where it's used — Floor / Wall / Bathroom / Outdoor</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -289,6 +302,31 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                       <FormItem>
                         <FormLabel>Grade</FormLabel>
                         <FormControl><Input placeholder="e.g. A, AA, Premium" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="series"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Series</FormLabel>
+                        <FormControl><Input placeholder="e.g. Milano Series" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="collection_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Collection</FormLabel>
+                        <FormControl><Input placeholder="e.g. Marble Collection" {...field} value={field.value ?? ""} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -624,6 +662,143 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                 </div>
               </CardContent>
             </Card>
+
+            {/* V2 Sprint 2 — Product Master: tile/sanitary specification fields.
+                Shown for both categories; all optional, so a sanitary item can
+                simply leave the tile-only ones (finish/surface/caliber) blank. */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">
+                  Specification
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="tile_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{category === "sanitary" ? "Type" : "Tile Type"}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={category === "sanitary" ? "e.g. One-piece, Wall-hung" : "e.g. Ceramic, Vitrified, Porcelain"}
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="country_of_origin"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Country of Origin</FormLabel>
+                        <FormControl><Input placeholder="e.g. Bangladesh, China, Spain" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {category === "tiles" && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="finish"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Finish</FormLabel>
+                            <FormControl><Input placeholder="e.g. Glossy, Matt, Satin" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="surface"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Surface</FormLabel>
+                            <FormControl><Input placeholder="e.g. Polished, Rustic, Wooden" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="shade_family"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Shade Family</FormLabel>
+                            <FormControl><Input placeholder="e.g. Beige tones" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormDescription>
+                              General shade group. The exact shade code per delivery is tracked on the batch/lot when stock is received.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="caliber_spec"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Caliber (spec)</FormLabel>
+                            <FormControl><Input placeholder="e.g. C1" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormDescription>Nominal spec — the exact caliber per delivery is tracked on the batch/lot.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="thickness_mm"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Thickness (mm)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              placeholder="e.g. 8.5"
+                              {...field}
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="default_rack"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Default Rack / Shelf</FormLabel>
+                      <FormControl><Input placeholder="e.g. Rack A-3" {...field} value={field.value ?? ""} /></FormControl>
+                      <FormDescription>
+                        Informational suggested location. Actual stock is tracked per godown in Inventory.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
           </div>
 
           {/* Right Column — Pricing & Settings */}
@@ -787,6 +962,12 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                 />
               </CardContent>
             </Card>
+
+            {/* V2 Sprint 2 — Price Levels. Only meaningful once the product
+                exists (edit mode), same gating as MigrateToSqftButton above. */}
+            {productId && dealerId && (
+              <PriceLevelsPanel productId={productId} dealerId={dealerId} />
+            )}
           </div>
         </div>
 
