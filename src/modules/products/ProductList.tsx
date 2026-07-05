@@ -60,9 +60,19 @@ const ProductList = ({ dealerId }: ProductListProps) => {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [brandFilter, setBrandFilter] = useState<string>("all");
   const [unitFilter, setUnitFilter] = useState<string>("all");
   const [stockFilter, setStockFilter] = useState<string>("all");
+  // V2 Sprint 2.1 — server-side Product List filters (span ALL of the
+  // dealer's products, not just the current page — see productService.facets).
+  // Brand moved here from the old client-side-only filter above.
+  const [brandFilter, setBrandFilter] = useState<string>("all");
+  const [seriesFilter, setSeriesFilter] = useState<string>("all");
+  const [collectionFilter, setCollectionFilter] = useState<string>("all");
+  const [finishFilter, setFinishFilter] = useState<string>("all");
+  const [sizeFilter, setSizeFilter] = useState<string>("all");
+  const [tileTypeFilter, setTileTypeFilter] = useState<string>("all");
+  const [countryFilter, setCountryFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("name-asc");
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [barcodeSingle, setBarcodeSingle] = useState<{ id: string; sku: string; name: string; default_sale_rate: number } | null>(null);
@@ -84,9 +94,32 @@ const ProductList = ({ dealerId }: ProductListProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // V2 Sprint 2.1 — server-side filters, sent to GET /api/products as
+  // f.<col>=value (existing generic mechanism). Only non-"all" values are
+  // included so an unfiltered list is byte-identical to the pre-2.1 request.
+  const serverFilters = useMemo(() => {
+    const f: Record<string, string | boolean> = {};
+    if (brandFilter !== "all") f.brand = brandFilter;
+    if (seriesFilter !== "all") f.series = seriesFilter;
+    if (collectionFilter !== "all") f.collection_name = collectionFilter;
+    if (finishFilter !== "all") f.finish = finishFilter;
+    if (sizeFilter !== "all") f.size = sizeFilter;
+    if (tileTypeFilter !== "all") f.tile_type = tileTypeFilter;
+    if (countryFilter !== "all") f.country_of_origin = countryFilter;
+    if (statusFilter !== "all") f.active = statusFilter === "active";
+    return f;
+  }, [brandFilter, seriesFilter, collectionFilter, finishFilter, sizeFilter, tileTypeFilter, countryFilter, statusFilter]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ["products", dealerId, search, page],
-    queryFn: () => productService.list(dealerId, search, page),
+    queryKey: ["products", dealerId, search, page, serverFilters],
+    queryFn: () => productService.list(dealerId, search, page, serverFilters),
+    enabled: !!dealerId,
+  });
+
+  // V2 Sprint 2.1 — distinct filter values across the WHOLE dealer catalogue.
+  const { data: facetsData } = useQuery({
+    queryKey: ["products-facets", dealerId],
+    queryFn: () => productService.facets(dealerId),
     enabled: !!dealerId,
   });
 
@@ -183,12 +216,15 @@ const ProductList = ({ dealerId }: ProductListProps) => {
   }, [summaryData, stockData]);
 
 
-  // Build available brand options from current page products
-  const brandOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of products) if (p.brand) set.add(p.brand);
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products]);
+  // V2 Sprint 2.1 — filter dropdown options now come from the dealer-wide
+  // facets endpoint (GET /api/products/facets), not just the current page.
+  const brandOptions = facetsData?.brand ?? [];
+  const seriesOptions = facetsData?.series ?? [];
+  const collectionOptions = facetsData?.collection_name ?? [];
+  const finishOptions = facetsData?.finish ?? [];
+  const sizeOptions = facetsData?.size ?? [];
+  const tileTypeOptions = facetsData?.tile_type ?? [];
+  const countryOptions = facetsData?.country_of_origin ?? [];
 
   const categoryOptions = useMemo(() => {
     const set = new Set<string>();
@@ -200,7 +236,9 @@ const ProductList = ({ dealerId }: ProductListProps) => {
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => {
       if (categoryFilter !== "all" && p.category !== categoryFilter) return false;
-      if (brandFilter !== "all" && (p.brand || "") !== brandFilter) return false;
+      // brand/series/collection/finish/size/tile_type/country/status are now
+      // applied server-side (serverFilters, above) so every matching product
+      // across the whole catalogue is included, not just this page.
       if (unitFilter !== "all" && p.unit_type !== unitFilter) return false;
       if (stockFilter !== "all") {
         const si = stockData?.get(p.id);
@@ -225,22 +263,37 @@ const ProductList = ({ dealerId }: ProductListProps) => {
     };
     list = [...list].sort(sorters[sortBy] ?? sorters["name-asc"]);
     return list;
-  }, [products, categoryFilter, brandFilter, unitFilter, stockFilter, sortBy, stockData]);
+  }, [products, categoryFilter, unitFilter, stockFilter, sortBy, stockData]);
 
   const activeFilterCount =
     (categoryFilter !== "all" ? 1 : 0) +
-    (brandFilter !== "all" ? 1 : 0) +
     (unitFilter !== "all" ? 1 : 0) +
     (stockFilter !== "all" ? 1 : 0) +
-    (search.trim() ? 1 : 0);
+    (search.trim() ? 1 : 0) +
+    // V2 Sprint 2.1 — server-side filters
+    Object.keys(serverFilters).length;
 
   const clearAllFilters = () => {
     setSearch("");
     setCategoryFilter("all");
-    setBrandFilter("all");
     setUnitFilter("all");
     setStockFilter("all");
     setSortBy("name-asc");
+    // V2 Sprint 2.1
+    setBrandFilter("all");
+    setSeriesFilter("all");
+    setCollectionFilter("all");
+    setFinishFilter("all");
+    setSizeFilter("all");
+    setTileTypeFilter("all");
+    setCountryFilter("all");
+    setStatusFilter("all");
+    setPage(1);
+  };
+
+  /** V2 Sprint 2.1 — every server-side filter must also reset to page 1. */
+  const handleServerFilterChange = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
     setPage(1);
   };
 
@@ -448,13 +501,84 @@ const ProductList = ({ dealerId }: ProductListProps) => {
               </SelectContent>
             </Select>
 
-            <Select value={brandFilter} onValueChange={setBrandFilter}>
+            {/* V2 Sprint 2.1 — server-side, dealer-wide filters (populated from
+                GET /api/products/facets, not just the current page). */}
+            <Select value={brandFilter} onValueChange={handleServerFilterChange(setBrandFilter)}>
               <SelectTrigger className="w-[150px]"><SelectValue placeholder="Brand" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Brands</SelectItem>
                 {brandOptions.map((b) => (
                   <SelectItem key={b} value={b}>{b}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={seriesFilter} onValueChange={handleServerFilterChange(setSeriesFilter)}>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Series" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Series</SelectItem>
+                {seriesOptions.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={collectionFilter} onValueChange={handleServerFilterChange(setCollectionFilter)}>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Collection" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Collections</SelectItem>
+                {collectionOptions.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={tileTypeFilter} onValueChange={handleServerFilterChange(setTileTypeFilter)}>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Tile Type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tile Types</SelectItem>
+                {tileTypeOptions.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={finishFilter} onValueChange={handleServerFilterChange(setFinishFilter)}>
+              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Finish" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Finishes</SelectItem>
+                {finishOptions.map((f) => (
+                  <SelectItem key={f} value={f}>{f}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sizeFilter} onValueChange={handleServerFilterChange(setSizeFilter)}>
+              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Size" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sizes</SelectItem>
+                {sizeOptions.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={countryFilter} onValueChange={handleServerFilterChange(setCountryFilter)}>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Country" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Countries</SelectItem>
+                {countryOptions.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={statusFilter} onValueChange={handleServerFilterChange(setStatusFilter)}>
+              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
 
@@ -505,10 +629,17 @@ const ProductList = ({ dealerId }: ProductListProps) => {
             {search.trim() && <UIBadge variant="secondary">Search: {search}</UIBadge>}
             {categoryFilter !== "all" && <UIBadge variant="secondary" className="capitalize">Category: {categoryFilter}</UIBadge>}
             {brandFilter !== "all" && <UIBadge variant="secondary">Brand: {brandFilter}</UIBadge>}
+            {seriesFilter !== "all" && <UIBadge variant="secondary">Series: {seriesFilter}</UIBadge>}
+            {collectionFilter !== "all" && <UIBadge variant="secondary">Collection: {collectionFilter}</UIBadge>}
+            {tileTypeFilter !== "all" && <UIBadge variant="secondary">Tile Type: {tileTypeFilter}</UIBadge>}
+            {finishFilter !== "all" && <UIBadge variant="secondary">Finish: {finishFilter}</UIBadge>}
+            {sizeFilter !== "all" && <UIBadge variant="secondary">Size: {sizeFilter}</UIBadge>}
+            {countryFilter !== "all" && <UIBadge variant="secondary">Country: {countryFilter}</UIBadge>}
+            {statusFilter !== "all" && <UIBadge variant="secondary" className="capitalize">Status: {statusFilter}</UIBadge>}
             {unitFilter !== "all" && <UIBadge variant="secondary">Unit: {unitFilter === "box_sft" ? "Box/Sft" : "Piece"}</UIBadge>}
             {stockFilter !== "all" && <UIBadge variant="secondary" className="capitalize">Stock: {stockFilter}</UIBadge>}
             <span className="ml-auto text-muted-foreground">
-              Showing {filteredProducts.length} of {products.length} on this page
+              Showing {filteredProducts.length} of {total} total{Object.keys(serverFilters).length > 0 || search.trim() ? " (filtered)" : ""}
             </span>
           </div>
         )}

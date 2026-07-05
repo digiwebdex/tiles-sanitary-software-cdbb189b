@@ -112,6 +112,19 @@ router.post('/products', requireRole('dealer_admin'), async (req: Request, res: 
         color: str(row.color) || null,
         barcode: barcodeRaw || null,
         reorder_level: num(row.reorder_level, 0),
+        // V2 Sprint 2.1 — Product Master taxonomy (all optional; blank/missing
+        // cells simply import as not-set, same as every other optional column
+        // above).
+        series: str(row.series) || null,
+        collection_name: str(row.collection_name) || null,
+        tile_type: str(row.tile_type) || null,
+        finish: str(row.finish) || null,
+        surface: str(row.surface) || null,
+        shade_family: str(row.shade_family) || null,
+        caliber_spec: str(row.caliber_spec) || null,
+        thickness_mm: row.thickness_mm ? num(row.thickness_mm) : null,
+        country_of_origin: str(row.country_of_origin) || null,
+        default_rack: str(row.default_rack) || null,
       };
 
       try {

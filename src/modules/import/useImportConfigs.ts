@@ -36,11 +36,22 @@ export const productColumns: ColumnDef[] = [
   { key: "color", label: "Color" },
   { key: "barcode", label: "Barcode" },
   { key: "reorder_level", label: "Reorder Level", validate: (v) => v && isNaN(Number(v)) ? "Must be a number" : null },
+  // V2 Sprint 2.1 — Product Master taxonomy (all optional)
+  { key: "series", label: "Series" },
+  { key: "collection_name", label: "Collection" },
+  { key: "tile_type", label: "Tile Type" },
+  { key: "finish", label: "Finish" },
+  { key: "surface", label: "Surface" },
+  { key: "shade_family", label: "Shade Family" },
+  { key: "caliber_spec", label: "Caliber (spec)" },
+  { key: "thickness_mm", label: "Thickness (mm)", validate: (v) => v && isNaN(Number(v)) ? "Must be a number" : null },
+  { key: "country_of_origin", label: "Country of Origin" },
+  { key: "default_rack", label: "Default Rack" },
 ];
 
 export const productSampleData = [
-  { name: "Floor Tile 60x60", sku: "FT-001", category: "tiles", unit_type: "box_sft", per_box_sft: "16", default_sale_rate: "45", cost_price: "35", brand: "RAK", size: "60x60", color: "White", barcode: "123456", reorder_level: "10" },
-  { name: "Commode Standard", sku: "SN-001", category: "sanitary", unit_type: "piece", per_box_sft: "", default_sale_rate: "5500", cost_price: "4000", brand: "COTTO", size: "", color: "White", barcode: "", reorder_level: "5" },
+  { name: "Floor Tile 60x60", sku: "FT-001", category: "tiles", unit_type: "box_sft", per_box_sft: "16", default_sale_rate: "45", cost_price: "35", brand: "RAK", size: "60x60", color: "White", barcode: "123456", reorder_level: "10", series: "Milano Series", collection_name: "Marble Collection", tile_type: "Vitrified", finish: "Glossy", surface: "Polished", shade_family: "Beige", caliber_spec: "C1", thickness_mm: "9", country_of_origin: "Spain", default_rack: "Rack A-3" },
+  { name: "Commode Standard", sku: "SN-001", category: "sanitary", unit_type: "piece", per_box_sft: "", default_sale_rate: "5500", cost_price: "4000", brand: "COTTO", size: "", color: "White", barcode: "", reorder_level: "5", series: "", collection_name: "", tile_type: "One-piece", finish: "", surface: "", shade_family: "", caliber_spec: "", thickness_mm: "", country_of_origin: "Thailand", default_rack: "" },
 ];
 
 export async function importProducts(rows: Record<string, string>[], mode: "skip" | "overwrite", dealerId: string): Promise<ImportResult> {

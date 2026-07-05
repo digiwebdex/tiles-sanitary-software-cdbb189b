@@ -33,6 +33,15 @@ import { uploadProductImage, resolveImageUrl } from "@/lib/uploads";
 import { toast } from "sonner";
 import MigrateToSqftButton from "@/modules/products/MigrateToSqftButton";
 import PriceLevelsPanel from "@/modules/products/PriceLevelsPanel";
+import VocabularyInput from "@/modules/products/VocabularyInput";
+import {
+  TILE_TYPE_OPTIONS,
+  FINISH_OPTIONS,
+  SURFACE_OPTIONS,
+  COUNTRY_OF_ORIGIN_OPTIONS,
+  SHADE_FAMILY_OPTIONS,
+  CALIBER_SPEC_OPTIONS,
+} from "@/lib/data/productVocabularies";
 
 interface ProductFormProps {
   defaultValues?: Partial<ProductFormValues>;
@@ -681,7 +690,9 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                       <FormItem>
                         <FormLabel>{category === "sanitary" ? "Type" : "Tile Type"}</FormLabel>
                         <FormControl>
-                          <Input
+                          <VocabularyInput
+                            listId="product-tile-type-options"
+                            suggestions={TILE_TYPE_OPTIONS}
                             placeholder={category === "sanitary" ? "e.g. One-piece, Wall-hung" : "e.g. Ceramic, Vitrified, Porcelain"}
                             {...field}
                             value={field.value ?? ""}
@@ -697,7 +708,15 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Country of Origin</FormLabel>
-                        <FormControl><Input placeholder="e.g. Bangladesh, China, Spain" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormControl>
+                          <VocabularyInput
+                            listId="product-country-of-origin-options"
+                            suggestions={COUNTRY_OF_ORIGIN_OPTIONS}
+                            placeholder="e.g. Bangladesh, China, Spain"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -713,7 +732,15 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Finish</FormLabel>
-                            <FormControl><Input placeholder="e.g. Glossy, Matt, Satin" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormControl>
+                              <VocabularyInput
+                                listId="product-finish-options"
+                                suggestions={FINISH_OPTIONS}
+                                placeholder="e.g. Glossy, Matt, Satin"
+                                {...field}
+                                value={field.value ?? ""}
+                              />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -724,7 +751,15 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Surface</FormLabel>
-                            <FormControl><Input placeholder="e.g. Polished, Rustic, Wooden" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormControl>
+                              <VocabularyInput
+                                listId="product-surface-options"
+                                suggestions={SURFACE_OPTIONS}
+                                placeholder="e.g. Polished, Rustic, Wooden"
+                                {...field}
+                                value={field.value ?? ""}
+                              />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -738,7 +773,15 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Shade Family</FormLabel>
-                            <FormControl><Input placeholder="e.g. Beige tones" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormControl>
+                              <VocabularyInput
+                                listId="product-shade-family-options"
+                                suggestions={SHADE_FAMILY_OPTIONS}
+                                placeholder="e.g. Beige tones"
+                                {...field}
+                                value={field.value ?? ""}
+                              />
+                            </FormControl>
                             <FormDescription>
                               General shade group. The exact shade code per delivery is tracked on the batch/lot when stock is received.
                             </FormDescription>
@@ -752,7 +795,15 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Caliber (spec)</FormLabel>
-                            <FormControl><Input placeholder="e.g. C1" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormControl>
+                              <VocabularyInput
+                                listId="product-caliber-spec-options"
+                                suggestions={CALIBER_SPEC_OPTIONS}
+                                placeholder="e.g. C1"
+                                {...field}
+                                value={field.value ?? ""}
+                              />
+                            </FormControl>
                             <FormDescription>Nominal spec — the exact caliber per delivery is tracked on the batch/lot.</FormDescription>
                             <FormMessage />
                           </FormItem>

@@ -6,7 +6,7 @@
 import type { Database } from "@/integrations/supabase/types";
 import { validateInput, createProductServiceSchema, updateProductServiceSchema } from "@/lib/validators";
 import { dataClient } from "@/lib/data/dataClient";
-import { vpsTokenStore } from "@/lib/vpsAuthClient";
+import { vpsTokenStore, vpsAuthedFetch } from "@/lib/vpsAuthClient";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
@@ -26,7 +26,19 @@ function resolveCurrentDealerId(): string | null {
 }
 
 export const productService = {
-  async list(dealerId: string, search?: string, page = 1) {
+  /**
+   * `filters` is new in V2 Sprint 2.1 — optional, so every existing call
+   * site (Damage, Pricing Tiers, CommandPalette, QuotationForm,
+   * AreaCalculatorDialog, ProductList's own prior calls) that only passes
+   * (dealerId, search, page) behaves exactly as before: the adapter simply
+   * never receives a `filters` key, byte-for-byte the same request as today.
+   */
+  async list(
+    dealerId: string,
+    search?: string,
+    page = 1,
+    filters?: Record<string, string | number | boolean | null>,
+  ) {
     const trimmed = search?.trim() ?? "";
 
     const result = await productsAdapter.list({
@@ -35,8 +47,20 @@ export const productService = {
       pageSize: PAGE_SIZE,
       search: trimmed || undefined,
       orderBy: { column: "created_at", direction: "desc" },
+      ...(filters && Object.keys(filters).length > 0 ? { filters } : {}),
     });
     return { data: result.rows, total: result.total };
+  },
+
+  /**
+   * V2 Sprint 2.1 — distinct values (brand/series/collection/tile_type/
+   * finish/size/country_of_origin) across ALL of the dealer's products, for
+   * the Product List's filter dropdowns. GET /api/products/facets.
+   */
+  async facets(dealerId: string): Promise<Record<string, string[]>> {
+    const res = await vpsAuthedFetch(`/api/products/facets?dealerId=${encodeURIComponent(dealerId)}`);
+    if (!res.ok) throw new Error("Failed to load product filter options");
+    return (await res.json()) as Record<string, string[]>;
   },
 
   async getById(id: string, dealerIdOverride?: string) {

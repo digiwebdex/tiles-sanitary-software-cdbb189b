@@ -1,5 +1,5 @@
 /**
- * V2 Sprint 2 — Product Master pure helpers.
+ * V2 Sprint 2 / 2.1 — Product Master pure helpers.
  *
  * Small, dependency-free functions extracted out of routes/products.ts so
  * the arithmetic/shaping logic is unit-testable without mocking Knex.
@@ -55,4 +55,51 @@ export function shapePriceLevels(
       rate: t.rate === null || t.rate === undefined ? null : Number(t.rate),
     })),
   };
+}
+
+// ── V2 Sprint 2.1 — Product List filters ────────────────────────────────────
+
+/**
+ * The product columns GET /api/products/facets returns distinct values for,
+ * to populate the Product List's filter dropdowns. Kept as one list so the
+ * route, the shaping function, and any future addition stay in sync.
+ */
+export const FACET_COLUMNS = [
+  'brand',
+  'series',
+  'collection_name',
+  'tile_type',
+  'finish',
+  'size',
+  'country_of_origin',
+] as const;
+export type FacetColumn = (typeof FACET_COLUMNS)[number];
+
+export type FacetsResult = Record<FacetColumn, string[]>;
+
+/**
+ * Shape N raw `SELECT DISTINCT <col> FROM products WHERE dealer_id = ? AND
+ * <col> IS NOT NULL` result sets (one per FACET_COLUMNS entry, same order)
+ * into a { column: string[] } map: trimmed, de-duplicated (case-insensitive,
+ * first-seen casing wins), blank-string values dropped, alphabetically
+ * sorted. Pure function — no DB access — so the not-obvious edge cases
+ * (blank strings, case collisions, null vs "") are covered by unit tests
+ * independent of the query.
+ */
+export function shapeFacets(rawByColumn: Record<FacetColumn, Array<Record<string, unknown>>>): FacetsResult {
+  const result = {} as FacetsResult;
+  for (const col of FACET_COLUMNS) {
+    const rows = rawByColumn[col] ?? [];
+    const seen = new Map<string, string>(); // lowercase -> first-seen original casing
+    for (const row of rows) {
+      const raw = row[col];
+      if (raw === null || raw === undefined) continue;
+      const value = String(raw).trim();
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (!seen.has(key)) seen.set(key, value);
+    }
+    result[col] = Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+  }
+  return result;
 }

@@ -24,7 +24,13 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole, hasRole } from '../middleware/roles';
-import { computeBackorderOutstanding, shapePriceLevels } from '../services/productMasterService';
+import {
+  computeBackorderOutstanding,
+  shapePriceLevels,
+  shapeFacets,
+  FACET_COLUMNS,
+  type FacetColumn,
+} from '../services/productMasterService';
 
 /**
  * Strip cost_price for users that lack 'dealer_admin' or 'super_admin'.
@@ -68,6 +74,8 @@ const FILTERABLE = new Set([
   'finish',
   'surface',
   'country_of_origin',
+  // V2 Sprint 2.1 — Product List filters
+  'size',
 ]);
 
 const WRITABLE = new Set([
@@ -214,10 +222,17 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (search) {
+      // V2 Sprint 2.1 — additive: sku/name/barcode still match exactly as
+      // before (nothing removed), series/collection_name are OR'd in so a
+      // dealer can find a product by its line name too. Existing callers
+      // that only cared about sku/name/barcode results are unaffected —
+      // this can only ADD matches, never remove any.
       q = q.andWhere(function () {
         this.whereILike('sku', `%${search}%`)
           .orWhereILike('name', `%${search}%`)
-          .orWhereILike('barcode', `%${search}%`);
+          .orWhereILike('barcode', `%${search}%`)
+          .orWhereILike('series', `%${search}%`)
+          .orWhereILike('collection_name', `%${search}%`);
       });
     }
 
@@ -248,6 +263,35 @@ router.get('/', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[products/list]', err.message);
     res.status(500).json({ error: 'Failed to list products' });
+  }
+});
+
+// ── GET /api/products/facets ───────────────────────────────────────────────
+// V2 Sprint 2.1 — distinct values (across ALL of the dealer's products, not
+// just the current page) for the Product List's filter dropdowns. Read-only;
+// reuses the `products` table, no new columns/tables.
+router.get('/facets', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealerScope(req, res);
+    if (!dealerId) return;
+
+    const perColumn = await Promise.all(
+      FACET_COLUMNS.map((col) =>
+        db(TABLE)
+          .distinct(col)
+          .where({ dealer_id: dealerId })
+          .whereNotNull(col)
+          .select(col),
+      ),
+    );
+
+    const rawByColumn = {} as Record<FacetColumn, Array<Record<string, unknown>>>;
+    FACET_COLUMNS.forEach((col, i) => { rawByColumn[col] = perColumn[i]; });
+
+    res.json(shapeFacets(rawByColumn));
+  } catch (err: any) {
+    console.error('[products/facets]', err.message);
+    res.status(500).json({ error: 'Failed to load product facets' });
   }
 });
 

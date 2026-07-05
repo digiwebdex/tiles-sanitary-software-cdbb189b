@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { computeBackorderOutstanding, shapePriceLevels } from './productMasterService';
+import {
+  computeBackorderOutstanding,
+  shapePriceLevels,
+  shapeFacets,
+  FACET_COLUMNS,
+  type FacetColumn,
+} from './productMasterService';
+
+/** Build an "all columns empty" fixture, then override just the columns a test cares about. */
+function emptyRawByColumn(): Record<FacetColumn, Array<Record<string, unknown>>> {
+  const base = {} as Record<FacetColumn, Array<Record<string, unknown>>>;
+  for (const col of FACET_COLUMNS) base[col] = [];
+  return base;
+}
 
 describe('computeBackorderOutstanding', () => {
   it('returns backorder minus allocated when positive', () => {
@@ -56,5 +69,56 @@ describe('shapePriceLevels', () => {
     ]);
     expect(result.tiers[0].rate).toBeNull();
     expect(result.tiers[0].isDefault).toBe(false);
+  });
+});
+
+describe('shapeFacets', () => {
+  it('returns every FACET_COLUMNS key even when all input is empty', () => {
+    const result = shapeFacets(emptyRawByColumn());
+    for (const col of FACET_COLUMNS) expect(result[col]).toEqual([]);
+  });
+
+  it('extracts, trims, and sorts distinct values for one column', () => {
+    const raw = emptyRawByColumn();
+    raw.brand = [{ brand: '  RAK  ' }, { brand: 'Akij' }, { brand: 'DBL' }];
+    const result = shapeFacets(raw);
+    expect(result.brand).toEqual(['Akij', 'DBL', 'RAK']);
+  });
+
+  it('de-duplicates case-insensitively, keeping the first-seen casing', () => {
+    const raw = emptyRawByColumn();
+    raw.finish = [{ finish: 'Glossy' }, { finish: 'glossy' }, { finish: 'GLOSSY' }, { finish: 'Matt' }];
+    const result = shapeFacets(raw);
+    expect(result.finish).toEqual(['Glossy', 'Matt']);
+  });
+
+  it('drops null, undefined, and blank/whitespace-only values', () => {
+    const raw = emptyRawByColumn();
+    raw.country_of_origin = [
+      { country_of_origin: 'Bangladesh' },
+      { country_of_origin: null },
+      { country_of_origin: undefined },
+      { country_of_origin: '' },
+      { country_of_origin: '   ' },
+    ];
+    const result = shapeFacets(raw);
+    expect(result.country_of_origin).toEqual(['Bangladesh']);
+  });
+
+  it('keeps each column independent (no cross-contamination)', () => {
+    const raw = emptyRawByColumn();
+    raw.brand = [{ brand: 'RAK' }];
+    raw.series = [{ series: 'Milano Series' }];
+    const result = shapeFacets(raw);
+    expect(result.brand).toEqual(['RAK']);
+    expect(result.series).toEqual(['Milano Series']);
+    expect(result.collection_name).toEqual([]);
+  });
+
+  it('handles a column missing entirely from the input map (defensive)', () => {
+    const raw = emptyRawByColumn();
+    delete (raw as any).size;
+    const result = shapeFacets(raw);
+    expect(result.size).toEqual([]);
   });
 });

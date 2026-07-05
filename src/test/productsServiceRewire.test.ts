@@ -141,4 +141,27 @@ describe("Phase 3D — productService routes reads through dataClient", () => {
       "network down",
     );
   });
+
+  // ── V2 Sprint 2.1 — Product List filters ──
+  it("filters omitted (3-arg call, the pre-2.1 shape) → adapter receives no `filters` key at all", async () => {
+    adapterListMock.mockResolvedValueOnce({ rows: [], total: 0 });
+    await productService.list("dealer-1", "", 1);
+    const callArg = adapterListMock.mock.calls[0][0];
+    expect(Object.prototype.hasOwnProperty.call(callArg, "filters")).toBe(false);
+  });
+
+  it("filters provided → passed through to the adapter untouched", async () => {
+    adapterListMock.mockResolvedValueOnce({ rows: [], total: 0 });
+    await productService.list("dealer-1", "", 1, { brand: "RAK", active: true });
+    expect(adapterListMock).toHaveBeenCalledWith(
+      expect.objectContaining({ filters: { brand: "RAK", active: true } }),
+    );
+  });
+
+  it("empty filters object → treated the same as omitted (no `filters` key sent)", async () => {
+    adapterListMock.mockResolvedValueOnce({ rows: [], total: 0 });
+    await productService.list("dealer-1", "", 1, {});
+    const callArg = adapterListMock.mock.calls[0][0];
+    expect(Object.prototype.hasOwnProperty.call(callArg, "filters")).toBe(false);
+  });
 });
