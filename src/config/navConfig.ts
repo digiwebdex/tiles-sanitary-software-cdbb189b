@@ -124,6 +124,10 @@ export const navSections: NavSection[] = [
       { path: "/payables/pay", label: "Pay Supplier", icon: Wallet, dealerAdminOnly: true },
       { path: "/supplier-ledger/statement", label: "Supplier Statement", icon: FileText, roles: ["manager", "accountant"] },
       { path: "/supplier-ledger/aging", label: "Payables Aging", icon: CalendarClock, dealerAdminOnly: true },
+      { path: "/purchase-returns-v2", label: "Purchase Returns (V2)", icon: RotateCcw, roles: ["manager", "accountant"] },
+      { path: "/landed-cost", label: "Landed Cost", icon: Calculator, dealerAdminOnly: true },
+      { path: "/stock-cost-adjustments", label: "Stock Cost Update", icon: Scale, dealerAdminOnly: true },
+      { path: "/import-lc", label: "Import LC", icon: Landmark, roles: ["manager", "accountant"], tier: "advanced" },
     ],
   },
   {

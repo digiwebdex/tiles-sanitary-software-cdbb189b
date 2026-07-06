@@ -58,6 +58,13 @@ import CreatePurchaseInvoice from "./pages/purchase-invoices/CreatePurchaseInvoi
 import PurchaseInvoiceDetail from "./pages/purchase-invoices/PurchaseInvoiceDetail";
 import SupplierStatementPage from "./pages/supplier-ledger/SupplierStatementPage";
 import SupplierAgingPage from "./pages/supplier-ledger/SupplierAgingPage";
+import PurchaseReturnsV2Page from "./pages/purchase-returns-v2/PurchaseReturnsV2Page";
+import CreatePurchaseReturnV2 from "./pages/purchase-returns-v2/CreatePurchaseReturnV2";
+import PurchaseReturnV2Detail from "./pages/purchase-returns-v2/PurchaseReturnV2Detail";
+import LandedCostSheetsPage from "./pages/landed-cost/LandedCostSheetsPage";
+import LandedCostSheetDetail from "./pages/landed-cost/LandedCostSheetDetail";
+import StockCostAdjustmentsPage from "./pages/stock-cost-adjustments/StockCostAdjustmentsPage";
+import ImportLcPage from "./pages/import-lc/ImportLcPage";
 import CustomersPage from "./pages/customers/CustomersPage";
 import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
@@ -342,6 +349,13 @@ const App = () => (
             <Route path="/purchase-invoices/:id" element={<ProtectedRoute><AppLayout><PurchaseInvoiceDetail /></AppLayout></ProtectedRoute>} />
             <Route path="/supplier-ledger/statement" element={<ProtectedRoute><AppLayout><SupplierStatementPage /></AppLayout></ProtectedRoute>} />
             <Route path="/supplier-ledger/aging" element={<ProtectedRoute><AppLayout><SupplierAgingPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-returns-v2" element={<ProtectedRoute><AppLayout><PurchaseReturnsV2Page /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-returns-v2/new" element={<ProtectedRoute><AppLayout><CreatePurchaseReturnV2 /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-returns-v2/:id" element={<ProtectedRoute><AppLayout><PurchaseReturnV2Detail /></AppLayout></ProtectedRoute>} />
+            <Route path="/landed-cost" element={<ProtectedRoute><AppLayout><LandedCostSheetsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/landed-cost/:id" element={<ProtectedRoute><AppLayout><LandedCostSheetDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/stock-cost-adjustments" element={<ProtectedRoute><AppLayout><StockCostAdjustmentsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/import-lc" element={<ProtectedRoute><AppLayout><ImportLcPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases" element={<ProtectedRoute><AppLayout><PurchasesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/new" element={<ProtectedRoute><AppLayout><CreatePurchase /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/:id" element={<ProtectedRoute><AppLayout><ViewPurchase /></AppLayout></ProtectedRoute>} />
