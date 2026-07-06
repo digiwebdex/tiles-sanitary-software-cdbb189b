@@ -6,7 +6,7 @@ import {
   MessageCircle, UserCog, Inbox, HelpCircle, Crown, Landmark, Scale, Warehouse,
   ClipboardCheck, Sparkles, CalendarDays, AlertTriangle, CalendarClock, Building2,
   Megaphone, Award, GraduationCap, Laptop, BadgeDollarSign, Clock, LogOut,
-  Calculator, Boxes, Bookmark,
+  Calculator, Boxes, Bookmark, Gauge,
 } from "lucide-react";
 
 /** Staff roles below the owner (dealer_admin). Owner + super_admin see all. */
@@ -133,6 +133,8 @@ export const navSections: NavSection[] = [
       { path: "/display-sample", label: "Display & Samples", icon: MonitorSpeaker, roles: ["manager", "salesman"] },
       // V2 Sprint 3C — Reservation, Backorder & Availability Engine.
       { path: "/reservations", label: "Reservations & Backorders", icon: Bookmark, roles: ["manager", "salesman"] },
+      // V2 Sprint 3D — Inventory Intelligence.
+      { path: "/inventory-intelligence", label: "Inventory Intelligence", icon: Gauge, dealerAdminOnly: true },
     ],
   },
   {

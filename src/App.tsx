@@ -86,6 +86,7 @@ import PayslipPage from "./pages/hrm/PayslipPage";
 import DirectorsPage from "./pages/directors/DirectorsPage";
 import WarehousesPage from "./pages/warehouses/WarehousesPage";
 import ReservationsPage from "./pages/reservations/ReservationsPage";
+import InventoryIntelligencePage from "./pages/inventory-intelligence/InventoryIntelligencePage";
 import Phase3ReportsPage from "./pages/reports/Phase3ReportsPage";
 import SalaryVoucherPage from "./pages/vouchers/SalaryVoucherPage";
 import DirectorVoucherPage from "./pages/vouchers/DirectorVoucherPage";
@@ -280,6 +281,7 @@ const App = () => (
             <Route path="/directors" element={<ProtectedRoute><AppLayout><DirectorsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/warehouses" element={<ProtectedRoute><AppLayout><WarehousesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/reservations" element={<ProtectedRoute><AppLayout><ReservationsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/inventory-intelligence" element={<ProtectedRoute><AppLayout><InventoryIntelligencePage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/operations" element={<ProtectedRoute><AppLayout><Phase3ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/vouchers/salary/:id" element={<ProtectedRoute><AppLayout><SalaryVoucherPage /></AppLayout></ProtectedRoute>} />
             <Route path="/vouchers/director/:id" element={<ProtectedRoute><AppLayout><DirectorVoucherPage /></AppLayout></ProtectedRoute>} />
