@@ -19,6 +19,10 @@ export interface Supplier {
   opening_balance: number;
   status: string;
   created_at: string;
+  // V2 Sprint 5A
+  category: string | null;
+  supplier_group: string | null;
+  credit_limit: number;
 }
 
 export interface SupplierFormData {
@@ -30,6 +34,29 @@ export interface SupplierFormData {
   gstin: string;
   opening_balance: number;
   status: "active" | "inactive";
+  // V2 Sprint 5A
+  category: string;
+  supplier_group: string;
+  credit_limit: number;
+}
+
+export interface SupplierLedgerEntry {
+  id: string;
+  type: string;
+  amount: number;
+  description: string | null;
+  entry_date: string;
+  purchase_id: string | null;
+  created_at: string;
+}
+
+export interface SupplierLedgerSummary {
+  supplier: { id: string; name: string; opening_balance: number };
+  outstanding: number;
+  balance: number;
+  total_purchased: number;
+  total_paid: number;
+  entries: SupplierLedgerEntry[];
 }
 
 const PAGE_SIZE = 25;
@@ -54,11 +81,19 @@ function buildWritePayload(form: Partial<SupplierFormData>): Record<string, unkn
   if (form.gstin !== undefined) payload.gstin = form.gstin.trim() || null;
   if (form.opening_balance !== undefined) payload.opening_balance = form.opening_balance;
   if (form.status !== undefined) payload.status = form.status;
+  if (form.category !== undefined) payload.category = form.category.trim() || null;
+  if (form.supplier_group !== undefined) payload.supplier_group = form.supplier_group.trim() || null;
+  if (form.credit_limit !== undefined) payload.credit_limit = form.credit_limit;
   return payload;
 }
 
 export const supplierService = {
-  async list(dealerId: string, search = "", page = 1) {
+  /**
+   * `categoryFilter`/`groupFilter` are new in V2 Sprint 5A — both optional,
+   * so every existing call site that only passes (dealerId, search, page)
+   * behaves exactly as before.
+   */
+  async list(dealerId: string, search = "", page = 1, categoryFilter = "", groupFilter = "") {
     const trimmed = search.trim();
     const params = new URLSearchParams({
       dealerId,
@@ -68,10 +103,17 @@ export const supplierService = {
       orderDir: "asc",
     });
     if (trimmed) params.set("search", trimmed);
+    if (categoryFilter) params.set("f.category", categoryFilter);
+    if (groupFilter) params.set("f.supplier_group", groupFilter);
     const body = await vpsRequest<{ rows: Supplier[]; total: number }>(
       `/api/suppliers?${params.toString()}`,
     );
     return { data: body.rows ?? [], total: body.total ?? 0 };
+  },
+
+  /** V2 Sprint 5A — Supplier Ledger Summary. */
+  async getLedgerSummary(id: string): Promise<SupplierLedgerSummary> {
+    return vpsRequest<SupplierLedgerSummary>(`/api/suppliers/${id}/ledger-summary`);
   },
 
   async getById(id: string) {

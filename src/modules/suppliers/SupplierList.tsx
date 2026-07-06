@@ -64,6 +64,9 @@ const SupplierList = () => {
         gstin: s.gstin ?? "",
         opening_balance: 0,
         status: s.status,
+        category: s.category ?? "",
+        supplier_group: s.supplier_group ?? "",
+        credit_limit: s.credit_limit ?? 0,
       } as any);
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
       toast.success("Supplier duplicated");
@@ -143,6 +146,7 @@ const SupplierList = () => {
                   <TableHead>Contact Person</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Category / Group</TableHead>
                   <TableHead className="text-right">Opening Bal.</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-24">Actions</TableHead>
@@ -164,6 +168,14 @@ const SupplierList = () => {
                         <a href={`mailto:${s.email}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
                           {s.email}
                         </a>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {s.category || s.supplier_group ? (
+                        <div className="flex flex-wrap gap-1">
+                          {s.category && <Badge variant="outline">{s.category}</Badge>}
+                          {s.supplier_group && <Badge variant="outline">{s.supplier_group}</Badge>}
+                        </div>
                       ) : "—"}
                     </TableCell>
                     <TableCell className="text-right text-sm font-mono">

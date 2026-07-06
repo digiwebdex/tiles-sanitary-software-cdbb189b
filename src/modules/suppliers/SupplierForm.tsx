@@ -27,6 +27,10 @@ const schema = z.object({
   gstin:           z.string().max(20).default(""),
   opening_balance: z.coerce.number().min(0, "Opening balance cannot be negative").default(0),
   status:          z.enum(["active", "inactive"]).default("active"),
+  // V2 Sprint 5A
+  category:        z.string().max(100).default(""),
+  supplier_group:  z.string().max(100).default(""),
+  credit_limit:    z.coerce.number().min(0, "Credit limit cannot be negative").default(0),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -57,6 +61,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
       gstin:           supplier?.gstin ?? "",
       opening_balance: supplier?.opening_balance ?? 0,
       status:          (supplier?.status as "active" | "inactive") ?? "active",
+      category:        supplier?.category ?? "",
+      supplier_group:  supplier?.supplier_group ?? "",
+      credit_limit:    supplier?.credit_limit ?? 0,
     },
   });
 
@@ -71,6 +78,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
           address: values.address,
           gstin: values.gstin,
           status: values.status,
+          category: values.category,
+          supplier_group: values.supplier_group,
+          credit_limit: values.credit_limit,
         });
       } else {
         await supplierService.create(dealerId, {
@@ -82,6 +92,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
           gstin: values.gstin,
           opening_balance: values.opening_balance,
           status: values.status,
+          category: values.category,
+          supplier_group: values.supplier_group,
+          credit_limit: values.credit_limit,
         });
       }
     },
@@ -229,6 +242,49 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
                     <SelectItem value="inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Row 5: Category + Group + Credit limit (V2 Sprint 5A) */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FormField
+            control={form.control}
+            name="category"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <FormControl>
+                  <Input placeholder="Manufacturer, Distributor…" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="supplier_group"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Supplier Group</FormLabel>
+                <FormControl>
+                  <Input placeholder="Preferred, Local, Import…" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="credit_limit"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Credit Limit (৳)</FormLabel>
+                <FormControl>
+                  <Input type="number" min={0} step="0.01" placeholder="0.00" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}

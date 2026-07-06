@@ -24,6 +24,7 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
+import { computeSupplierBalance, computeSupplierOutstanding } from '../lib/ledgerBalance';
 
 const router = Router();
 
@@ -36,10 +37,14 @@ const SORTABLE = new Set([
   'status',
   'opening_balance',
   'contact_person',
+  // V2 Sprint 5A
+  'category',
+  'supplier_group',
+  'credit_limit',
 ]);
 
 // Columns the frontend may filter by (equality only)
-const FILTERABLE = new Set(['status', 'name']);
+const FILTERABLE = new Set(['status', 'name', 'category', 'supplier_group']);
 
 // Columns the frontend may write (everything else is rejected)
 const WRITABLE = new Set([
@@ -51,6 +56,10 @@ const WRITABLE = new Set([
   'gstin',
   'opening_balance',
   'status',
+  // V2 Sprint 5A — additive, mirrors customers' category_group_discount fields
+  'category',
+  'supplier_group',
+  'credit_limit',
 ]);
 
 const supplierWriteSchema = z.object({
@@ -62,6 +71,10 @@ const supplierWriteSchema = z.object({
   gstin: z.string().trim().max(50).nullable().optional(),
   opening_balance: z.number().finite().optional(),
   status: z.enum(['active', 'inactive']).optional(),
+  // V2 Sprint 5A
+  category: z.string().trim().max(100).nullable().optional(),
+  supplier_group: z.string().trim().max(100).nullable().optional(),
+  credit_limit: z.number().finite().min(0).optional(),
 });
 
 /**
@@ -178,6 +191,58 @@ router.get('/:id', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[suppliers/get]', err.message);
     res.status(500).json({ error: 'Failed to load supplier' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Supplier Ledger Summary (V2 Sprint 5A)
+// Reuses supplier_ledger + the existing computeSupplierBalance/
+// computeSupplierOutstanding pure functions (backend/src/lib/ledgerBalance.ts,
+// already relied on elsewhere) rather than re-deriving balance math. No new
+// table — this only assembles data that already exists.
+// ─────────────────────────────────────────────────────────────────────────
+
+// ── GET /api/suppliers/:id/ledger-summary ──────────────────────────────────
+router.get('/:id/ledger-summary', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealerScope(req, res);
+    if (!dealerId) return;
+
+    const supplier = await db(TABLE)
+      .where({ id: req.params.id, dealer_id: dealerId })
+      .first('id', 'name', 'opening_balance');
+    if (!supplier) {
+      res.status(404).json({ error: 'Supplier not found' });
+      return;
+    }
+
+    const rows = await db('supplier_ledger')
+      .where({ dealer_id: dealerId, supplier_id: req.params.id })
+      .orderBy('entry_date', 'asc')
+      .orderBy('created_at', 'asc')
+      .select('id', 'type', 'amount', 'description', 'entry_date', 'purchase_id', 'created_at');
+
+    const outstanding = computeSupplierOutstanding(rows);
+    const balance = computeSupplierBalance(rows);
+
+    const totalPurchased = rows
+      .filter((r) => r.type === 'purchase')
+      .reduce((sum, r) => sum + Math.abs(Number(r.amount) || 0), 0);
+    const totalPaid = rows
+      .filter((r) => r.type === 'payment')
+      .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+    res.json({
+      supplier: { id: supplier.id, name: supplier.name, opening_balance: Number(supplier.opening_balance) || 0 },
+      outstanding,
+      balance,
+      total_purchased: Math.round(totalPurchased * 100) / 100,
+      total_paid: Math.round(totalPaid * 100) / 100,
+      entries: rows,
+    });
+  } catch (err: any) {
+    console.error('[suppliers/ledger-summary]', err.message);
+    res.status(500).json({ error: 'Failed to load supplier ledger summary' });
   }
 });
 

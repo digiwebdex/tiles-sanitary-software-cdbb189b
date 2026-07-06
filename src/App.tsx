@@ -41,6 +41,12 @@ import ReportsPage from "./pages/reports/ReportsPage";
 import SuppliersPage from "./pages/suppliers/SuppliersPage";
 import CreateSupplier from "./pages/suppliers/CreateSupplier";
 import EditSupplier from "./pages/suppliers/EditSupplier";
+import PurchaseRequestsPage from "./pages/purchase-requests/PurchaseRequestsPage";
+import CreatePurchaseRequest from "./pages/purchase-requests/CreatePurchaseRequest";
+import PurchaseRequestDetail from "./pages/purchase-requests/PurchaseRequestDetail";
+import RfqsPage from "./pages/rfq/RfqsPage";
+import CreateRfq from "./pages/rfq/CreateRfq";
+import RfqDetail from "./pages/rfq/RfqDetail";
 import CustomersPage from "./pages/customers/CustomersPage";
 import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
@@ -302,6 +308,14 @@ const App = () => (
             <Route path="/suppliers" element={<ProtectedRoute><AppLayout><SuppliersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/suppliers/new" element={<ProtectedRoute><AppLayout><CreateSupplier /></AppLayout></ProtectedRoute>} />
             <Route path="/suppliers/:id/edit" element={<ProtectedRoute><AppLayout><EditSupplier /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 5A — Purchase Request & RFQ */}
+            <Route path="/purchase-requests" element={<ProtectedRoute><AppLayout><PurchaseRequestsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-requests/new" element={<ProtectedRoute><AppLayout><CreatePurchaseRequest /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-requests/:id/edit" element={<ProtectedRoute><AppLayout><CreatePurchaseRequest /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-requests/:id" element={<ProtectedRoute><AppLayout><PurchaseRequestDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/rfqs" element={<ProtectedRoute><AppLayout><RfqsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/rfqs/new" element={<ProtectedRoute><AppLayout><CreateRfq /></AppLayout></ProtectedRoute>} />
+            <Route path="/rfqs/:id" element={<ProtectedRoute><AppLayout><RfqDetail /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases" element={<ProtectedRoute><AppLayout><PurchasesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/new" element={<ProtectedRoute><AppLayout><CreatePurchase /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/:id" element={<ProtectedRoute><AppLayout><ViewPurchase /></AppLayout></ProtectedRoute>} />
