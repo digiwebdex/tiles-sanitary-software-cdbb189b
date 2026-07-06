@@ -47,6 +47,9 @@ import PurchaseRequestDetail from "./pages/purchase-requests/PurchaseRequestDeta
 import RfqsPage from "./pages/rfq/RfqsPage";
 import CreateRfq from "./pages/rfq/CreateRfq";
 import RfqDetail from "./pages/rfq/RfqDetail";
+import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
+import CreatePurchaseOrder from "./pages/purchase-orders/CreatePurchaseOrder";
+import PurchaseOrderDetail from "./pages/purchase-orders/PurchaseOrderDetail";
 import CustomersPage from "./pages/customers/CustomersPage";
 import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
@@ -316,6 +319,11 @@ const App = () => (
             <Route path="/rfqs" element={<ProtectedRoute><AppLayout><RfqsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/rfqs/new" element={<ProtectedRoute><AppLayout><CreateRfq /></AppLayout></ProtectedRoute>} />
             <Route path="/rfqs/:id" element={<ProtectedRoute><AppLayout><RfqDetail /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 5B — Purchase Order */}
+            <Route path="/purchase-orders" element={<ProtectedRoute><AppLayout><PurchaseOrdersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-orders/new" element={<ProtectedRoute><AppLayout><CreatePurchaseOrder /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-orders/:id/edit" element={<ProtectedRoute><AppLayout><CreatePurchaseOrder /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-orders/:id" element={<ProtectedRoute><AppLayout><PurchaseOrderDetail /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases" element={<ProtectedRoute><AppLayout><PurchasesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/new" element={<ProtectedRoute><AppLayout><CreatePurchase /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/:id" element={<ProtectedRoute><AppLayout><ViewPurchase /></AppLayout></ProtectedRoute>} />

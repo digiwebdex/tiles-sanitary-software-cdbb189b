@@ -56,6 +56,7 @@ const TYPE_LABELS: Record<WhatsAppMessageType, string> = {
   payment_receipt: "Payment Receipt",
   overdue_reminder: "Overdue Reminder",
   delivery_update: "Delivery Update",
+  purchase_order_share: "Purchase Order Share",
 };
 
 const statusVariant = (
