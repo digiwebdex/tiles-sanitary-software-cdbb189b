@@ -50,6 +50,9 @@ import RfqDetail from "./pages/rfq/RfqDetail";
 import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
 import CreatePurchaseOrder from "./pages/purchase-orders/CreatePurchaseOrder";
 import PurchaseOrderDetail from "./pages/purchase-orders/PurchaseOrderDetail";
+import GoodsReceiptsPage from "./pages/goods-receipts/GoodsReceiptsPage";
+import CreateGoodsReceipt from "./pages/goods-receipts/CreateGoodsReceipt";
+import GoodsReceiptDetail from "./pages/goods-receipts/GoodsReceiptDetail";
 import CustomersPage from "./pages/customers/CustomersPage";
 import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
@@ -324,6 +327,11 @@ const App = () => (
             <Route path="/purchase-orders/new" element={<ProtectedRoute><AppLayout><CreatePurchaseOrder /></AppLayout></ProtectedRoute>} />
             <Route path="/purchase-orders/:id/edit" element={<ProtectedRoute><AppLayout><CreatePurchaseOrder /></AppLayout></ProtectedRoute>} />
             <Route path="/purchase-orders/:id" element={<ProtectedRoute><AppLayout><PurchaseOrderDetail /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 5C — Goods Receipt (GRN) */}
+            <Route path="/goods-receipts" element={<ProtectedRoute><AppLayout><GoodsReceiptsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/goods-receipts/new" element={<ProtectedRoute><AppLayout><CreateGoodsReceipt /></AppLayout></ProtectedRoute>} />
+            <Route path="/goods-receipts/:id/edit" element={<ProtectedRoute><AppLayout><CreateGoodsReceipt /></AppLayout></ProtectedRoute>} />
+            <Route path="/goods-receipts/:id" element={<ProtectedRoute><AppLayout><GoodsReceiptDetail /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases" element={<ProtectedRoute><AppLayout><PurchasesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/new" element={<ProtectedRoute><AppLayout><CreatePurchase /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/:id" element={<ProtectedRoute><AppLayout><ViewPurchase /></AppLayout></ProtectedRoute>} />

@@ -6,7 +6,7 @@ import {
   MessageCircle, UserCog, Inbox, HelpCircle, Crown, Landmark, Scale, Warehouse,
   ClipboardCheck, Sparkles, CalendarDays, AlertTriangle, CalendarClock, Building2,
   Megaphone, Award, GraduationCap, Laptop, BadgeDollarSign, Clock, LogOut,
-  Calculator, Boxes, Bookmark, Gauge, ClipboardList, FileEdit, Send, FileCheck2,
+  Calculator, Boxes, Bookmark, Gauge, ClipboardList, FileEdit, Send, FileCheck2, PackageCheck,
 } from "lucide-react";
 
 /** Staff roles below the owner (dealer_admin). Owner + super_admin see all. */
@@ -115,6 +115,7 @@ export const navSections: NavSection[] = [
       { path: "/purchase-requests", label: "Purchase Requests", icon: FileEdit, roles: ["manager"] },
       { path: "/rfqs", label: "RFQs", icon: Send, roles: ["manager"], tier: "advanced" },
       { path: "/purchase-orders", label: "Purchase Orders", icon: FileCheck2, roles: ["manager"] },
+      { path: "/goods-receipts", label: "Goods Receipt (GRN)", icon: PackageCheck, roles: ["manager"] },
       { path: "/purchases", label: "Purchases", icon: ShoppingCart, roles: ["manager"] },
       { path: "/purchases/auto-draft", label: "Auto-PO Drafts", icon: Sparkles, dealerAdminOnly: true, tier: "advanced" },
       { path: "/purchase-returns", label: "Purchase Returns", icon: Undo2, roles: ["manager"] },
