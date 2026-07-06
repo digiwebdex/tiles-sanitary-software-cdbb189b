@@ -25,6 +25,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import PaymentReceipt from "./PaymentReceipt";
 import FollowUpPanel from "./FollowUpPanel";
 import AdjustmentDialog from "./AdjustmentDialog";
+import AdvancePaymentDialog from "./AdvancePaymentDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { notificationService } from "@/services/notificationService";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
@@ -86,6 +87,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
   const [payDialog, setPayDialog] = useState<{ open: boolean; customer?: CustomerOutstanding }>({ open: false });
   // V2 Sprint 4A — "Collection Adjustment" (dealer_admin only)
   const [adjustDialog, setAdjustDialog] = useState<{ open: boolean; customer: { id: string; name: string } | null }>({ open: false, customer: null });
+  const [advanceDialog, setAdvanceDialog] = useState<{ open: boolean; customer: { id: string; name: string } | null }>({ open: false, customer: null });
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
@@ -309,6 +311,9 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
                   <div className="flex items-center justify-center gap-1">
                     <Button size="sm" variant="default" onClick={() => { setPayDialog({ open: true, customer: c }); setPayAmount(""); setPayNote(""); }}>
                       <DollarSign className="h-3 w-3 mr-1" /> Collect
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setAdvanceDialog({ open: true, customer: { id: c.id, name: c.name } })} title="Record advance payment">
+                      Advance
                     </Button>
                     {isDealerAdmin && (
                       <Button size="sm" variant="outline" onClick={() => setAdjustDialog({ open: true, customer: { id: c.id, name: c.name } })} title="Adjust balance">
@@ -606,6 +611,14 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
         customer={adjustDialog.customer}
         open={adjustDialog.open}
         onOpenChange={(open) => setAdjustDialog({ open, customer: open ? adjustDialog.customer : null })}
+      />
+
+      {/* V2 Sprint 4C — Advance Payment Dialog */}
+      <AdvancePaymentDialog
+        dealerId={dealerId}
+        customer={advanceDialog.customer}
+        open={advanceDialog.open}
+        onOpenChange={(open) => setAdvanceDialog({ open, customer: open ? advanceDialog.customer : null })}
       />
 
       {/* Receipt Dialog */}

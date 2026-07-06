@@ -15,6 +15,13 @@
  *     → manual signed customer_ledger entry (type='adjustment') for
  *       corrections outside the normal payment flow — e.g. a write-off or
  *       a balance correction. dealer_admin only.
+ *
+ *   POST /api/collections/advance (V2 Sprint 4C)
+ *     → record a payment with no invoice attached (sale_id=NULL); see
+ *       advancePaymentService.ts.
+ *   GET  /api/collections/advance-balance?customerId=<uuid> (V2 Sprint 4C)
+ *   POST /api/collections/advance/apply (V2 Sprint 4C)
+ *     → apply previously-received advance credit to a specific invoice.
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
@@ -23,6 +30,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
 import { recordCustomerPayment } from '../lib/customerPayment';
+import { receiveAdvancePayment, applyAdvanceToSale, getAdvanceBalance } from '../services/advancePaymentService';
 import {
   getCustomerAggById,
   getCustomerOutstandingMapFromReadModel,
@@ -281,6 +289,78 @@ router.post('/followups', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[collections/followups.create]', err.message);
     res.status(500).json({ error: 'Failed to add follow-up' });
+  }
+});
+
+// ─── Advance Payment (V2 Sprint 4C) ───────────────────────────────────────
+// recordCustomerPayment() (above) rejects a payment with no outstanding due
+// sale. These three endpoints let a customer pay ahead of any invoice, and
+// later apply that credit to one — see advancePaymentService.ts header.
+const advancePaymentSchema = z.object({
+  customer_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+  note: z.string().trim().max(500).optional(),
+  payment_mode: z.string().trim().max(50).optional(),
+  paid_account_id: z.string().uuid().optional().nullable(),
+});
+
+router.post('/advance', requireRole('dealer_admin', 'manager', 'accountant', 'salesman'), async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = advancePaymentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { customer_id, amount, note, payment_mode, paid_account_id } = parsed.data;
+  try {
+    const result = await db.transaction((trx) =>
+      receiveAdvancePayment(trx, { dealerId, customerId: customer_id, amount, note, payment_mode, paid_account_id }),
+    );
+    res.status(201).json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[collections/advance]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record advance payment' });
+  }
+});
+
+router.get('/advance-balance', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const customerId = (req.query.customerId as string | undefined) || '';
+  if (!customerId) return res.status(400).json({ error: 'customerId is required' });
+  try {
+    const balance = await getAdvanceBalance(dealerId, customerId);
+    res.json({ balance });
+  } catch (err: any) {
+    console.error('[collections/advance-balance]', err.message);
+    res.status(500).json({ error: 'Failed to load advance balance' });
+  }
+});
+
+const applyAdvanceSchema = z.object({
+  customer_id: z.string().uuid(),
+  sale_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+});
+
+router.post('/advance/apply', requireRole('dealer_admin', 'manager', 'accountant'), async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = applyAdvanceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { customer_id, sale_id, amount } = parsed.data;
+  try {
+    const result = await db.transaction((trx) =>
+      applyAdvanceToSale(trx, { dealerId, customerId: customer_id, saleId: sale_id, amount, appliedBy: req.user?.userId ?? null }),
+    );
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[collections/advance-apply]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to apply advance payment' });
   }
 });
 

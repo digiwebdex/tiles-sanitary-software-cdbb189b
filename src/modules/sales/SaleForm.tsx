@@ -71,9 +71,11 @@ interface SaleFormProps {
   priceLocked?: boolean;
   /** Pre-existing commission (edit mode). */
   defaultCommission?: SaleCommissionDraft | null;
+  /** V2 Sprint 4C — seeds reservation selections when prefilling from a Sales Order. */
+  initialReservationSelections?: Record<string, Array<{ reservation_id: string; consume_qty: number }>>;
 }
 
-const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabel, priceLocked, defaultCommission }: SaleFormProps) => {
+const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabel, priceLocked, defaultCommission, initialReservationSelections }: SaleFormProps) => {
   const { user, isDealerAdmin } = useAuth();
   const [commission, setCommission] = useState<SaleCommissionDraft | null>(defaultCommission ?? null);
   const [itemSearches, setItemSearches] = useState<Record<number, string>>({});
@@ -92,7 +94,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
   // Reservation selections: product_id → [{ reservation_id, consume_qty }]
   const [reservationSelections, setReservationSelections] = useState<
     Record<string, Array<{ reservation_id: string; consume_qty: number }>>
-  >({});
+  >(initialReservationSelections ?? {});
   const { data: dealerInfo } = useDealerInfo();
   const reservationsEnabled = dealerInfo?.enable_reservations === true;
 

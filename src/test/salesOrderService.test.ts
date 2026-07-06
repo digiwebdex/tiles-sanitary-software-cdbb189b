@@ -113,3 +113,24 @@ describe("salesOrderService.createFromQuotation", () => {
     expect(so.quotation_id).toBe("q1");
   });
 });
+
+describe("salesOrderService.getInvoicePrefill / linkToSale (V2 Sprint 4C)", () => {
+  it("POSTs to /:id/invoice-prefill and returns the prefill payload", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockOk({
+      data: { sales_order_id: "so1", so_number: "SO-00001", customer_name: "Acme", items: [], reservation_selections: {}, discount: 0, notes: "", project_id: null, site_id: null, blockers: [] },
+    }));
+    const prefill = await salesOrderService.getInvoicePrefill("so1", "dealer-1");
+    const [url, opts] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toBe("/api/sales-orders/so1/invoice-prefill?dealerId=dealer-1");
+    expect(opts.method).toBe("POST");
+    expect(prefill.so_number).toBe("SO-00001");
+  });
+
+  it("POSTs to /:id/link-to-sale with the saleId", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockOk({ ok: true }));
+    await salesOrderService.linkToSale("so1", "sale1", "dealer-1");
+    const [url, opts] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toBe("/api/sales-orders/so1/link-to-sale?dealerId=dealer-1");
+    expect(JSON.parse(opts.body)).toEqual({ saleId: "sale1" });
+  });
+});

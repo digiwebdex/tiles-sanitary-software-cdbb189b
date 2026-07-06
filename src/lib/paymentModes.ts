@@ -6,6 +6,7 @@ export const PAYMENT_MODES = [
   { id: "bank", label: "Bank Transfer", labelBn: "ব্যাংক" },
   { id: "bkash", label: "bKash", labelBn: "বিকাশ" },
   { id: "nagad", label: "Nagad", labelBn: "নগদ (MFS)" },
+  { id: "rocket", label: "Rocket", labelBn: "রকেট" },
   { id: "sslcommerz", label: "SSLCommerz", labelBn: "SSLCommerz" },
   { id: "cheque", label: "Cheque", labelBn: "চেক" },
   { id: "card", label: "Card", labelBn: "কার্ড" },
@@ -23,5 +24,5 @@ export function paymentModeRequiresBankAccount(id: string | null | undefined): b
 }
 
 export function isMobileOrGatewayMode(id: string | null | undefined): boolean {
-  return id === "bkash" || id === "nagad" || id === "sslcommerz";
+  return id === "bkash" || id === "nagad" || id === "rocket" || id === "sslcommerz";
 }

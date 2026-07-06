@@ -3,22 +3,25 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useDealerId } from "@/hooks/useDealerId";
 import { salesService } from "@/services/salesService";
 import { quotationService } from "@/services/quotationService";
+import { salesOrderService } from "@/services/salesOrderService";
 import { saleCommissionService } from "@/services/commissionService";
 import SaleForm from "@/modules/sales/SaleForm";
 import type { SaleFormValues } from "@/modules/sales/saleSchema";
 import type { SaleItemInput } from "@/services/salesService";
 import type { SaleCommissionDraft } from "@/components/sale/SaleCommissionSection";
 import { toast } from "sonner";
-import { ArrowLeft, FileSignature } from "lucide-react";
+import { ArrowLeft, FileSignature, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-interface QuotationPrefillState {
+interface PrefillState {
   quotation_id?: string;
+  sales_order_id?: string;
   customer_name?: string;
   discount?: number;
   notes?: string;
   items?: Array<{ product_id: string; quantity: number; sale_rate: number }>;
+  reservation_selections?: Record<string, Array<{ reservation_id: string; consume_qty: number }>>;
   project_id?: string | null;
   site_id?: string | null;
 }
@@ -28,8 +31,9 @@ const CreateSalePage = () => {
   const queryClient = useQueryClient();
   const dealerId = useDealerId();
   const location = useLocation();
-  const prefill = (location.state ?? {}) as QuotationPrefillState;
+  const prefill = (location.state ?? {}) as PrefillState;
   const fromQuotation = !!prefill.quotation_id;
+  const fromSalesOrder = !!prefill.sales_order_id;
 
   const mutation = useMutation({
     mutationFn: async (values: SaleFormValues & { allow_backorder?: boolean; reservation_selections?: Record<string, Array<{ reservation_id: string; consume_qty: number }>>; commission?: SaleCommissionDraft | null }) => {
@@ -52,12 +56,19 @@ const CreateSalePage = () => {
         project_id: values.project_id ?? null,
         site_id: values.site_id ?? null,
       });
-      // Link back to quotation if applicable
+      // Link back to quotation / sales order if applicable
       if (fromQuotation && prefill.quotation_id && result?.id) {
         try {
           await quotationService.linkToSale(prefill.quotation_id, result.id, dealerId);
         } catch (e) {
           toast.warning("Sale created, but failed to mark quotation as converted: " + (e as Error).message);
+        }
+      }
+      if (fromSalesOrder && prefill.sales_order_id && result?.id) {
+        try {
+          await salesOrderService.linkToSale(prefill.sales_order_id, result.id, dealerId);
+        } catch (e) {
+          toast.warning("Sale created, but failed to mark sales order as converted: " + (e as Error).message);
         }
       }
       // Persist optional commission
@@ -87,8 +98,11 @@ const CreateSalePage = () => {
       queryClient.invalidateQueries({ queryKey: ["sales"] });
       queryClient.invalidateQueries({ queryKey: ["stock"] });
       queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-orders"] });
       if (fromQuotation) {
         toast.success("Quotation converted to sale");
+      } else if (fromSalesOrder) {
+        toast.success("Sales order invoiced");
       } else if (data.sale_type === "challan_mode") {
         toast.success("Sale created in challan mode (draft)");
       } else {
@@ -119,12 +133,23 @@ const CreateSalePage = () => {
         </Card>
       )}
 
+      {fromSalesOrder && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 flex items-center gap-2 text-sm">
+            <ClipboardList className="h-4 w-4 text-primary" />
+            <span>
+              Creating invoice from sales order. Items, customer, discount, and this order's stock reservations have been prefilled — review before saving.
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
       <SaleForm
         dealerId={dealerId}
         onSubmit={async (v) => { await mutation.mutateAsync(v); }}
         isLoading={mutation.isPending}
         defaultValues={
-          fromQuotation
+          fromQuotation || fromSalesOrder
             ? {
                 customer_name: prefill.customer_name ?? "",
                 discount: prefill.discount ?? 0,
@@ -138,6 +163,7 @@ const CreateSalePage = () => {
               }
             : undefined
         }
+        initialReservationSelections={fromSalesOrder ? prefill.reservation_selections : undefined}
       />
     </div>
   );

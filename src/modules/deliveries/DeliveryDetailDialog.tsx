@@ -294,8 +294,12 @@ const DeliveryDetailDialog = ({ deliveryId, dealerId, onClose }: Props) => {
                 <p>{delivery.receiver_name ?? "—"}</p>
               </div>
               <div>
-                <p className="font-medium text-foreground">Received by:</p>
-                <p>—</p>
+                <p className="font-medium text-foreground">Confirmed:</p>
+                <p>
+                  {delivery.confirmed_at
+                    ? new Date(delivery.confirmed_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                    : "—"}
+                </p>
               </div>
             </div>
           </div>

@@ -4,6 +4,12 @@ import {
   paymentModeLabel,
   receiptPostingLineType,
 } from "../../backend/src/lib/paymentModes";
+import {
+  PAYMENT_MODES,
+  paymentModeLabel as feLabel,
+  paymentModeRequiresBankAccount,
+  isMobileOrGatewayMode,
+} from "@/lib/paymentModes";
 
 describe("paymentModes", () => {
   it("normalizes aliases including sslcommerz and ssmcommerz", () => {
@@ -24,5 +30,23 @@ describe("paymentModes", () => {
     expect(receiptPostingLineType("receipt", "nagad")).toBe("receipt_nagad");
     expect(receiptPostingLineType("receipt", "sslcommerz")).toBe("receipt_sslcommerz");
     expect(receiptPostingLineType("receipt", "cash")).toBe("receipt");
+  });
+});
+
+describe("frontend paymentModes — Rocket (V2 Sprint 4C)", () => {
+  it("lists rocket as a supported mode", () => {
+    expect(PAYMENT_MODES.some((m) => m.id === "rocket")).toBe(true);
+  });
+
+  it("does not require a bank account for rocket", () => {
+    expect(paymentModeRequiresBankAccount("rocket")).toBe(false);
+  });
+
+  it("treats rocket as a mobile/gateway mode (shows the settlement-account picker)", () => {
+    expect(isMobileOrGatewayMode("rocket")).toBe(true);
+  });
+
+  it("has a human-readable label", () => {
+    expect(feLabel("rocket")).toBe("Rocket");
   });
 });

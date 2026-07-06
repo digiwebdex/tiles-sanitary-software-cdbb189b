@@ -11,6 +11,8 @@
  *   PATCH  /api/sales-orders/:id/items/:itemId             (edit qty on a confirmed order — updates reservation)
  *   PATCH  /api/sales-orders/:id/delivery-planning         (planned_delivery_date / delivery_readiness)
  *   POST   /api/sales-orders/from-quotation/:quotationId   (Quotation → Sales Order conversion)
+ *   POST   /api/sales-orders/:id/invoice-prefill            (V2 Sprint 4C — prefill payload for /sales/new)
+ *   POST   /api/sales-orders/:id/link-to-sale               (V2 Sprint 4C — body: { saleId })
  *
  * This is a genuinely new entity — no "Sales Order" concept existed before
  * this sprint (the existing `sales` table is Invoice-equivalent: it deducts
@@ -679,6 +681,108 @@ router.post('/from-quotation/:quotationId', async (req: Request, res: Response) 
   } catch (e: any) {
     console.error('[sales-orders from-quotation]', e.message);
     res.status(500).json({ error: e.message || 'Failed to convert quotation to sales order' });
+  }
+});
+
+/* ----- SALES ORDER -> INVOICE CONVERSION (V2 Sprint 4C) ----- */
+
+/**
+ * Prefill payload for the EXISTING, unmodified /sales/new form — same
+ * pattern as quotations.ts's own /:id/conversion-prefill. Deliberately
+ * does NOT create a sale itself: the existing POST /api/sales endpoint
+ * already has every piece of logic needed (fresh availability/backorder
+ * check, VAT, COGS, numbering, ledger posting, and — critically —
+ * `reservation_selections` support that calls the existing
+ * consume_reservation_for_sale RPC and already special-cases a
+ * customer's OWN active reservation as available to them). Reusing it
+ * end-to-end means zero inventory/VAT math is duplicated here.
+ */
+router.post('/:id/invoice-prefill', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealer(req, res);
+    if (!dealerId) return;
+
+    const so = await db('sales_orders as so')
+      .leftJoin('customers as c', 'c.id', 'so.customer_id')
+      .where({ 'so.id': req.params.id, 'so.dealer_id': dealerId })
+      .first('so.*', 'c.name as customer_name');
+    if (!so) return res.status(404).json({ error: 'Sales order not found' });
+
+    const blockers: string[] = [];
+    if (!['confirmed', 'partially_delivered'].includes(so.status)) {
+      blockers.push(`Sales order is ${so.status} — only confirmed (or partially delivered) orders can be invoiced.`);
+    }
+    if (so.converted_sale_id) {
+      blockers.push('This sales order has already been converted to an invoice.');
+    }
+    if (!so.customer_id) {
+      blockers.push('Sales order has no linked customer.');
+    }
+
+    const items = await db('sales_order_items')
+      .where({ sales_order_id: so.id, dealer_id: dealerId })
+      .orderBy('sort_order', 'asc');
+
+    const saleItems = items
+      .filter((it: any) => !!it.product_id)
+      .map((it: any) => ({ product_id: it.product_id, quantity: Number(it.quantity), sale_rate: Number(it.rate) }));
+
+    const reservationSelections: Record<string, Array<{ reservation_id: string; consume_qty: number }>> = {};
+    for (const it of items as any[]) {
+      if (!it.product_id || !it.reservation_id || Number(it.reserved_qty) <= 0) continue;
+      const arr = reservationSelections[it.product_id] ?? [];
+      arr.push({ reservation_id: it.reservation_id, consume_qty: Number(it.reserved_qty) });
+      reservationSelections[it.product_id] = arr;
+    }
+
+    const customLines = items.filter((it: any) => !it.product_id);
+    if (customLines.length > 0) {
+      blockers.push(`${customLines.length} custom line(s) without a product link cannot be invoiced — remove them or edit the order.`);
+    }
+
+    const subtotal = items.reduce((s: number, it: any) => s + Number(it.line_total ?? 0), 0);
+    const discountAmount =
+      so.discount_type === 'percent'
+        ? Math.round(((subtotal * Number(so.discount_value)) / 100) * 100) / 100
+        : Number(so.discount_value);
+
+    res.json({
+      data: {
+        sales_order_id: so.id,
+        so_number: so.so_number,
+        customer_name: so.customer_name ?? so.customer_name_text ?? '',
+        items: saleItems,
+        reservation_selections: reservationSelections,
+        discount: discountAmount,
+        notes: [so.notes, `From Sales Order ${so.so_number}`].filter(Boolean).join(' · '),
+        project_id: so.project_id ?? null,
+        site_id: so.site_id ?? null,
+        blockers,
+      },
+    });
+  } catch (e: any) {
+    console.error('[sales-orders invoice-prefill]', e.message);
+    res.status(500).json({ error: e.message || 'Failed to prepare invoice conversion' });
+  }
+});
+
+router.post('/:id/link-to-sale', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealer(req, res);
+    if (!dealerId) return;
+    const userId = req.user?.userId ?? null;
+    const saleId = String(req.body?.saleId ?? req.body?.sale_id ?? '');
+    if (!saleId) return res.status(400).json({ error: 'saleId required' });
+
+    const [row] = await db('sales_orders')
+      .where({ id: req.params.id, dealer_id: dealerId })
+      .update({ converted_sale_id: saleId, converted_to_sale_by: userId, converted_to_sale_at: new Date().toISOString() })
+      .returning('id');
+    if (!row) return res.status(404).json({ error: 'Sales order not found' });
+    res.json({ ok: true });
+  } catch (e: any) {
+    console.error('[sales-orders link-to-sale]', e.message);
+    res.status(500).json({ error: e.message || 'Failed to link sales order to sale' });
   }
 });
 

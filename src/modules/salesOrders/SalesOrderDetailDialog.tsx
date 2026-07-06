@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { X, CheckCircle2, Ban, AlertTriangle, Pencil } from "lucide-react";
+import { X, CheckCircle2, Ban, AlertTriangle, Pencil, Receipt } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const READINESS_LABEL: Record<DeliveryReadiness, string> = {
 
 const SalesOrderDetailDialog = ({ salesOrderId, open, onOpenChange }: Props) => {
   const dealerId = useDealerId();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editQty, setEditQty] = useState<string>("");
@@ -101,6 +103,36 @@ const SalesOrderDetailDialog = ({ salesOrderId, open, onOpenChange }: Props) => 
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // V2 Sprint 4C — "Create Invoice from Sales Order": prefills the
+  // existing, unmodified /sales/new form (same pattern as Quotation's
+  // "Convert to Sale"). The Sale form's own reservation-consumption logic
+  // does the real work; this only builds the prefill payload.
+  const createInvoiceMutation = useMutation({
+    mutationFn: () => salesOrderService.getInvoicePrefill(salesOrderId, dealerId),
+    onSuccess: (prefill) => {
+      if (prefill.blockers.length > 0) {
+        toast.error(prefill.blockers[0], {
+          description: prefill.blockers.length > 1 ? `+${prefill.blockers.length - 1} more issue(s)` : undefined,
+        });
+        return;
+      }
+      onOpenChange(false);
+      navigate("/sales/new", {
+        state: {
+          sales_order_id: prefill.sales_order_id,
+          customer_name: prefill.customer_name,
+          discount: prefill.discount,
+          notes: prefill.notes,
+          items: prefill.items,
+          reservation_selections: prefill.reservation_selections,
+          project_id: prefill.project_id,
+          site_id: prefill.site_id,
+        },
+      });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   if (!so) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -116,6 +148,7 @@ const SalesOrderDetailDialog = ({ salesOrderId, open, onOpenChange }: Props) => 
   const canCancel = ["draft", "confirmed", "partially_delivered"].includes(so.status);
   const canEditPlanning = ["draft", "confirmed", "partially_delivered"].includes(so.status);
   const canEditQty = ["confirmed", "partially_delivered"].includes(so.status);
+  const canCreateInvoice = ["confirmed", "partially_delivered"].includes(so.status) && !so.converted_sale_id;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -136,6 +169,16 @@ const SalesOrderDetailDialog = ({ salesOrderId, open, onOpenChange }: Props) => 
                 disabled={confirmMutation.isPending}
               >
                 <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
+              </Button>
+            )}
+            {canCreateInvoice && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => createInvoiceMutation.mutate()}
+                disabled={createInvoiceMutation.isPending}
+              >
+                <Receipt className="h-4 w-4 mr-1" /> Create Invoice
               </Button>
             )}
             {canCancel && (
@@ -175,6 +218,21 @@ const SalesOrderDetailDialog = ({ salesOrderId, open, onOpenChange }: Props) => 
               <div className="md:col-span-3">
                 <p className="text-xs text-muted-foreground">Cancel Reason</p>
                 <p className="text-destructive">{so.cancel_reason}</p>
+              </div>
+            )}
+            {so.converted_sale_id && (
+              <div className="md:col-span-3">
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => {
+                    onOpenChange(false);
+                    navigate(`/sales/${so.converted_sale_id}/invoice`);
+                  }}
+                >
+                  <Receipt className="h-3 w-3 mr-1" /> View invoice
+                </Button>
               </div>
             )}
           </CardContent>

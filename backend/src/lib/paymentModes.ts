@@ -6,6 +6,7 @@ export const PAYMENT_MODES = [
   { id: 'bank', label: 'Bank Transfer', labelBn: 'ব্যাংক' },
   { id: 'bkash', label: 'bKash', labelBn: 'বিকাশ' },
   { id: 'nagad', label: 'Nagad', labelBn: 'নগদ (MFS)' },
+  { id: 'rocket', label: 'Rocket', labelBn: 'রকেট' },
   { id: 'sslcommerz', label: 'SSLCommerz', labelBn: 'SSLCommerz' },
   { id: 'cheque', label: 'Cheque', labelBn: 'চেক' },
   { id: 'card', label: 'Card', labelBn: 'কার্ড' },
@@ -49,6 +50,7 @@ export function receiptPostingLineType(
 ): string {
   if (mode === 'bkash') return `${base}_bkash`;
   if (mode === 'nagad') return `${base}_nagad`;
+  if (mode === 'rocket') return `${base}_rocket`;
   if (mode === 'sslcommerz') return `${base}_sslcommerz`;
   return base;
 }

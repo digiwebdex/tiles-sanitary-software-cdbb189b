@@ -26,8 +26,10 @@ export interface CreateChallanInput {
   sale_id: string;
   challan_date: string;
   driver_name?: string;
+  driver_phone?: string;
   transport_name?: string;
   vehicle_no?: string;
+  scheduled_delivery_date?: string;
   notes?: string;
   created_by?: string;
   show_price?: boolean;
@@ -94,8 +96,10 @@ export const challanService = {
     updates: {
       challan_date?: string;
       driver_name?: string;
+      driver_phone?: string;
       transport_name?: string;
       vehicle_no?: string;
+      scheduled_delivery_date?: string;
       notes?: string;
       items?: { id: string; product_id: string; quantity: number; sale_rate: number }[];
     },

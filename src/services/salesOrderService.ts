@@ -37,6 +37,9 @@ export interface SalesOrder {
   cancelled_by: string | null;
   cancelled_at: string | null;
   cancel_reason: string | null;
+  converted_sale_id: string | null;
+  converted_to_sale_by: string | null;
+  converted_to_sale_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -187,5 +190,32 @@ export const salesOrderService = {
       method: "POST",
     });
     return r.data;
+  },
+
+  /** V2 Sprint 4C — prefill payload for the existing /sales/new form. */
+  async getInvoicePrefill(salesOrderId: string, dealerId: string): Promise<{
+    sales_order_id: string;
+    so_number: string;
+    customer_name: string;
+    items: Array<{ product_id: string; quantity: number; sale_rate: number }>;
+    reservation_selections: Record<string, Array<{ reservation_id: string; consume_qty: number }>>;
+    discount: number;
+    notes: string;
+    project_id: string | null;
+    site_id: string | null;
+    blockers: string[];
+  }> {
+    const r = await call<{ data: any }>(`/api/sales-orders/${salesOrderId}/invoice-prefill${qs({ dealerId })}`, {
+      method: "POST",
+    });
+    return r.data;
+  },
+
+  async linkToSale(salesOrderId: string, saleId: string, dealerId: string): Promise<void> {
+    await call(`/api/sales-orders/${salesOrderId}/link-to-sale${qs({ dealerId })}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ saleId }),
+    });
   },
 };

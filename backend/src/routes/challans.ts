@@ -365,8 +365,10 @@ const createSchema = z.object({
   sale_id: z.string().uuid(),
   challan_date: z.string().min(1),
   driver_name: z.string().nullable().optional(),
+  driver_phone: z.string().nullable().optional(),
   transport_name: z.string().nullable().optional(),
   vehicle_no: z.string().nullable().optional(),
+  scheduled_delivery_date: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   show_price: z.boolean().optional(),
 });
@@ -414,8 +416,10 @@ router.post('/', async (req: Request, res: Response) => {
           challan_no: challanNo,
           challan_date: input.challan_date,
           driver_name: input.driver_name || null,
+          driver_phone: input.driver_phone || null,
           transport_name: input.transport_name || null,
           vehicle_no: input.vehicle_no || null,
+          scheduled_delivery_date: input.scheduled_delivery_date || null,
           notes: input.notes || null,
           status: 'pending',
           delivery_status: 'pending',
@@ -596,8 +600,10 @@ const updateSchema = z.object({
   dealer_id: z.string().uuid().optional(),
   challan_date: z.string().optional(),
   driver_name: z.string().nullable().optional(),
+  driver_phone: z.string().nullable().optional(),
   transport_name: z.string().nullable().optional(),
   vehicle_no: z.string().nullable().optional(),
+  scheduled_delivery_date: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   items: z
     .array(
@@ -637,8 +643,10 @@ router.put('/:id', async (req: Request, res: Response) => {
       await trx('challans').where({ id }).update({
         challan_date: updates.challan_date,
         driver_name: updates.driver_name || null,
+        driver_phone: updates.driver_phone || null,
         transport_name: updates.transport_name || null,
         vehicle_no: updates.vehicle_no || null,
+        scheduled_delivery_date: updates.scheduled_delivery_date || null,
         notes: updates.notes || null,
       });
 

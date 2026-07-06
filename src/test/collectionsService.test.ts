@@ -65,3 +65,42 @@ describe("collectionsService.recordAdjustment (V2 Sprint 4A)", () => {
     ).rejects.toThrow("A reason is required");
   });
 });
+
+describe("collectionsService — Advance Payment (V2 Sprint 4C)", () => {
+  beforeEach(() => {
+    vpsAuthedFetchMock.mockReset();
+  });
+
+  it("recordAdvance POSTs to /api/collections/advance", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockOk({ ok: true, id: "l1", amount: 1000 }));
+    await collectionsService.recordAdvance("dealer-1", { customer_id: "c1", amount: 1000, payment_mode: "bkash" });
+    const [url, opts] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toBe("/api/collections/advance?dealerId=dealer-1");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual({ customer_id: "c1", amount: 1000, payment_mode: "bkash" });
+  });
+
+  it("getAdvanceBalance GETs /api/collections/advance-balance and returns the balance", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockOk({ balance: 750 }));
+    const balance = await collectionsService.getAdvanceBalance("dealer-1", "c1");
+    const url = vpsAuthedFetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("dealerId=dealer-1");
+    expect(url).toContain("customerId=c1");
+    expect(balance).toBe(750);
+  });
+
+  it("applyAdvance POSTs to /api/collections/advance/apply", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockOk({ ok: true, newDue: 0 }));
+    await collectionsService.applyAdvance("dealer-1", { customer_id: "c1", sale_id: "s1", amount: 500 });
+    const [url, opts] = vpsAuthedFetchMock.mock.calls[0];
+    expect(url).toBe("/api/collections/advance/apply?dealerId=dealer-1");
+    expect(JSON.parse(opts.body)).toEqual({ customer_id: "c1", sale_id: "s1", amount: 500 });
+  });
+
+  it("propagates an error when applying more than the unapplied balance", async () => {
+    vpsAuthedFetchMock.mockResolvedValueOnce(mockErr("Amount exceeds unapplied advance balance (max 100.00)", 400));
+    await expect(
+      collectionsService.applyAdvance("dealer-1", { customer_id: "c1", sale_id: "s1", amount: 500 }),
+    ).rejects.toThrow("Amount exceeds unapplied advance balance");
+  });
+});

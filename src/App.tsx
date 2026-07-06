@@ -46,6 +46,7 @@ import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
 import CustomerProfilePage from "./pages/customers/CustomerProfilePage";
 import CreditReportPage from "./pages/reports/CreditReportPage";
+import VatReportsPage from "./pages/reports/VatReportsPage";
 import ChallansPage from "./pages/challans/ChallansPage";
 import PurchaseReturnsPage from "./pages/purchase-returns/PurchaseReturnsPage";
 import CreatePurchaseReturn from "./pages/purchase-returns/CreatePurchaseReturn";
@@ -252,6 +253,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedRoute allowReadonly><AppLayout><Index /></AppLayout></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute allowReadonly><AppLayout><ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/credit" element={<ProtectedRoute allowReadonly><AppLayout><CreditReportPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/reports/vat" element={<ProtectedRoute><AppLayout><VatReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings/login-history" element={<ProtectedRoute><AppLayout><LoginHistoryPage /></AppLayout></ProtectedRoute>} />
             <Route path="/subscription" element={<ProtectedRoute allowReadonly><AppLayout><SubscriptionPage /></AppLayout></ProtectedRoute>} />

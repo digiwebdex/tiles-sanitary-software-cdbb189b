@@ -95,4 +95,33 @@ export const collectionsService = {
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
     );
   },
+
+  /** V2 Sprint 4C — "Advance Payment": record a payment with no invoice attached yet. */
+  async recordAdvance(
+    dealerId: string,
+    input: { customer_id: string; amount: number; note?: string; payment_mode?: string; paid_account_id?: string | null },
+  ) {
+    return await vpsRequest<{ ok: boolean; id: string; amount: number }>(
+      `/api/collections/advance?dealerId=${encodeURIComponent(dealerId)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    );
+  },
+
+  async getAdvanceBalance(dealerId: string, customerId: string): Promise<number> {
+    const body = await vpsRequest<{ balance: number }>(
+      `/api/collections/advance-balance?dealerId=${encodeURIComponent(dealerId)}&customerId=${encodeURIComponent(customerId)}`,
+    );
+    return body.balance ?? 0;
+  },
+
+  /** V2 Sprint 4C — apply previously-received advance credit to a specific invoice. */
+  async applyAdvance(
+    dealerId: string,
+    input: { customer_id: string; sale_id: string; amount: number },
+  ) {
+    return await vpsRequest<{ ok: boolean; newDue: number }>(
+      `/api/collections/advance/apply?dealerId=${encodeURIComponent(dealerId)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    );
+  },
 };

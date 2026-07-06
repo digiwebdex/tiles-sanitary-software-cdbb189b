@@ -179,6 +179,7 @@ export const navSections: NavSection[] = [
       { path: "/reports", label: "Reports Hub", icon: BarChart3, readonlyAllowed: true, roles: ["manager", "accountant"] },
       { path: "/reports/operations", label: "Operations Reports", icon: Scale, dealerAdminOnly: true, planFeature: "advanced_reports" },
       { path: "/reports/credit", label: "Credit Report", icon: ShieldCheck, readonlyAllowed: true, roles: ["manager", "accountant"] },
+      { path: "/reports/vat", label: "VAT Reports", icon: Landmark, dealerAdminOnly: true },
     ],
   },
   {
