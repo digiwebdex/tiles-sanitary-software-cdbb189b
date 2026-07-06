@@ -61,11 +61,47 @@ Unlike Sprints 3D/4A (where most requested areas turned out to already be built)
 
 ---
 
-## 3. Database impact
+## 3. Files changed (complete list — `git diff --stat 72c35d5 HEAD`)
+
+**New files (16):**
+
+| File | Purpose |
+|---|---|
+| `backend/src/db/migrations/090_sales_orders.ts` | Schema — `sales_orders`, `sales_order_items`, sequence column/function, `quotations` audit columns |
+| `backend/src/routes/salesOrders.ts` | All Sales Order API endpoints |
+| `backend/src/routes/salesOrders.query.test.ts` | Route query-shape + Zod schema tests |
+| `backend/src/services/salesOrderService.ts` | Pure business logic (totals, reservable-qty cap, caliber check, delivery readiness) |
+| `backend/src/services/salesOrderService.test.ts` | Unit tests for the above |
+| `docs/SPRINT4B_SALES_ORDER_RESERVATION.md` | This report |
+| `src/services/salesOrderService.ts` | Frontend API client |
+| `src/test/salesOrderService.test.ts` | Frontend API client tests |
+| `src/modules/salesOrders/salesOrderSchema.ts` | Zod form schema |
+| `src/modules/salesOrders/SalesOrderForm.tsx` | Create/edit draft UI |
+| `src/modules/salesOrders/SalesOrderList.tsx` | List/search/filter UI |
+| `src/modules/salesOrders/SalesOrderDetailDialog.tsx` | Detail view — Approve/Cancel/delivery-planning/qty-edit |
+| `src/components/salesOrder/SalesOrderStatusBadge.tsx` | Status badge component |
+| `src/pages/salesOrders/SalesOrdersPage.tsx` | List page wrapper |
+| `src/pages/salesOrders/CreateSalesOrder.tsx` | Create page wrapper |
+| `src/pages/salesOrders/EditSalesOrder.tsx` | Edit page wrapper |
+
+**Modified files (4 — additive only, confirmed via diff):**
+
+| File | Change |
+|---|---|
+| `backend/src/index.ts` | +2 lines: import + register `/api/sales-orders` route |
+| `src/App.tsx` | +6 lines: 3 new routes |
+| `src/config/navConfig.ts` | +1 line: "Sales Orders" nav item |
+| `src/modules/quotations/QuotationDetailDialog.tsx` | +24/-1 lines: new "Convert to Sales Order" button + handler |
+
+**Totals:** 20 files changed, 2,691 insertions(+), 2 deletions(-). Zero files from Sprints 2–4A (Product Master, Inventory, Warehouse/Godown/Rack/Bin, Availability Engine, Reservation Engine, Customer Management, Quotation backend/route logic) were modified — confirmed by `git diff --stat 72c35d5 HEAD` above showing only the 4 files listed.
+
+---
+
+## 4. Database impact
 
 **Purely additive.** 2 new tables, 1 new column + 1 new function on the shared `invoice_sequences` table, 3 new nullable columns on `quotations`. No existing table/column is renamed, retyped, or dropped; no existing default changes. Every quotation, sale, reservation, or customer created before this migration behaves identically.
 
-## 4. API impact
+## 5. API impact
 
 | Change | Compatibility |
 |---|---|
@@ -74,12 +110,12 @@ Unlike Sprints 3D/4A (where most requested areas turned out to already be built)
 | `reservations.ts`, `availabilityService.ts`, `sales.ts` | **Zero changes** — the new route calls their RPCs/functions directly but does not modify them. |
 | Existing Quotation→Sale conversion (`conversion-prefill`, `link-to-sale`) | **Zero changes** — a separate, new conversion path was built instead of modifying this one. |
 
-## 5. Testing report
+## 6. Testing report
 
 - **Backend:** `npx tsc --noEmit` clean (only the same pre-existing Sprint 3B `warehouseTransferStock.test.ts` issue every prior sprint's report documents — unrelated, not touched). `npx vitest run` — **196/196 pass** (32 new + 164 prior). New: `salesOrderService.test.ts` (22 — `calcLineTotal`/`calcTotals`/`computeReservableQty`/`hasCaliberMismatch`/`computeDeliveryReadiness`), `salesOrders.query.test.ts` (10 — list-query `.toSQL()` shape + Zod schema defaults/enum coverage).
 - **Frontend:** `npx tsc --noEmit -p tsconfig.app.json` clean (only the same pre-existing `portalService.ts` issue every prior sprint's report documents). `npx vitest run` — **306/306 pass** (9 new + 297 prior). New: `salesOrderService.test.ts` (9 — one test per API method, request-shape + error-propagation). `npm run build` succeeds cleanly (same pre-existing chunk-size warning as before this sprint — not new).
 
-## 6. Manual QA checklist
+## 7. Manual QA checklist
 
 - [ ] **Create a Sales Order** — pick a customer, add 2 product lines + 1 custom line, set a salesperson and planned delivery date, "Save Draft". Confirm it lists with a temporary `SO-DRAFT-…` number and status "Draft".
 - [ ] **Edit the draft** — change quantities/discount, re-save; confirm totals recompute.
@@ -93,14 +129,14 @@ Unlike Sprints 3D/4A (where most requested areas turned out to already be built)
 - [ ] **Quotation → Sales Order** — open an active quotation, click "Convert to Sales Order"; confirm a new draft order opens pre-filled with identical customer/pricing/discount/shade/caliber/batch data, and the source quotation shows the new audit-trail link.
 - [ ] Confirm Quotation create/edit/finalize/cancel/revise/"Convert to Sale" all still work exactly as before (unchanged), and Inventory/Reservations/Availability pages from prior sprints are unaffected.
 
-## 7. Rollback strategy
+## 8. Rollback strategy
 
 1. **Not yet merged/deployed** — do not merge the branch. Nothing is live.
 2. **After merge:** `git revert` the sprint commit — every change is additive; the 2 modified existing files (`quotations.ts`'s detail dialog on the frontend, `index.ts`'s route registration) only gained a new button/route respectively.
 3. **DB rollback:** migration `090`'s `down()` drops both new tables, the new function, the `invoice_sequences` column, and the 3 new `quotations` columns, in FK-safe order. No enum values were added, so there is nothing left un-droppable (unlike Sprint 4A's `customer_type` extension).
 4. **Partial rollback:** the "Convert to Sales Order" button on the Quotation detail view can be hidden independently of the backend (which would simply go unused); the Sales Orders nav item and routes can likewise be hidden without touching any other module.
 
-## 8. Explicitly out of scope (per Sprint 4B instructions — not done)
+## 9. Explicitly out of scope (per Sprint 4B instructions — not done)
 
 - Invoice, Challan, Payment collection, VAT posting, POS, Sales Return, Exchange, Warranty, Barcode/QR, Accounting posting — untouched.
 - `sales_order_items.delivered_qty` exists in the schema (to support the `partially_delivered`/`completed` statuses) but nothing in this sprint writes to it — actual delivery execution remains a future sprint's responsibility.
