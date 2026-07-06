@@ -32,21 +32,27 @@ export const productService = {
    * AreaCalculatorDialog, ProductList's own prior calls) that only passes
    * (dealerId, search, page) behaves exactly as before: the adapter simply
    * never receives a `filters` key, byte-for-byte the same request as today.
+   *
+   * `orderBy`/`pageSize` are new in V2 Sprint 4E — both optional, default to
+   * the existing `created_at desc` / 25-row behavior, so every existing call
+   * site is unaffected.
    */
   async list(
     dealerId: string,
     search?: string,
     page = 1,
     filters?: Record<string, string | number | boolean | null>,
+    orderBy: { column: string; direction: "asc" | "desc" } = { column: "created_at", direction: "desc" },
+    pageSize = PAGE_SIZE,
   ) {
     const trimmed = search?.trim() ?? "";
 
     const result = await productsAdapter.list({
       dealerId,
       page: Math.max(0, page - 1),
-      pageSize: PAGE_SIZE,
+      pageSize,
       search: trimmed || undefined,
-      orderBy: { column: "created_at", direction: "desc" },
+      orderBy,
       ...(filters && Object.keys(filters).length > 0 ? { filters } : {}),
     });
     return { data: result.rows, total: result.total };

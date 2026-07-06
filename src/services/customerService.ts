@@ -91,17 +91,24 @@ function buildWritePayload(form: Partial<CustomerFormData>): Record<string, unkn
 }
 
 export const customerService = {
-  async list(dealerId: string, search = "", typeFilter = "", page = 1) {
+  /**
+   * `statusFilter` and `pageSize` are new in V2 Sprint 4E — both optional,
+   * so every existing call site that only passes (dealerId, search,
+   * typeFilter, page) behaves exactly as before (no status filter, the
+   * existing 25-row page size).
+   */
+  async list(dealerId: string, search = "", typeFilter = "", page = 1, statusFilter = "", pageSize = PAGE_SIZE) {
     const trimmed = search.trim();
     const params = new URLSearchParams({
       dealerId,
       page: String(Math.max(0, page - 1)),
-      pageSize: String(PAGE_SIZE),
+      pageSize: String(pageSize),
       orderBy: "name",
       orderDir: "asc",
     });
     if (trimmed) params.set("search", trimmed);
     if (typeFilter) params.set("f.type", typeFilter);
+    if (statusFilter) params.set("f.status", statusFilter);
     const body = await vpsRequest<{ rows: Customer[]; total: number }>(
       `/api/customers?${params.toString()}`,
     );

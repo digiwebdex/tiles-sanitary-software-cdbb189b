@@ -164,4 +164,30 @@ describe("Phase 3D — productService routes reads through dataClient", () => {
     const callArg = adapterListMock.mock.calls[0][0];
     expect(Object.prototype.hasOwnProperty.call(callArg, "filters")).toBe(false);
   });
+
+  // ── V2 Sprint 4E — POS modernization: orderBy/pageSize overrides ──
+  it("orderBy/pageSize omitted → adapter still receives the pre-4E defaults (created_at desc, 25)", async () => {
+    adapterListMock.mockResolvedValueOnce({ rows: [], total: 0 });
+    await productService.list("dealer-1", "", 1, { active: true });
+    expect(adapterListMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { column: "created_at", direction: "desc" },
+        pageSize: 25,
+      }),
+    );
+  });
+
+  it("orderBy/pageSize provided → passed through to the adapter untouched (POS name-ordered lookup)", async () => {
+    adapterListMock.mockResolvedValueOnce({ rows: [], total: 0 });
+    await productService.list(
+      "dealer-1", "tile", 1, { active: true },
+      { column: "name", direction: "asc" }, 20,
+    );
+    expect(adapterListMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { column: "name", direction: "asc" },
+        pageSize: 20,
+      }),
+    );
+  });
 });
