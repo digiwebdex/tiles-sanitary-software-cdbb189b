@@ -122,6 +122,9 @@ export const createSalesReturnServiceSchema = z.object({
   reason: optionalSafeText(300),
   is_broken: z.boolean(),
   refund_amount: z.number().min(0, "Refund amount cannot be negative"),
+  /** V2 Sprint 4D — refund settlement channel; 'credit' = Credit Note (no cash/bank movement). */
+  refund_mode: z.string().nullable().optional(),
+  refund_paid_account_id: z.string().uuid().nullable().optional(),
   return_date: z.string().min(1),
   created_by: z.string().uuid().optional(),
 });

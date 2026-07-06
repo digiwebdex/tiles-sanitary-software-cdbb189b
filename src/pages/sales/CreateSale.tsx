@@ -4,19 +4,21 @@ import { useDealerId } from "@/hooks/useDealerId";
 import { salesService } from "@/services/salesService";
 import { quotationService } from "@/services/quotationService";
 import { salesOrderService } from "@/services/salesOrderService";
+import { salesReturnService } from "@/services/salesReturnService";
 import { saleCommissionService } from "@/services/commissionService";
 import SaleForm from "@/modules/sales/SaleForm";
 import type { SaleFormValues } from "@/modules/sales/saleSchema";
 import type { SaleItemInput } from "@/services/salesService";
 import type { SaleCommissionDraft } from "@/components/sale/SaleCommissionSection";
 import { toast } from "sonner";
-import { ArrowLeft, FileSignature, ClipboardList } from "lucide-react";
+import { ArrowLeft, FileSignature, ClipboardList, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface PrefillState {
   quotation_id?: string;
   sales_order_id?: string;
+  exchange_return_id?: string;
   customer_name?: string;
   discount?: number;
   notes?: string;
@@ -34,6 +36,7 @@ const CreateSalePage = () => {
   const prefill = (location.state ?? {}) as PrefillState;
   const fromQuotation = !!prefill.quotation_id;
   const fromSalesOrder = !!prefill.sales_order_id;
+  const fromExchange = !!prefill.exchange_return_id;
 
   const mutation = useMutation({
     mutationFn: async (values: SaleFormValues & { allow_backorder?: boolean; reservation_selections?: Record<string, Array<{ reservation_id: string; consume_qty: number }>>; commission?: SaleCommissionDraft | null }) => {
@@ -71,6 +74,15 @@ const CreateSalePage = () => {
           toast.warning("Sale created, but failed to mark sales order as converted: " + (e as Error).message);
         }
       }
+      let exchangeApplied = 0;
+      if (fromExchange && prefill.exchange_return_id && result?.id) {
+        try {
+          const linked = await salesReturnService.linkExchange(dealerId, prefill.exchange_return_id, result.id);
+          exchangeApplied = linked.applied ?? 0;
+        } catch (e) {
+          toast.warning("Sale created, but failed to link the exchange: " + (e as Error).message);
+        }
+      }
       // Persist optional commission
       if (values.commission && values.commission.referral_source_id && result?.id) {
         const subtotal = (values.items ?? []).reduce(
@@ -92,15 +104,22 @@ const CreateSalePage = () => {
           toast.warning("Sale saved, but commission could not be recorded: " + (e as Error).message);
         }
       }
-      return { id: result!.id, sale_type: values.sale_type };
+      return { id: result!.id, sale_type: values.sale_type, exchangeApplied };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["sales"] });
       queryClient.invalidateQueries({ queryKey: ["stock"] });
       queryClient.invalidateQueries({ queryKey: ["quotations"] });
       queryClient.invalidateQueries({ queryKey: ["sales-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-returns"] });
       if (fromQuotation) {
         toast.success("Quotation converted to sale");
+      } else if (fromExchange) {
+        toast.success(
+          data.exchangeApplied > 0
+            ? `Exchange linked — ৳${data.exchangeApplied.toLocaleString()} credited from the return`
+            : "Exchange linked to the new sale",
+        );
       } else if (fromSalesOrder) {
         toast.success("Sales order invoiced");
       } else if (data.sale_type === "challan_mode") {
@@ -144,12 +163,23 @@ const CreateSalePage = () => {
         </Card>
       )}
 
+      {fromExchange && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 flex items-center gap-2 text-sm">
+            <Repeat className="h-4 w-4 text-primary" />
+            <span>
+              Exchange — pick the new item(s) below. Any available credit from the original return will be applied automatically toward this sale's due amount once saved.
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
       <SaleForm
         dealerId={dealerId}
         onSubmit={async (v) => { await mutation.mutateAsync(v); }}
         isLoading={mutation.isPending}
         defaultValues={
-          fromQuotation || fromSalesOrder
+          fromQuotation || fromSalesOrder || fromExchange
             ? {
                 customer_name: prefill.customer_name ?? "",
                 discount: prefill.discount ?? 0,

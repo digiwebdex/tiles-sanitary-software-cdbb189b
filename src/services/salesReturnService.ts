@@ -32,6 +32,8 @@ export interface CreateSalesReturnInput {
   is_broken: boolean;
   refund_amount: number;
   refund_mode?: string;
+  /** V2 Sprint 4D — required when refund_mode needs a bank account (bank/cheque/card). */
+  refund_paid_account_id?: string | null;
   return_date: string;
   created_by?: string;
 }
@@ -71,8 +73,35 @@ export const salesReturnService = {
         is_broken: input.is_broken,
         refund_amount: input.refund_amount,
         refund_mode: input.refund_mode ?? null,
+        refund_paid_account_id: input.refund_paid_account_id ?? null,
         return_date: input.return_date,
       }),
+    });
+  },
+
+  /** V2 Sprint 4D — Credit Note: aggregate unapplied balance for a customer. */
+  async getCreditNoteBalance(dealerId: string, customerId: string): Promise<number> {
+    const body = await vpsRequest<{ balance: number }>(
+      `/api/returns/credit-note-balance?dealerId=${encodeURIComponent(dealerId)}&customerId=${encodeURIComponent(customerId)}`,
+    );
+    return body.balance ?? 0;
+  },
+
+  async applyCreditNote(
+    dealerId: string,
+    input: { customer_id: string; sale_id: string; amount: number },
+  ): Promise<{ ok: boolean; newDue: number }> {
+    return await vpsRequest(`/api/returns/credit-note/apply?dealerId=${encodeURIComponent(dealerId)}`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  /** V2 Sprint 4D — "Exchange": link a return to the new replacement sale. */
+  async linkExchange(dealerId: string, salesReturnId: string, saleId: string): Promise<{ ok: boolean; applied: number; newDue?: number }> {
+    return await vpsRequest(`/api/returns/sales/${salesReturnId}/link-exchange?dealerId=${encodeURIComponent(dealerId)}`, {
+      method: "POST",
+      body: JSON.stringify({ saleId }),
     });
   },
 };
