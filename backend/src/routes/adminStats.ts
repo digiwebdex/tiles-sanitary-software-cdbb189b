@@ -8,6 +8,7 @@
 import { Router, Request, Response } from 'express';
 import { sendAllTrialReminders, sendTrialDay5Reminders, sendTrialDay7Reminders } from '../services/trialReminderService';
 import { runTrialExpiry } from '../services/trialExpiryService';
+import { runReservationExpirySweep } from '../services/reservationExpiryService';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/roles';
@@ -230,6 +231,15 @@ cronRouter.post('/expire-trials', cronGuard, async (_req: Request, res: Response
     return res.json(await runTrialExpiry());
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Trial expiry failed' });
+  }
+});
+
+/** POST /api/admin/cron/expire-stale-reservations — V2 Sprint 3C "Reservation Expiry". */
+cronRouter.post('/expire-stale-reservations', cronGuard, async (_req: Request, res: Response) => {
+  try {
+    return res.json(await runReservationExpirySweep());
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Reservation expiry sweep failed' });
   }
 });
 

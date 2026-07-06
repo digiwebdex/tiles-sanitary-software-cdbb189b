@@ -30,6 +30,7 @@ type DealerSettingsRow = {
   default_vat_rate: number;
   tax_id: string | null;
   menu_mode: "simple" | "advanced";
+  enable_reservations: boolean;
 };
 
 async function fetchDealerSettings(dealerId: string): Promise<DealerSettingsRow> {
@@ -44,7 +45,7 @@ async function fetchDealerSettings(dealerId: string): Promise<DealerSettingsRow>
 
 async function patchDealerSettings(
   dealerId: string,
-  patch: Partial<Pick<DealerSettingsRow, "allow_backorder" | "default_wastage_pct" | "dual_unit_enabled" | "vat_enabled" | "default_vat_rate" | "menu_mode">>,
+  patch: Partial<Pick<DealerSettingsRow, "allow_backorder" | "default_wastage_pct" | "dual_unit_enabled" | "vat_enabled" | "default_vat_rate" | "menu_mode" | "enable_reservations">>,
 ): Promise<DealerSettingsRow> {
   const res = await vpsAuthedFetch(`/api/dealer-settings`, {
     method: "PATCH",
@@ -115,6 +116,15 @@ const SettingsPage = () => {
     onSuccess: (_, enabled) => {
       invalidate();
       toast.success(enabled ? "Backorder mode enabled" : "Backorder mode disabled");
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const toggleReservations = useMutation({
+    mutationFn: (enabled: boolean) => patchDealerSettings(dealerId, { enable_reservations: enabled }),
+    onSuccess: (_, enabled) => {
+      invalidate();
+      toast.success(enabled ? "Stock reservations enabled" : "Stock reservations disabled");
     },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -295,6 +305,26 @@ const SettingsPage = () => {
                   </ul>
                 </div>
               )}
+
+              <Separator />
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="enable-reservations" className="text-sm font-medium">
+                    Stock Reservations
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, sales staff can hold stock for a specific customer (with an
+                    optional expiry) before the sale is finalized — see Inventory → Reservations.
+                  </p>
+                </div>
+                <Switch
+                  id="enable-reservations"
+                  checked={dealer?.enable_reservations === true}
+                  onCheckedChange={(checked) => toggleReservations.mutate(checked)}
+                  disabled={toggleReservations.isPending}
+                />
+              </div>
 
               <Separator />
 
