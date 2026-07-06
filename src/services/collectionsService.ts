@@ -48,6 +48,14 @@ export const collectionsService = {
     return body.customers ?? [];
   },
 
+  /** V2 Sprint 4A — Customer Profile "ledger summary": one customer's outstanding/aging, regardless of balance. */
+  async getCustomerOutstanding(dealerId: string, customerId: string): Promise<CustomerOutstandingDTO | null> {
+    const body = await vpsRequest<{ customers: CustomerOutstandingDTO[] }>(
+      `/api/collections/outstanding?dealerId=${encodeURIComponent(dealerId)}&customerId=${encodeURIComponent(customerId)}`,
+    );
+    return body.customers?.[0] ?? null;
+  },
+
   async listRecent(dealerId: string, limit = 20): Promise<RecentCollectionDTO[]> {
     const body = await vpsRequest<{ rows: RecentCollectionDTO[] }>(
       `/api/collections/recent?dealerId=${encodeURIComponent(dealerId)}&limit=${limit}`,
@@ -75,5 +83,16 @@ export const collectionsService = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
+  },
+
+  /** V2 Sprint 4A — "Collection Adjustment": manual signed ledger entry outside the normal payment flow. */
+  async recordAdjustment(
+    dealerId: string,
+    input: { customer_id: string; amount: number; reason: string },
+  ) {
+    return await vpsRequest<{ row: unknown }>(
+      `/api/collections/adjustment?dealerId=${encodeURIComponent(dealerId)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    );
   },
 };

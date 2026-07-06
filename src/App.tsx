@@ -44,6 +44,7 @@ import EditSupplier from "./pages/suppliers/EditSupplier";
 import CustomersPage from "./pages/customers/CustomersPage";
 import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
+import CustomerProfilePage from "./pages/customers/CustomerProfilePage";
 import CreditReportPage from "./pages/reports/CreditReportPage";
 import ChallansPage from "./pages/challans/ChallansPage";
 import PurchaseReturnsPage from "./pages/purchase-returns/PurchaseReturnsPage";
@@ -302,6 +303,7 @@ const App = () => (
             <Route path="/customers" element={<ProtectedRoute><AppLayout><CustomersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/new" element={<ProtectedRoute><AppLayout><CreateCustomer /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/:id/edit" element={<ProtectedRoute><AppLayout><EditCustomer /></AppLayout></ProtectedRoute>} />
+            <Route path="/customers/:id" element={<ProtectedRoute><AppLayout><CustomerProfilePage /></AppLayout></ProtectedRoute>} />
             <Route path="/leads" element={<ProtectedRoute><AppLayout><LeadsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/leads/visits" element={<ProtectedRoute><AppLayout><LeadVisitRegisterPage /></AppLayout></ProtectedRoute>} />
             <Route path="/leads/options" element={<ProtectedRoute><AppLayout><LeadOptionsPage /></AppLayout></ProtectedRoute>} />

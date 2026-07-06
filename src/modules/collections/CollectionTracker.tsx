@@ -24,6 +24,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import PaymentReceipt from "./PaymentReceipt";
 import FollowUpPanel from "./FollowUpPanel";
+import AdjustmentDialog from "./AdjustmentDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 import { notificationService } from "@/services/notificationService";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
 import SendWhatsAppDialog from "@/components/whatsapp/SendWhatsAppDialog";
@@ -75,12 +77,15 @@ const AGING_BADGE: Record<string, { label: string; variant: string }> = {
 
 export default function CollectionTracker({ dealerId }: { dealerId: string }) {
   const { profile } = useAuth();
+  const { isDealerAdmin } = usePermissions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: dealerInfo } = useDealerInfo();
   const receiptRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [payDialog, setPayDialog] = useState<{ open: boolean; customer?: CustomerOutstanding }>({ open: false });
+  // V2 Sprint 4A — "Collection Adjustment" (dealer_admin only)
+  const [adjustDialog, setAdjustDialog] = useState<{ open: boolean; customer: { id: string; name: string } | null }>({ open: false, customer: null });
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
@@ -305,6 +310,11 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
                     <Button size="sm" variant="default" onClick={() => { setPayDialog({ open: true, customer: c }); setPayAmount(""); setPayNote(""); }}>
                       <DollarSign className="h-3 w-3 mr-1" /> Collect
                     </Button>
+                    {isDealerAdmin && (
+                      <Button size="sm" variant="outline" onClick={() => setAdjustDialog({ open: true, customer: { id: c.id, name: c.name } })} title="Adjust balance">
+                        Adjust
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => setFollowUpCustomer({ id: c.id, name: c.name })} title="Follow-up history">
                       <MessageSquareText className="h-3 w-3" />
                     </Button>
@@ -589,6 +599,14 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* V2 Sprint 4A — Collection Adjustment Dialog */}
+      <AdjustmentDialog
+        dealerId={dealerId}
+        customer={adjustDialog.customer}
+        open={adjustDialog.open}
+        onOpenChange={(open) => setAdjustDialog({ open, customer: open ? adjustDialog.customer : null })}
+      />
 
       {/* Receipt Dialog */}
       <Dialog open={!!receiptData} onOpenChange={(o) => !o && setReceiptData(null)}>

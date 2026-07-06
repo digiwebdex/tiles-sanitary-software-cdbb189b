@@ -28,16 +28,25 @@ import { exportToExcel } from "@/lib/exportUtils";
 
 const PAGE_SIZE = 25;
 
+// V2 Sprint 4A — extended with Dealer/Contractor/Builder/Corporate Customer.
 const TYPE_LABELS: Record<string, string> = {
   retailer: "Retailer",
   customer: "Regular",
   project: "Project",
+  dealer: "Dealer",
+  contractor: "Contractor",
+  builder: "Builder",
+  corporate: "Corporate",
 };
 
 const TYPE_COLORS: Record<string, string> = {
   retailer: "default",
   customer: "secondary",
   project: "outline",
+  dealer: "default",
+  contractor: "secondary",
+  builder: "secondary",
+  corporate: "outline",
 };
 
 function getAgingBucket(daysOverdue: number): string {
@@ -188,6 +197,10 @@ const CustomerList = () => {
             <SelectItem value="retailer">Retailer</SelectItem>
             <SelectItem value="customer">Regular</SelectItem>
             <SelectItem value="project">Project</SelectItem>
+            <SelectItem value="dealer">Dealer</SelectItem>
+            <SelectItem value="contractor">Contractor</SelectItem>
+            <SelectItem value="builder">Builder</SelectItem>
+            <SelectItem value="corporate">Corporate</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -281,7 +294,7 @@ const CustomerList = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}/edit`)}>
+                            <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}`)}>
                               <Eye className="mr-2 h-4 w-4" /> View Profile
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}/edit`)}>
