@@ -6,7 +6,7 @@ import {
   MessageCircle, UserCog, Inbox, HelpCircle, Crown, Landmark, Scale, Warehouse,
   ClipboardCheck, Sparkles, CalendarDays, AlertTriangle, CalendarClock, Building2,
   Megaphone, Award, GraduationCap, Laptop, BadgeDollarSign, Clock, LogOut,
-  Calculator, Boxes, Bookmark, Gauge,
+  Calculator, Boxes, Bookmark, Gauge, ClipboardList,
 } from "lucide-react";
 
 /** Staff roles below the owner (dealer_admin). Owner + super_admin see all. */
@@ -102,6 +102,7 @@ export const navSections: NavSection[] = [
       { path: "/leads/options", label: "Lead Options", icon: HandCoins, dealerAdminOnly: true, planFeature: "leads" },
       { path: "/projects", label: "Projects", icon: Folder, planFeature: "projects", roles: ["manager", "salesman"] },
       { path: "/quotations", label: "Quotations", icon: FileSignature, planFeature: "quotations", roles: ["manager", "salesman"] },
+      { path: "/sales-orders", label: "Sales Orders", icon: ClipboardList, planFeature: "quotations", roles: ["manager", "salesman"] },
       { path: "/collections", label: "Collections", icon: Wallet, roles: ["manager", "salesman", "accountant"] },
     ],
   },

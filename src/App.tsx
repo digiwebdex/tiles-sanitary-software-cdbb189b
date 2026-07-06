@@ -61,6 +61,9 @@ import ApprovalsPage from "./pages/approvals/ApprovalsPage";
 import QuotationsPage from "./pages/quotations/QuotationsPage";
 import CreateQuotation from "./pages/quotations/CreateQuotation";
 import EditQuotation from "./pages/quotations/EditQuotation";
+import SalesOrdersPage from "./pages/salesOrders/SalesOrdersPage";
+import CreateSalesOrder from "./pages/salesOrders/CreateSalesOrder";
+import EditSalesOrder from "./pages/salesOrders/EditSalesOrder";
 import ProjectsPage from "./pages/projects/ProjectsPage";
 import ReferralSourcesPage from "./pages/referrals/ReferralSourcesPage";
 import DisplaySampleStockPage from "./pages/display-sample/DisplaySampleStockPage";
@@ -332,6 +335,9 @@ const App = () => (
             <Route path="/quotations" element={<ProtectedRoute><AppLayout><QuotationsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/quotations/new" element={<ProtectedRoute><AppLayout><CreateQuotation /></AppLayout></ProtectedRoute>} />
             <Route path="/quotations/:id/edit" element={<ProtectedRoute><AppLayout><EditQuotation /></AppLayout></ProtectedRoute>} />
+            <Route path="/sales-orders" element={<ProtectedRoute><AppLayout><SalesOrdersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/sales-orders/new" element={<ProtectedRoute><AppLayout><CreateSalesOrder /></AppLayout></ProtectedRoute>} />
+            <Route path="/sales-orders/:id/edit" element={<ProtectedRoute><AppLayout><EditSalesOrder /></AppLayout></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><AppLayout><ProjectsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/referrals" element={<ProtectedRoute><AppLayout><ReferralSourcesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/display-sample" element={<ProtectedRoute><AppLayout><DisplaySampleStockPage /></AppLayout></ProtectedRoute>} />
