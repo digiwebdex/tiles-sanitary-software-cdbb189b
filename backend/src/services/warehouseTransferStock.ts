@@ -17,16 +17,46 @@ export async function getDefaultWarehouseId(
   return row?.id ?? null;
 }
 
+export type TransferLevel = 'warehouse' | 'godown' | 'rack';
+
+const LOCATION_TABLE: Record<TransferLevel, string> = {
+  warehouse: 'warehouse_stock',
+  godown: 'godown_stock',
+  rack: 'rack_stock',
+};
+
+const LOCATION_ID_COLUMN: Record<TransferLevel, string> = {
+  warehouse: 'warehouse_id',
+  godown: 'godown_id',
+  rack: 'rack_id',
+};
+
+const LOCATION_LABEL: Record<TransferLevel, string> = {
+  warehouse: 'warehouse',
+  godown: 'godown',
+  rack: 'rack',
+};
+
 /**
- * Move qty between warehouse_stock rows (P3-06).
- * Does not touch aggregate `stock` — warehouse_stock is location cache.
+ * Move qty between location-scoped stock cache rows.
+ *
+ * V2 Sprint 3B — generic over `warehouse_stock` / `godown_stock` /
+ * `rack_stock`, which all share the same shape (dealer_id, <location>_id,
+ * product_id, box/piece/sft/total_pieces). This is the same mechanism
+ * `applyWarehouseTransferStock` used pre-3B (P3-06), now parameterized by
+ * tier so godown- and rack-level transfers reuse it unchanged rather than
+ * duplicating the box/piece/sft delta math three times.
+ *
+ * Does not touch the aggregate `stock` table — each `<level>_stock` table is
+ * a location cache, same as `warehouse_stock` always was.
  */
-export async function applyWarehouseTransferStock(
+async function applyLocationTransferStock(
   trx: Knex.Transaction,
+  level: TransferLevel,
   params: {
     dealerId: string;
-    fromWarehouseId: string;
-    toWarehouseId: string;
+    fromId: string;
+    toId: string;
     productId: string;
     quantity: number;
     unit: string;
@@ -35,19 +65,13 @@ export async function applyWarehouseTransferStock(
     userId: string | null;
   },
 ): Promise<void> {
-  const {
-    dealerId,
-    fromWarehouseId,
-    toWarehouseId,
-    productId,
-    quantity,
-    unit,
-    transferId,
-    transferNo,
-  } = params;
+  const { dealerId, fromId, toId, productId, quantity, unit, transferId, transferNo } = params;
+  const table = LOCATION_TABLE[level];
+  const idCol = LOCATION_ID_COLUMN[level];
+  const label = LOCATION_LABEL[level];
 
-  if (fromWarehouseId === toWarehouseId) {
-    throw new Error('Source and destination warehouse must differ');
+  if (fromId === toId) {
+    throw new Error(`Source and destination ${label} must differ`);
   }
 
   const product = await trx('products')
@@ -69,18 +93,18 @@ export async function applyWarehouseTransferStock(
   const totalPieces = boxDelta * ppb + pieceDelta;
   const sftDelta = boxDelta * perBoxSft;
 
-  const fromRow = await trx('warehouse_stock')
-    .where({ dealer_id: dealerId, warehouse_id: fromWarehouseId, product_id: productId })
+  const fromRow = await trx(table)
+    .where({ dealer_id: dealerId, [idCol]: fromId, product_id: productId })
     .forUpdate()
     .first();
 
   if (!fromRow || num(fromRow.total_pieces) < totalPieces - 0.0001) {
-    throw new Error('Insufficient stock at source warehouse');
+    throw new Error(`Insufficient stock at source ${label}`);
   }
 
-  const upsertWhStock = async (warehouseId: string, sign: 1 | -1) => {
-    const existing = await trx('warehouse_stock')
-      .where({ dealer_id: dealerId, warehouse_id: warehouseId, product_id: productId })
+  const upsertLocationStock = async (locationId: string, sign: 1 | -1) => {
+    const existing = await trx(table)
+      .where({ dealer_id: dealerId, [idCol]: locationId, product_id: productId })
       .forUpdate()
       .first();
 
@@ -90,10 +114,10 @@ export async function applyWarehouseTransferStock(
     const tp = sign * totalPieces;
 
     if (!existing) {
-      if (sign < 0) throw new Error('Insufficient stock at source warehouse');
-      await trx('warehouse_stock').insert({
+      if (sign < 0) throw new Error(`Insufficient stock at source ${label}`);
+      await trx(table).insert({
         dealer_id: dealerId,
-        warehouse_id: warehouseId,
+        [idCol]: locationId,
         product_id: productId,
         box_qty: Math.max(0, b),
         piece_qty: Math.max(0, p),
@@ -106,11 +130,11 @@ export async function applyWarehouseTransferStock(
     const newBox = num(existing.box_qty) + b;
     const newPiece = num(existing.piece_qty) + p;
     if (newBox < -0.0001 || newPiece < -0.0001 || num(existing.total_pieces) + tp < -0.0001) {
-      throw new Error('Insufficient stock at source warehouse');
+      throw new Error(`Insufficient stock at source ${label}`);
     }
 
-    await trx('warehouse_stock')
-      .where({ dealer_id: dealerId, warehouse_id: warehouseId, product_id: productId })
+    await trx(table)
+      .where({ dealer_id: dealerId, [idCol]: locationId, product_id: productId })
       .update({
         box_qty: Math.max(0, newBox),
         piece_qty: Math.max(0, newPiece),
@@ -120,8 +144,8 @@ export async function applyWarehouseTransferStock(
       });
   };
 
-  await upsertWhStock(fromWarehouseId, -1);
-  await upsertWhStock(toWarehouseId, 1);
+  await upsertLocationStock(fromId, -1);
+  await upsertLocationStock(toId, 1);
 
   const refNo = transferNo ?? transferId;
 
@@ -129,8 +153,8 @@ export async function applyWarehouseTransferStock(
     {
       dealer_id: dealerId,
       product_id: productId,
-      warehouse_id: fromWarehouseId,
-      movement_type: 'warehouse_transfer_out',
+      [idCol]: fromId,
+      movement_type: `${level}_transfer_out`,
       qty_delta: -totalPieces,
       qty_unit: 'pieces',
       reference_type: 'warehouse_transfers',
@@ -140,8 +164,8 @@ export async function applyWarehouseTransferStock(
     {
       dealer_id: dealerId,
       product_id: productId,
-      warehouse_id: toWarehouseId,
-      movement_type: 'warehouse_transfer_in',
+      [idCol]: toId,
+      movement_type: `${level}_transfer_in`,
       qty_delta: totalPieces,
       qty_unit: 'pieces',
       reference_type: 'warehouse_transfers',
@@ -149,4 +173,85 @@ export async function applyWarehouseTransferStock(
       reference_no: refNo,
     },
   ]);
+}
+
+export async function applyWarehouseTransferStock(
+  trx: Knex.Transaction,
+  params: {
+    dealerId: string;
+    fromWarehouseId: string;
+    toWarehouseId: string;
+    productId: string;
+    quantity: number;
+    unit: string;
+    transferId: string;
+    transferNo: string | null;
+    userId: string | null;
+  },
+): Promise<void> {
+  return applyLocationTransferStock(trx, 'warehouse', {
+    dealerId: params.dealerId,
+    fromId: params.fromWarehouseId,
+    toId: params.toWarehouseId,
+    productId: params.productId,
+    quantity: params.quantity,
+    unit: params.unit,
+    transferId: params.transferId,
+    transferNo: params.transferNo,
+    userId: params.userId,
+  });
+}
+
+export async function applyGodownTransferStock(
+  trx: Knex.Transaction,
+  params: {
+    dealerId: string;
+    fromGodownId: string;
+    toGodownId: string;
+    productId: string;
+    quantity: number;
+    unit: string;
+    transferId: string;
+    transferNo: string | null;
+    userId: string | null;
+  },
+): Promise<void> {
+  return applyLocationTransferStock(trx, 'godown', {
+    dealerId: params.dealerId,
+    fromId: params.fromGodownId,
+    toId: params.toGodownId,
+    productId: params.productId,
+    quantity: params.quantity,
+    unit: params.unit,
+    transferId: params.transferId,
+    transferNo: params.transferNo,
+    userId: params.userId,
+  });
+}
+
+export async function applyRackTransferStock(
+  trx: Knex.Transaction,
+  params: {
+    dealerId: string;
+    fromRackId: string;
+    toRackId: string;
+    productId: string;
+    quantity: number;
+    unit: string;
+    transferId: string;
+    transferNo: string | null;
+    userId: string | null;
+  },
+): Promise<void> {
+  return applyLocationTransferStock(trx, 'rack', {
+    dealerId: params.dealerId,
+    fromId: params.fromRackId,
+    toId: params.toRackId,
+    productId: params.productId,
+    quantity: params.quantity,
+    unit: params.unit,
+    transferId: params.transferId,
+    transferNo: params.transferNo,
+    userId: params.userId,
+  });
 }
