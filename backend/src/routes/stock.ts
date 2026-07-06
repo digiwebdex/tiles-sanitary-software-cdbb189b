@@ -109,6 +109,83 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /api/stock/ledger ───────────────────────────────────────────────────
+// V2 Sprint 3A — Inventory Core: "Stock Ledger" / "Stock History".
+//
+// Every stock-moving transaction (manual adjustment, purchase receipt, sale,
+// return, restore) already writes a row to `stock_ledger` — see
+// routes/adjustments.ts, routes/purchases.ts, routes/sales.ts. Nothing reads
+// it back today; this is the one new read surface Sprint 3A adds. Registered
+// BEFORE `/:id` so Express doesn't capture "ledger" as the :id param.
+//
+//   GET /api/stock/ledger?dealerId=&productId=&from=&to=&page=&pageSize=
+//     productId  optional — filters to one product ("Stock History" use case)
+//     from/to    optional — inclusive date range (YYYY-MM-DD) on created_at
+//   No dealer_admin restriction: stock_ledger carries quantities only (no
+//   cost/rate columns), so it's safe for the same audience as GET /api/stock.
+router.get('/ledger', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealerScope(req, res);
+    if (!dealerId) return;
+
+    const page = Math.max(0, parseInt((req.query.page as string) || '0', 10));
+    const pageSize = Math.min(
+      200,
+      Math.max(1, parseInt((req.query.pageSize as string) || '50', 10)),
+    );
+    const productId = (req.query.productId as string) || undefined;
+    const from = (req.query.from as string) || undefined;
+    const to = (req.query.to as string) || undefined;
+
+    let q = db('stock_ledger as sl')
+      .innerJoin('products as p', 'p.id', 'sl.product_id')
+      .where('sl.dealer_id', dealerId);
+
+    if (productId) q = q.andWhere('sl.product_id', productId);
+    if (from) q = q.andWhere('sl.created_at', '>=', from);
+    // Inclusive end-of-day: `to` is a plain date, so bump to the start of the
+    // next day rather than comparing against midnight of `to` itself.
+    if (to) q = q.andWhere('sl.created_at', '<', db.raw(`(?::date + interval '1 day')`, [to]));
+
+    const countQ = q.clone().clearSelect().count<{ count: string }[]>('sl.id as count');
+
+    const rowsQ = q
+      .clone()
+      .select(
+        'sl.id',
+        'sl.product_id',
+        'p.name as product_name',
+        'p.sku as product_sku',
+        'p.unit_type as product_unit_type',
+        'p.pieces_per_box as product_pieces_per_box',
+        'sl.txn_type',
+        'sl.reference_table',
+        'sl.reference_id',
+        'sl.reference_no',
+        'sl.box_qty',
+        'sl.piece_qty',
+        'sl.total_pieces',
+        'sl.stock_before_pieces',
+        'sl.stock_after_pieces',
+        'sl.stock_before_display',
+        'sl.stock_after_display',
+        'sl.created_by',
+        'sl.created_at',
+      )
+      .orderBy('sl.created_at', 'desc')
+      .offset(page * pageSize)
+      .limit(pageSize);
+
+    const [countRow] = await countQ;
+    const rows = await rowsQ;
+
+    res.json({ rows, total: Number(countRow?.count ?? 0) });
+  } catch (err: any) {
+    console.error('[stock/ledger]', err.message);
+    res.status(500).json({ error: 'Failed to load stock ledger' });
+  }
+});
+
 // ── GET /api/stock/:id ─────────────────────────────────────────────────────
 router.get('/:id', async (req: Request, res: Response) => {
   try {

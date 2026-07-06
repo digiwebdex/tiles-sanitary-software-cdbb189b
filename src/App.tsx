@@ -22,6 +22,7 @@ import SubscriptionPage from "./pages/subscription/SubscriptionPage";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ProductsPage from "./pages/products/ProductsPage";
+import InventoryPage from "./pages/inventory/InventoryPage";
 import CreateProductRoute from "./pages/products/CreateProductRoute";
 import EditProduct from "./pages/products/EditProduct";
 import DamagePage from "./pages/damage/DamagePage";
@@ -285,6 +286,8 @@ const App = () => (
             <Route path="/products" element={<ProtectedRoute><AppLayout><ProductsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/products/new" element={<ProtectedRoute><AppLayout><CreateProductRoute /></AppLayout></ProtectedRoute>} />
             <Route path="/products/:id/edit" element={<ProtectedRoute><AppLayout><EditProduct /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 3A — Inventory Core */}
+            <Route path="/inventory" element={<ProtectedRoute><AppLayout><InventoryPage /></AppLayout></ProtectedRoute>} />
             <Route path="/damage" element={<ProtectedRoute><AppLayout><DamagePage /></AppLayout></ProtectedRoute>} />
             <Route path="/suppliers" element={<ProtectedRoute><AppLayout><SuppliersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/suppliers/new" element={<ProtectedRoute><AppLayout><CreateSupplier /></AppLayout></ProtectedRoute>} />

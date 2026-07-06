@@ -184,9 +184,54 @@ export const stockService = {
     return ((body as any).rows ?? []) as DamageEntry[];
   },
 
+  /**
+   * V2 Sprint 3A — Inventory Core: "Stock Ledger" / "Stock History".
+   * Dealer-wide by default; pass productId to scope to one product.
+   */
+  getLedger: async (
+    dealerId: string,
+    opts: { productId?: string; from?: string; to?: string; page?: number; pageSize?: number } = {},
+  ): Promise<{ rows: StockLedgerEntry[]; total: number }> => {
+    const params = new URLSearchParams({ dealerId });
+    if (opts.productId) params.set('productId', opts.productId);
+    if (opts.from) params.set('from', opts.from);
+    if (opts.to) params.set('to', opts.to);
+    if (opts.page !== undefined) params.set('page', String(opts.page));
+    if (opts.pageSize !== undefined) params.set('pageSize', String(opts.pageSize));
+    const res = await vpsAuthedFetch(`/api/stock/ledger?${params.toString()}`);
+    const body = await res.json().catch(() => ({} as any));
+    if (!res.ok) throw new Error((body as any)?.error || 'Failed to load stock ledger');
+    return {
+      rows: ((body as any).rows ?? []) as StockLedgerEntry[],
+      total: Number((body as any).total ?? 0),
+    };
+  },
+
   getAvailableQty,
   deductStockWithBackorder,
 };
+
+export interface StockLedgerEntry {
+  id: string;
+  product_id: string;
+  product_name: string;
+  product_sku: string;
+  product_unit_type: 'box_sft' | 'piece';
+  product_pieces_per_box: number | null;
+  txn_type: string;
+  reference_table: string | null;
+  reference_id: string | null;
+  reference_no: string | null;
+  box_qty: number;
+  piece_qty: number;
+  total_pieces: number;
+  stock_before_pieces: number;
+  stock_after_pieces: number;
+  stock_before_display: string;
+  stock_after_display: string;
+  created_by: string | null;
+  created_at: string;
+}
 
 export interface DamageEntry {
   id: string;

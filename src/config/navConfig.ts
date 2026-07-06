@@ -6,7 +6,7 @@ import {
   MessageCircle, UserCog, Inbox, HelpCircle, Crown, Landmark, Scale, Warehouse,
   ClipboardCheck, Sparkles, CalendarDays, AlertTriangle, CalendarClock, Building2,
   Megaphone, Award, GraduationCap, Laptop, BadgeDollarSign, Clock, LogOut,
-  Calculator,
+  Calculator, Boxes,
 } from "lucide-react";
 
 /** Staff roles below the owner (dealer_admin). Owner + super_admin see all. */
@@ -124,6 +124,9 @@ export const navSections: NavSection[] = [
     defaultOpen: false,
     items: [
       { path: "/products", label: "Products", icon: Package, roles: ["manager", "salesman"] },
+      // V2 Sprint 3A — Inventory Core: dealer-wide current stock, stock
+      // ledger/history, movement, adjustment, and summary.
+      { path: "/inventory", label: "Current Stock", icon: Boxes, roles: ["manager", "salesman"] },
       { path: "/damage", label: "Damage / Broken", icon: AlertTriangle, dealerAdminOnly: true },
       // Warehouses visible on all plans — quantity is limited by plan (enforced in backend)
       { path: "/warehouses", label: "Warehouses", icon: Warehouse, dealerAdminOnly: true },
