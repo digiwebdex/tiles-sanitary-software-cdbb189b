@@ -53,6 +53,11 @@ import PurchaseOrderDetail from "./pages/purchase-orders/PurchaseOrderDetail";
 import GoodsReceiptsPage from "./pages/goods-receipts/GoodsReceiptsPage";
 import CreateGoodsReceipt from "./pages/goods-receipts/CreateGoodsReceipt";
 import GoodsReceiptDetail from "./pages/goods-receipts/GoodsReceiptDetail";
+import PurchaseInvoicesPage from "./pages/purchase-invoices/PurchaseInvoicesPage";
+import CreatePurchaseInvoice from "./pages/purchase-invoices/CreatePurchaseInvoice";
+import PurchaseInvoiceDetail from "./pages/purchase-invoices/PurchaseInvoiceDetail";
+import SupplierStatementPage from "./pages/supplier-ledger/SupplierStatementPage";
+import SupplierAgingPage from "./pages/supplier-ledger/SupplierAgingPage";
 import CustomersPage from "./pages/customers/CustomersPage";
 import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
@@ -332,6 +337,11 @@ const App = () => (
             <Route path="/goods-receipts/new" element={<ProtectedRoute><AppLayout><CreateGoodsReceipt /></AppLayout></ProtectedRoute>} />
             <Route path="/goods-receipts/:id/edit" element={<ProtectedRoute><AppLayout><CreateGoodsReceipt /></AppLayout></ProtectedRoute>} />
             <Route path="/goods-receipts/:id" element={<ProtectedRoute><AppLayout><GoodsReceiptDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-invoices" element={<ProtectedRoute><AppLayout><PurchaseInvoicesPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-invoices/new" element={<ProtectedRoute><AppLayout><CreatePurchaseInvoice /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-invoices/:id" element={<ProtectedRoute><AppLayout><PurchaseInvoiceDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/supplier-ledger/statement" element={<ProtectedRoute><AppLayout><SupplierStatementPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/supplier-ledger/aging" element={<ProtectedRoute><AppLayout><SupplierAgingPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases" element={<ProtectedRoute><AppLayout><PurchasesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/new" element={<ProtectedRoute><AppLayout><CreatePurchase /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/:id" element={<ProtectedRoute><AppLayout><ViewPurchase /></AppLayout></ProtectedRoute>} />
