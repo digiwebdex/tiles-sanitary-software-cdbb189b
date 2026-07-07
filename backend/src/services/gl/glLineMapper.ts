@@ -42,6 +42,13 @@
  * `stock`/`sale_out`, which DOES need its own GL line (debit COGS / credit
  * Inventory is a genuinely separate effect from debit AR / credit Sales
  * Revenue — standard perpetual-inventory double-entry, not a duplicate).
+ *
+ * V2 Sprint 6B addition — `customer`/`'opening_balance'` and `supplier`/
+ * `'opening_balance'` line types (see services/accounting/openingBalancePosting.ts):
+ * a per-party balance predating the system, booked against a dedicated
+ * Opening Balance Equity suspense account (GL_CODES.OPENING_BALANCE_EQUITY)
+ * rather than Sales/COGS/Inventory, since it isn't a current-period
+ * transaction. Additive only — no existing case's behavior changes.
  */
 import { GL_CODES } from '../../lib/glChart';
 
@@ -115,6 +122,19 @@ export function mapPostingLineToGl(line: PostingLineForGl, taxSplit?: TaxSplit):
         drafts.push(
           { ...base, accountCode: GL_CODES.AR, debit: 0, credit: amt },
         );
+      } else if (line.line_type === 'opening_balance' && amt !== 0) {
+        const a = abs(amt);
+        if (amt > 0) {
+          drafts.push(
+            { ...base, accountCode: GL_CODES.AR, debit: a, credit: 0 },
+            { ...base, accountCode: GL_CODES.OPENING_BALANCE_EQUITY, debit: 0, credit: a },
+          );
+        } else {
+          drafts.push(
+            { ...base, accountCode: GL_CODES.AR, debit: 0, credit: a },
+            { ...base, accountCode: GL_CODES.OPENING_BALANCE_EQUITY, debit: a, credit: 0 },
+          );
+        }
       }
       break;
     }
@@ -138,6 +158,23 @@ export function mapPostingLineToGl(line: PostingLineForGl, taxSplit?: TaxSplit):
         drafts.push(
           { ...base, accountCode: GL_CODES.AP, debit: amt, credit: 0 },
         );
+      } else if (line.line_type === 'opening_balance' && amt !== 0) {
+        // Supplier convention matches the 'purchase' branch above exactly
+        // (ledgerBalance.ts computeSupplierBalance's `else` bucket: balance
+        // += -amt): a NEGATIVE amount is what we owe more of, same as a
+        // purchase; a positive amount is a credit balance in our favor.
+        const a = abs(amt);
+        if (amt < 0) {
+          drafts.push(
+            { ...base, accountCode: GL_CODES.OPENING_BALANCE_EQUITY, debit: a, credit: 0 },
+            { ...base, accountCode: GL_CODES.AP, debit: 0, credit: a },
+          );
+        } else {
+          drafts.push(
+            { ...base, accountCode: GL_CODES.OPENING_BALANCE_EQUITY, debit: 0, credit: a },
+            { ...base, accountCode: GL_CODES.AP, debit: a, credit: 0 },
+          );
+        }
       }
       break;
     }

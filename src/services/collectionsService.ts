@@ -12,7 +12,7 @@ export interface CustomerOutstandingDTO {
   last_payment_date: string | null;
   total_sales: number;
   total_paid: number;
-  invoices: { invoice_number: string; sale_id: string; sale_date: string }[];
+  invoices: { invoice_number: string; sale_id: string; sale_date: string; due_amount: number }[];
   oldestSaleDate: string | null;
   daysOverdue: number;
   agingBucket: string;
@@ -63,7 +63,7 @@ export const collectionsService = {
     return body.rows ?? [];
   },
 
-  /** Record payment against oldest due invoices (FIFO) for a customer. */
+  /** Record payment against oldest due invoices (FIFO), or a specific invoice via sale_id, for a customer. */
   async recordPayment(
     dealerId: string,
     input: {
@@ -72,6 +72,7 @@ export const collectionsService = {
       note?: string;
       payment_mode?: string;
       paid_account_id?: string | null;
+      sale_id?: string;
     },
   ) {
     return await vpsRequest<{

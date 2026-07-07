@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { useDealerId } from "@/hooks/useDealerId";
 import { customerStatementService } from "@/services/customerStatementService";
+import { openingBalanceService } from "@/services/openingBalanceService";
 import { buildWaLink, normalizePhoneForWa, isValidWaPhone } from "@/services/whatsappService";
 import { formatCurrency } from "@/lib/utils";
-import { Printer, ArrowLeft, MessageCircle } from "lucide-react";
+import { Printer, ArrowLeft, MessageCircle, Landmark } from "lucide-react";
+import { toast } from "sonner";
 
 const CustomerStatementPage = () => {
   const { customerId } = useParams<{ customerId: string }>();
@@ -26,10 +28,24 @@ const CustomerStatementPage = () => {
   const from = sp.get("from") || "";
   const to = sp.get("to") || todayStr;
 
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["customer-statement", customerId, dealerId, from, to],
     queryFn: () => customerStatementService.get(customerId!, dealerId, { from: from || undefined, to: to || undefined }),
     enabled: !!customerId && !!dealerId,
+  });
+
+  // V2 Sprint 6B — one-time, idempotent action mirroring this customer's
+  // opening_balance into the ledger/GL (see openingBalancePosting.ts). Safe
+  // to call more than once; a second call is a no-op.
+  const postOpeningBalance = useMutation({
+    mutationFn: () => openingBalanceService.postCustomer(dealerId, customerId!),
+    onSuccess: (res) => {
+      if (res.posted) toast.success("Opening balance posted to ledger/GL");
+      else toast.info("Opening balance was already posted (or is zero)");
+      queryClient.invalidateQueries({ queryKey: ["customer-statement"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to post opening balance"),
   });
 
   const setRange = (f: string, t: string) => {
@@ -83,6 +99,10 @@ const CustomerStatementPage = () => {
           <Button variant="outline" size="sm" onClick={() => setRange("", todayStr)}>All Time</Button>
           <Button onClick={() => window.print()}><Printer className="h-4 w-4 mr-2" />Print / PDF</Button>
           <Button variant="secondary" onClick={sendWhatsApp}><MessageCircle className="h-4 w-4 mr-2" />WhatsApp</Button>
+          <Button variant="outline" size="sm" disabled={postOpeningBalance.isPending} onClick={() => postOpeningBalance.mutate()}>
+            <Landmark className="h-4 w-4 mr-2" />
+            {postOpeningBalance.isPending ? "Posting…" : "Post Opening Balance to GL"}
+          </Button>
         </div>
       </div>
 

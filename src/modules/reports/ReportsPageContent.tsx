@@ -1970,6 +1970,20 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
     },
   });
 
+  // V2 Sprint 6B — Due Today/This Week/This Month, mirroring the supplier
+  // side's existing supplier-aging cards (same recency-based convention,
+  // since no due-date/payment-terms field exists on Sales/Customers either).
+  const { data: dueBuckets } = useQuery({
+    queryKey: ["customer-aging-due-buckets", dealerId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ dealerId });
+      const res = await vpsAuthedFetch(`/api/customer-aging?${params.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      const body = await res.json();
+      return body.summary as { due_today: number; due_this_week: number; due_this_month: number };
+    },
+  });
+
   const rows = (data ?? []).filter(
     (c) => c.name.toLowerCase().includes(search.toLowerCase()) || (c.phone && c.phone.includes(search))
   );
@@ -2007,6 +2021,22 @@ function DueAgingReport({ dealerId }: { dealerId: string }) {
             <CardContent className="p-3 text-center">
               <p className="text-xs text-muted-foreground">{c.label}</p>
               <p className={`text-lg font-bold ${c.color}`}>৳{Math.round(c.value).toLocaleString()}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Due Today / This Week / This Month (V2 Sprint 6B) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          { label: "Due Today", value: dueBuckets?.due_today ?? 0 },
+          { label: "Due This Week", value: dueBuckets?.due_this_week ?? 0 },
+          { label: "Due This Month", value: dueBuckets?.due_this_month ?? 0 },
+        ].map((c) => (
+          <Card key={c.label}>
+            <CardContent className="p-3 text-center">
+              <p className="text-xs text-muted-foreground">{c.label}</p>
+              <p className="text-lg font-bold text-foreground">৳{Math.round(c.value).toLocaleString()}</p>
             </CardContent>
           </Card>
         ))}

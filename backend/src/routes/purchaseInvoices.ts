@@ -31,6 +31,8 @@ import { requireRole } from '../middleware/roles';
 import { computeVatBreakdown } from '../lib/vatMath';
 import { loadDealerVatSettings, insertTaxPostingLine } from '../services/taxPostingService';
 import { recordSupplierPaymentFifo } from '../lib/supplierPayment';
+import { isPostingEngineEnabled, mirrorToPostingTables } from '../services/posting/PostingOrchestrator';
+import { buildPurchaseLedgerLines } from '../services/posting/LedgerPostingEngine';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -399,6 +401,36 @@ router.post('/:id/finalize', requireRole('dealer_admin', 'manager', 'accountant'
         description: `Purchase Invoice ${invoiceNumber}`,
         entry_date: purchase.purchase_date,
       });
+
+      // V2 Sprint 6B — mirror into the Posting Engine. Stock/batch/warehouse
+      // effects are NOT re-posted here (Goods Receipt already posted them at
+      // receiving time, per this file's own header comment); only the
+      // financial (supplier_ledger) effect above needs a GL mirror. The
+      // `paid_on_create` payment portion, if any, is mirrored separately by
+      // `recordSupplierPaymentFifo` itself (wired in the same sprint) — NOT
+      // passed to `buildPurchaseLedgerLines` here, to avoid double-posting it.
+      if (isPostingEngineEnabled()) {
+        const posting = await mirrorToPostingTables(
+          {
+            trx,
+            dealerId,
+            documentType: 'purchase',
+            documentId: purchase.id,
+            eventType: 'posted',
+            entryDate: purchase.purchase_date,
+            postedBy: userId,
+            idempotencyKey: `purchase:post:${purchase.id}`,
+          },
+          buildPurchaseLedgerLines({
+            purchaseId: purchase.id,
+            supplierId: purchase.supplier_id,
+            entryDate: purchase.purchase_date,
+            netPayable: grossPayable,
+            description: `Purchase Invoice ${invoiceNumber}`,
+          }),
+        );
+        await trx('purchases').where({ id: purchase.id }).update({ posting_batch_id: posting.batchId });
+      }
 
       if (paid_on_create > 0) {
         // Reuses the existing FIFO payment recorder — since this targets a

@@ -121,6 +121,41 @@ describe('glLineMapper — cash/bank/expense (unchanged, re-verified)', () => {
   });
 });
 
+describe('glLineMapper — opening_balance (V2 Sprint 6B)', () => {
+  it('maps a positive customer opening balance to debit AR / credit Opening Balance Equity', () => {
+    const drafts = mapPostingLineToGl({ id: 'ob1', line_domain: 'customer', line_type: 'opening_balance', amount: 5000 });
+    expect(drafts).toHaveLength(2);
+    expect(drafts.find((d) => d.accountCode === GL_CODES.AR)).toMatchObject({ debit: 5000, credit: 0 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.OPENING_BALANCE_EQUITY)).toMatchObject({ debit: 0, credit: 5000 });
+  });
+
+  it('maps a negative customer opening balance (credit balance) as the exact mirror', () => {
+    const drafts = mapPostingLineToGl({ id: 'ob2', line_domain: 'customer', line_type: 'opening_balance', amount: -1200 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.AR)).toMatchObject({ debit: 0, credit: 1200 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.OPENING_BALANCE_EQUITY)).toMatchObject({ debit: 1200, credit: 0 });
+  });
+
+  it('maps a supplier opening balance (negative amount = we owe more, matching the purchase convention) to debit Opening Balance Equity / credit AP', () => {
+    const drafts = mapPostingLineToGl({ id: 'ob3', line_domain: 'supplier', line_type: 'opening_balance', amount: -3000 });
+    expect(drafts).toHaveLength(2);
+    expect(drafts.find((d) => d.accountCode === GL_CODES.OPENING_BALANCE_EQUITY)).toMatchObject({ debit: 3000, credit: 0 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.AP)).toMatchObject({ debit: 0, credit: 3000 });
+  });
+
+  it('maps a positive supplier opening balance (credit in our favor) as the exact mirror', () => {
+    const drafts = mapPostingLineToGl({ id: 'ob4', line_domain: 'supplier', line_type: 'opening_balance', amount: 800 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.OPENING_BALANCE_EQUITY)).toMatchObject({ debit: 0, credit: 800 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.AP)).toMatchObject({ debit: 800, credit: 0 });
+  });
+
+  it('each opening_balance draft pair is independently balanced (no Clearing plug needed)', () => {
+    const { wasUnbalanced } = mapPostingLinesToGl([
+      { id: 'ob5', line_domain: 'customer', line_type: 'opening_balance', amount: 2500 },
+    ]);
+    expect(wasUnbalanced).toBe(false);
+  });
+});
+
 describe('balanceGlDrafts — posting validation', () => {
   it('adds a clearing line and flags wasUnbalanced when a batch is unbalanced', () => {
     const result = balanceGlDrafts([

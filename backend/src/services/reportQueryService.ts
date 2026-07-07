@@ -477,8 +477,10 @@ export async function listPayablesOutstanding(
   }
 
   const [purchases, suppliers] = await Promise.all([
+    // V2 Sprint 6B fix: a draft (not-yet-finalized) Purchase Invoice must
+    // not be payable — only a posted bill has a real, final due amount.
     db('purchases')
-      .where({ dealer_id: dealerId })
+      .where({ dealer_id: dealerId, document_status: 'posted' })
       .whereIn('supplier_id', supplierIds)
       .orderBy('purchase_date', 'asc')
       .select('*'),

@@ -11,14 +11,16 @@
  */
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDealerId } from "@/hooks/useDealerId";
 import { supplierService } from "@/services/supplierService";
+import { openingBalanceService } from "@/services/openingBalanceService";
 import { formatCurrency } from "@/lib/utils";
-import { Printer, ArrowLeft, Search } from "lucide-react";
+import { Printer, ArrowLeft, Search, Landmark } from "lucide-react";
+import { toast } from "sonner";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -50,6 +52,19 @@ const SupplierStatementPage = () => {
     queryKey: ["supplier-ledger-summary", supplierId],
     queryFn: () => supplierService.getLedgerSummary(supplierId),
     enabled: !!supplierId,
+  });
+
+  // V2 Sprint 6B — one-time, idempotent action mirroring this supplier's
+  // opening_balance into the ledger/GL (see openingBalancePosting.ts).
+  const queryClient = useQueryClient();
+  const postOpeningBalance = useMutation({
+    mutationFn: () => openingBalanceService.postSupplier(dealerId, supplierId),
+    onSuccess: (res) => {
+      if (res.posted) toast.success("Opening balance posted to ledger/GL");
+      else toast.info("Opening balance was already posted (or is zero)");
+      queryClient.invalidateQueries({ queryKey: ["supplier-ledger-summary"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to post opening balance"),
   });
 
   const rows = useMemo(() => {
@@ -102,7 +117,13 @@ const SupplierStatementPage = () => {
     <div className="container mx-auto p-4 max-w-5xl">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-4 print:hidden">
         <Button variant="outline" onClick={() => setSp({})}><ArrowLeft className="h-4 w-4 mr-2" />Change Supplier</Button>
-        <Button onClick={() => window.print()}><Printer className="h-4 w-4 mr-2" />Print / PDF</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={postOpeningBalance.isPending} onClick={() => postOpeningBalance.mutate()}>
+            <Landmark className="h-4 w-4 mr-2" />
+            {postOpeningBalance.isPending ? "Posting…" : "Post Opening Balance to GL"}
+          </Button>
+          <Button onClick={() => window.print()}><Printer className="h-4 w-4 mr-2" />Print / PDF</Button>
+        </div>
       </div>
 
       <Card className="print:shadow-none print:border-0">

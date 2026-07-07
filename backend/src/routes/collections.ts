@@ -104,11 +104,14 @@ router.get('/outstanding', async (req: Request, res: Response) => {
       }
     }
 
-    const invoiceMap = new Map<string, { invoice_number: string; sale_id: string; sale_date: string }[]>();
+    // V2 Sprint 6B — due_amount added (already fetched above, just not
+    // surfaced before) so the frontend can offer manual bill selection for
+    // a payment instead of only implicit FIFO.
+    const invoiceMap = new Map<string, { invoice_number: string; sale_id: string; sale_date: string; due_amount: number }[]>();
     for (const s of sales) {
       if (!s.invoice_number) continue;
       const arr = invoiceMap.get(s.customer_id) ?? [];
-      arr.push({ invoice_number: s.invoice_number, sale_id: s.id, sale_date: String(s.sale_date) });
+      arr.push({ invoice_number: s.invoice_number, sale_id: s.id, sale_date: String(s.sale_date), due_amount: Number(s.due_amount) || 0 });
       invoiceMap.set(s.customer_id, arr);
     }
 
@@ -166,6 +169,9 @@ const collectionPaymentSchema = z.object({
   note: z.string().trim().max(500).optional(),
   payment_mode: z.string().trim().max(50).optional(),
   paid_account_id: z.string().uuid().optional().nullable(),
+  // V2 Sprint 6B — optional manual bill targeting (mirrors the supplier
+  // side's existing purchase_id targeting); omitted = FIFO, unchanged.
+  sale_id: z.string().uuid().optional(),
 });
 
 router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'salesman'), async (req: Request, res: Response) => {
@@ -178,7 +184,7 @@ router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'sa
     return;
   }
 
-  const { customer_id, amount, note, payment_mode, paid_account_id } = parsed.data;
+  const { customer_id, amount, note, payment_mode, paid_account_id, sale_id } = parsed.data;
 
   try {
     const result = await db.transaction(async (trx) =>
@@ -189,6 +195,7 @@ router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'sa
         note,
         payment_mode,
         paid_account_id,
+        saleId: sale_id,
       }),
     );
     res.status(201).json({ ok: true, ...result });

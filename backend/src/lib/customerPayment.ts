@@ -5,6 +5,8 @@ import {
   paymentModeRequiresBankAccount,
   type PaymentModeId,
 } from './paymentModes';
+import { isPostingEngineEnabled, mirrorToPostingTables } from '../services/posting/PostingOrchestrator';
+import { buildCustomerPaymentLines } from '../services/posting/LedgerPostingEngine';
 
 export interface RecordCustomerPaymentInput {
   dealerId: string;
@@ -100,6 +102,7 @@ export async function recordCustomerPayment(
 
   let remaining = input.amount;
   const allocations: PaymentAllocation[] = [];
+  let firstLedgerRowId: string | undefined;
 
   for (const sale of salesToPay) {
     if (remaining <= 0) break;
@@ -116,15 +119,18 @@ export async function recordCustomerPayment(
         ? `Payment for Invoice #${invoiceLabel}`
         : `Payment allocated to Invoice #${invoiceLabel}`);
 
-    await trx('customer_ledger').insert({
-      dealer_id: input.dealerId,
-      customer_id: input.customerId,
-      sale_id: sale.id,
-      type: 'payment',
-      amount: apply,
-      description,
-      entry_date: entryDate,
-    });
+    const [ledgerRow] = await trx('customer_ledger')
+      .insert({
+        dealer_id: input.dealerId,
+        customer_id: input.customerId,
+        sale_id: sale.id,
+        type: 'payment',
+        amount: apply,
+        description,
+        entry_date: entryDate,
+      })
+      .returning('id');
+    firstLedgerRowId ??= ledgerRow.id as string;
 
     const newPaid = (Number(sale.paid_amount) || 0) + apply;
     const maxPayable = Math.max(
@@ -169,6 +175,33 @@ export async function recordCustomerPayment(
     paidAccountId,
     payment_mode: paymentMode,
   });
+
+  // V2 Sprint 6B — mirror into the Posting Engine (buildCustomerPaymentLines
+  // already existed, unused, since Sprint 6A; this is its first caller).
+  // idempotencyKey is keyed off the first customer_ledger row this call just
+  // inserted, which is always freshly generated, so a genuinely new payment
+  // never collides with a prior one.
+  if (isPostingEngineEnabled() && firstLedgerRowId) {
+    await mirrorToPostingTables(
+      {
+        trx,
+        dealerId: input.dealerId,
+        documentType: 'payment',
+        documentId: firstLedgerRowId,
+        eventType: 'posted',
+        entryDate,
+        idempotencyKey: `customer_payment:${firstLedgerRowId}`,
+      },
+      buildCustomerPaymentLines({
+        customerId: input.customerId,
+        entryDate,
+        paidAccountId,
+        paymentMode,
+        allocations: allocations.map((a) => ({ saleId: a.saleId, amount: a.amount })),
+        totalApplied,
+      }),
+    );
+  }
 
   return { allocations, totalApplied };
 }

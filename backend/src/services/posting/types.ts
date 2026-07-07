@@ -13,7 +13,8 @@ export type PostingDocumentType =
   | 'expense'
   | 'purchase_return'
   | 'landed_cost'
-  | 'stock_cost_adjustment';
+  | 'stock_cost_adjustment'
+  | 'opening_balance';
 
 export type PostingEventType = 'posted' | 'reversed';
 

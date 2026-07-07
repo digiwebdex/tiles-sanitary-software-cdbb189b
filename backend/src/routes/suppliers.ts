@@ -232,13 +232,18 @@ router.get('/:id/ledger-summary', async (req: Request, res: Response) => {
       .filter((r) => r.type === 'payment')
       .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
+    // 'outstanding'/'balance' are computed from the FULL row set (so a posted
+    // opening-balance row correctly contributes), but 'entries' — the list the
+    // Supplier Statement page walks client-side starting from
+    // `supplier.opening_balance` — excludes 'opening_balance' rows to avoid
+    // double-counting the same figure twice (V2 Sprint 6B).
     res.json({
       supplier: { id: supplier.id, name: supplier.name, opening_balance: Number(supplier.opening_balance) || 0 },
       outstanding,
       balance,
       total_purchased: Math.round(totalPurchased * 100) / 100,
       total_paid: Math.round(totalPaid * 100) / 100,
-      entries: rows,
+      entries: rows.filter((r) => r.type !== 'opening_balance'),
     });
   } catch (err: any) {
     console.error('[suppliers/ledger-summary]', err.message);
