@@ -25,6 +25,7 @@ import { requireRole, restrictSuperAdminOnFinancials } from '../middleware/roles
 import { ensureDealerGlChart, getTrialBalance } from '../services/gl/glJournalWriter';
 import { isGlSpineEnabled } from '../services/gl/glConfig';
 import { isPostingEngineEnabled } from '../services/posting/PostingOrchestrator';
+import { computeTrialBalance } from '../services/gl/generalLedgerService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -247,6 +248,36 @@ router.get(
     try {
       const dealerId = resolveDealer(req, res);
       if (!dealerId) return;
+
+      // V2 Sprint 6E — period/fiscal-year/branch-filtered Trial Balance with
+      // Opening/Closing Balance columns, additive: only taken when any of
+      // the new query params are present. With none of them, behavior is
+      // byte-identical to the pre-6E cumulative-as-of-date response below.
+      let from = (req.query.from as string | undefined) || undefined;
+      let to = (req.query.to as string | undefined) || undefined;
+      const branchId = (req.query.branchId as string | undefined) || undefined;
+      const fiscalYearId = (req.query.fiscalYearId as string | undefined) || undefined;
+
+      if (fiscalYearId) {
+        const fy = await db('fiscal_years').where({ id: fiscalYearId, dealer_id: dealerId }).first('start_date', 'end_date');
+        if (!fy) { res.status(400).json({ error: 'Fiscal year not found' }); return; }
+        from = from ?? String(fy.start_date).slice(0, 10);
+        to = to ?? String(fy.end_date).slice(0, 10);
+      }
+
+      if (from || to || branchId) {
+        const result = await computeTrialBalance(dealerId, { from: from ?? null, to: to ?? null, branchId: branchId ?? null });
+        res.json({
+          ...result,
+          gl_spine_enabled: isGlSpineEnabled(),
+          from: from ?? null,
+          to: to ?? null,
+          branch_id: branchId ?? null,
+          fiscal_year_id: fiscalYearId ?? null,
+        });
+        return;
+      }
+
       const asOf = (req.query.asOf as string | undefined) || undefined;
       const rows = await getTrialBalance(dealerId, asOf);
       const totalDebit = rows.reduce((s, r) => s + r.debit, 0);

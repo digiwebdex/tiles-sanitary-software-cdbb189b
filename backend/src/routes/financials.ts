@@ -235,17 +235,58 @@ router.get('/p-and-l', async (req, res) => {
   }));
   const total_expenses = expenses_by_category.reduce((s, r) => s + r.amount, 0);
 
+  // ── V2 Sprint 6E — Other Income / Other Expenses ──
+  // Asset disposal gains/losses and bad debt write-offs (Sprint 6D+) have no
+  // home in the legacy subledgers this file otherwise reads — they only
+  // exist as GL Spine postings (accounts 4100/6200/6100). Sourced from the
+  // GL Spine specifically for that reason, not because the rest of this
+  // report is being migrated off subledgers.
+  const other_income = await safeSum(
+    { route: 'financials.pnl.other_income', label: 'Other Income (Gain on Disposal)', warnings, context: ctx },
+    async () => {
+      const row = await db('gl_journal_lines as jl')
+        .join('gl_journal_entries as je', 'je.id', 'jl.journal_entry_id')
+        .join('gl_accounts as a', 'a.id', 'jl.account_id')
+        .where('je.dealer_id', dealerId)
+        .andWhere('a.code', '4100')
+        .modify(qb => { if (from) qb.where('je.entry_date', '>=', from); if (to) qb.where('je.entry_date', '<=', to); })
+        .sum({ debit: 'jl.debit' }).sum({ credit: 'jl.credit' }).first();
+      return num((row as any)?.credit) - num((row as any)?.debit);
+    },
+  );
+  const other_expenses = await safeSum(
+    { route: 'financials.pnl.other_expenses', label: 'Other Expenses (Loss on Disposal + Bad Debt)', warnings, context: ctx },
+    async () => {
+      const row = await db('gl_journal_lines as jl')
+        .join('gl_journal_entries as je', 'je.id', 'jl.journal_entry_id')
+        .join('gl_accounts as a', 'a.id', 'jl.account_id')
+        .where('je.dealer_id', dealerId)
+        .whereIn('a.code', ['6200', '6100'])
+        .modify(qb => { if (from) qb.where('je.entry_date', '>=', from); if (to) qb.where('je.entry_date', '<=', to); })
+        .sum({ debit: 'jl.debit' }).sum({ credit: 'jl.credit' }).first();
+      return num((row as any)?.debit) - num((row as any)?.credit);
+    },
+  );
+
   // Profit must be computed on the ex-tax taxable base — output VAT/SD in
   // `revenue` (gross) are liabilities, not earnings. `taxable_revenue` already
   // excludes them. Returns are stored gross (refund_amount); subtracting them
   // from the net base slightly understates profit by the VAT portion of
   // returns — conservative, and surfaced in a warning below.
   const net_output_tax = output_vat + output_sd;
-  const gross_profit = taxable_revenue - sales_returns - net_cogs;
-  const net_profit = gross_profit - total_expenses;
+  const cost_of_sales = net_cogs;
+  const gross_profit = taxable_revenue - sales_returns - cost_of_sales;
+  const operating_expenses = total_expenses;
+  const operating_profit = gross_profit - operating_expenses;
+  const net_profit = operating_profit + other_income - other_expenses;
   if (net_output_tax > 0.005) {
     warnings.push(
       'Revenue is shown gross (VAT/SD-inclusive); profit is computed on the ex-tax taxable base. Output VAT/SD are liabilities (see output_vat/output_sd), not income. Sales returns are netted at their gross refund amount.',
+    );
+  }
+  if (other_income > 0.005 || other_expenses > 0.005) {
+    warnings.push(
+      'V2 Sprint 6E: net_profit now nets Other Income/Other Expenses (asset disposal gains/losses, bad debt) sourced from the GL Spine — these were not included in prior sprints\' net_profit figure.',
     );
   }
 
@@ -273,12 +314,17 @@ router.get('/p-and-l', async (req, res) => {
     cogs,
     cogs_reversal,
     net_cogs,
+    cost_of_sales,
     gross_profit,
     expenses_by_category,
     total_expenses,
+    operating_expenses,
+    operating_profit,
+    other_income,
+    other_expenses,
     net_profit,
     // ── Phase 1 transparency fields (additive, optional) ──
-    data_source: 'sales.taxable_amount (ex-tax) + sales.cogs + sales_returns.refund_amount + sales_returns.cogs_reversal; reversed sales excluded',
+    data_source: 'sales.taxable_amount (ex-tax) + sales.cogs + sales_returns.refund_amount + sales_returns.cogs_reversal; reversed sales excluded; other_income/other_expenses from GL Spine (V2 Sprint 6E)',
     warnings,
   });
 });
@@ -370,8 +416,81 @@ router.get('/balance-sheet', async (req, res) => {
     else if (r.type === 'withdrawal' || r.type === 'dividend') director_capital -= amt;
   }
 
-  const total_assets = cash + bank_total + inventory + receivable;
-  const total_liabilities = payable;
+  // ── V2 Sprint 6E — Fixed Assets (net of Accumulated Depreciation), the
+  // Non-current Asset the Balance Sheet was missing entirely (Sprint 6D
+  // introduced Fixed Assets but nothing sourced them into this report). ──
+  const fixed_assets_net = await safeSum(
+    { route: 'financials.bs.fixed_assets', label: 'Fixed Assets (net)', warnings, context: ctx },
+    async () => {
+      if (!asOf) {
+        const row = await db('assets')
+          .where({ dealer_id: dealerId })
+          .whereNotNull('purchase_posting_batch_id')
+          .whereNot('status', 'disposed')
+          .sum({ cost: 'purchase_cost' }).sum({ dep: 'accumulated_depreciation' }).first();
+        return num((row as any)?.cost) - num((row as any)?.dep);
+      }
+      const rows = await db('assets')
+        .where({ dealer_id: dealerId })
+        .whereNotNull('purchase_posting_batch_id')
+        .where('purchase_date', '<=', asOf)
+        .andWhere(qb => qb.whereNull('disposed_at').orWhere('disposed_at', '>', asOf))
+        .select('id', 'purchase_cost');
+      let total = 0;
+      for (const r of rows as any[]) {
+        const dep = await db('asset_depreciation_schedule')
+          .where({ dealer_id: dealerId, asset_id: r.id })
+          .andWhere('period_end', '<=', asOf)
+          .sum({ total: 'depreciation_amount' }).first();
+        total += num(r.purchase_cost) - num((dep as any)?.total);
+      }
+      return total;
+    },
+  );
+
+  // ── V2 Sprint 6E — VAT Payable (cumulative GL balance), the current
+  // liability every sale already credits (glLineMapper.ts) but which this
+  // report never surfaced. ──
+  const vat_payable = await safeSum(
+    { route: 'financials.bs.vat_payable', label: 'VAT Payable', warnings, context: ctx },
+    async () => {
+      const row = await db('gl_journal_lines as jl')
+        .join('gl_journal_entries as je', 'je.id', 'jl.journal_entry_id')
+        .join('gl_accounts as a', 'a.id', 'jl.account_id')
+        .where('je.dealer_id', dealerId)
+        .andWhere('a.code', '2100')
+        .modify(qb => { if (asOf) qb.where('je.entry_date', '<=', asOf); })
+        .sum({ debit: 'jl.debit' }).sum({ credit: 'jl.credit' }).first();
+      return num((row as any)?.credit) - num((row as any)?.debit);
+    },
+  );
+
+  // ── V2 Sprint 6E — Retained Earnings actually posted by Fiscal Year
+  // Closing (journal_entry_lines, account='Retained Earnings' by the exact
+  // convention the closing-journal generator uses). Additive alongside the
+  // pre-existing `retained_earnings` plug below — 0 until a dealer has
+  // closed at least one fiscal year. ──
+  const retained_earnings_from_closing = await safeSum(
+    { route: 'financials.bs.retained_earnings_closed', label: 'Retained Earnings (from Fiscal Year Closing)', warnings, context: ctx },
+    async () => {
+      const row = await db('journal_entry_lines as jel')
+        .join('journal_entries as je', 'je.id', 'jel.journal_entry_id')
+        .where('je.dealer_id', dealerId)
+        .andWhere('je.status', 'posted')
+        .whereNull('je.voided_at')
+        .andWhereRaw("TRIM(jel.account) = 'Retained Earnings'")
+        .modify(qb => { if (asOf) qb.where('je.entry_date', '<=', asOf); })
+        .sum({ debit: 'jel.debit' }).sum({ credit: 'jel.credit' }).first();
+      return num((row as any)?.credit) - num((row as any)?.debit);
+    },
+  );
+
+  const current_assets = cash + bank_total + inventory + receivable;
+  const non_current_assets = fixed_assets_net;
+  const total_assets = current_assets + non_current_assets;
+  const current_liabilities = payable + vat_payable;
+  const long_term_liabilities = 0;
+  const total_liabilities = current_liabilities + long_term_liabilities;
   const total_equity = total_assets - total_liabilities;
   const retained_earnings = total_equity - director_capital;
 
@@ -383,15 +502,22 @@ router.get('/balance-sheet', async (req, res) => {
       bank_accounts: bankList,
       inventory,
       accounts_receivable: receivable,
+      fixed_assets_net,
+      current_assets,
+      non_current_assets,
       total: total_assets,
     },
     liabilities: {
       accounts_payable: payable,
+      vat_payable,
+      current_liabilities,
+      long_term_liabilities,
       total: total_liabilities,
     },
     equity: {
       director_capital,
       retained_earnings,
+      retained_earnings_from_closing,
       owner_equity: total_equity,
       total: total_equity,
     },
@@ -665,10 +791,59 @@ router.get('/cash-flow', async (req, res) => {
     const net_cash_flow = r2(total_in - total_out);
     const closing_cash = r2(opening_cash + net_cash_flow);
 
+    // ── V2 Sprint 6E — Operating / Investing / Financing classification ──
+    // `cash_ledger.type` distinguishes receipt/payment/expense (Operating)
+    // from transfer (internal cash<->bank movement, not real economic
+    // activity — excluded from all three buckets, reported separately).
+    const operating_in = r2(inflows.filter(r => r.label !== 'transfer').reduce((s, r) => s + r.amount, 0));
+    const operating_out = r2(outflows.filter(r => r.label !== 'transfer').reduce((s, r) => s + r.amount, 0));
+    const internal_transfers = r2(
+      inflows.filter(r => r.label === 'transfer').reduce((s, r) => s + r.amount, 0)
+      - outflows.filter(r => r.label === 'transfer').reduce((s, r) => s + r.amount, 0),
+    );
+
+    // Investing: Fixed Asset purchase/disposal cash-side effect. This does
+    // NOT appear in cash_ledger at all — assetPosting.ts (Sprint 6D) mirrors
+    // straight into the GL Spine, never cash_ledger — so it must be sourced
+    // from gl_journal_lines specifically, the same pattern already used for
+    // P&L's other_income/other_expenses and the Balance Sheet's fixed_assets_net.
+    const investingRow = await db('gl_journal_lines as jl')
+      .join('gl_journal_entries as je', 'je.id', 'jl.journal_entry_id')
+      .join('gl_accounts as a', 'a.id', 'jl.account_id')
+      .where('je.dealer_id', dealerId)
+      .whereIn('je.document_type', ['fixed_asset_purchase', 'fixed_asset_disposal'])
+      .whereIn('a.code', ['1000', '1010'])
+      .modify(qb => { if (from) qb.where('je.entry_date', '>=', from); if (to) qb.where('je.entry_date', '<=', to); })
+      .sum({ debit: 'jl.debit' }).sum({ credit: 'jl.credit' }).first();
+    const investing_in = r2(num((investingRow as any)?.debit));
+    const investing_out = r2(num((investingRow as any)?.credit));
+
+    // Financing: director capital movements (director_transactions, not cash_ledger).
+    const financingRows = await db('director_transactions')
+      .where({ dealer_id: dealerId })
+      .modify(qb => { if (from) qb.where('entry_date', '>=', from); if (to) qb.where('entry_date', '<=', to); })
+      .select('type').sum({ total: 'amount' }).groupBy('type');
+    let financing_in = 0, financing_out = 0;
+    for (const r of financingRows as any[]) {
+      const amt = num(r.total);
+      if (r.type === 'deposit') financing_in = r2(financing_in + amt);
+      else if (r.type === 'withdrawal' || r.type === 'dividend') financing_out = r2(financing_out + amt);
+    }
+
+    const operating_activities = { inflow: operating_in, outflow: operating_out, net: r2(operating_in - operating_out) };
+    const investing_activities = { inflow: investing_in, outflow: investing_out, net: r2(investing_in - investing_out) };
+    const financing_activities = { inflow: financing_in, outflow: financing_out, net: r2(financing_in - financing_out) };
+    const net_cash_flow_classified = r2(operating_activities.net + investing_activities.net + financing_activities.net);
+
     res.json({
       period: { from, to },
       opening_cash, inflows, outflows,
       total_in, total_out, net_cash_flow, closing_cash,
+      operating_activities,
+      investing_activities,
+      financing_activities,
+      internal_transfers,
+      net_cash_flow_classified,
       source: 'cash_ledger',
     });
   } catch (err: any) {

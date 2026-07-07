@@ -15,8 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useDealerId } from "@/hooks/useDealerId";
 import { financialService } from "@/services/financialService";
+import { fiscalYearService } from "@/services/fiscalYearService";
+import { branchService } from "@/services/branchNoticeService";
 import { formatCurrency } from "@/lib/utils";
 import { Printer, TrendingUp, Scale, BookOpen, AlertTriangle, Wallet } from "lucide-react";
 
@@ -66,6 +69,30 @@ const FinancialStatementsPage = () => {
     queryKey: ["trial-balance", dealerId, tb],
     queryFn: () => financialService.trialBalance(dealerId, tb.asOf, tb.source),
     enabled: !!dealerId,
+  });
+
+  // V2 Sprint 6E — period/fiscal-year/branch-filtered Trial Balance (GL Spine).
+  const [periodView, setPeriodView] = useState(false);
+  const [tbPeriod, setTbPeriod] = useState({ from: monthAgo, to: today, fiscalYearId: "", branchId: "" });
+  const { data: fiscalYears } = useQuery({
+    queryKey: ["fiscal-years", dealerId],
+    queryFn: () => fiscalYearService.list(dealerId),
+    enabled: !!dealerId && periodView,
+  });
+  const { data: branches } = useQuery({
+    queryKey: ["branches", dealerId],
+    queryFn: () => branchService.list(),
+    enabled: !!dealerId && periodView,
+  });
+  const { data: periodTrial, isLoading: periodTbLoading } = useQuery({
+    queryKey: ["trial-balance-period", dealerId, tbPeriod],
+    queryFn: () => financialService.trialBalancePeriod(dealerId, {
+      from: tbPeriod.fiscalYearId ? undefined : tbPeriod.from,
+      to: tbPeriod.fiscalYearId ? undefined : tbPeriod.to,
+      fiscalYearId: tbPeriod.fiscalYearId || undefined,
+      branchId: tbPeriod.branchId || undefined,
+    }),
+    enabled: !!dealerId && periodView,
   });
 
   const [cf, setCf] = useState({ from: monthAgo, to: today });
@@ -121,6 +148,15 @@ const FinancialStatementsPage = () => {
                     ))}
                     {!pAndL.expenses_by_category.length && <TableRow><TableCell colSpan={2} className="pl-8 text-muted-foreground">No expenses recorded</TableCell></TableRow>}
                     <TableRow className="border-t"><TableCell className="font-semibold">Total Expenses</TableCell><TableCell className="text-right font-mono">({formatCurrency(pAndL.total_expenses)})</TableCell></TableRow>
+                    {pAndL.operating_profit != null && (
+                      <TableRow className="bg-muted/40"><TableCell className="font-bold">Operating Profit</TableCell><TableCell className="text-right font-mono font-bold">{formatCurrency(pAndL.operating_profit)}</TableCell></TableRow>
+                    )}
+                    {(pAndL.other_income ?? 0) > 0 && (
+                      <TableRow><TableCell className="text-muted-foreground">Add: Other Income (asset disposal gains)</TableCell><TableCell className="text-right font-mono text-emerald-600">{formatCurrency(pAndL.other_income ?? 0)}</TableCell></TableRow>
+                    )}
+                    {(pAndL.other_expenses ?? 0) > 0 && (
+                      <TableRow><TableCell className="text-muted-foreground">Less: Other Expenses (disposal losses, bad debt)</TableCell><TableCell className="text-right font-mono text-red-500">({formatCurrency(pAndL.other_expenses ?? 0)})</TableCell></TableRow>
+                    )}
                     <TableRow className="bg-primary/10"><TableCell className="font-bold text-lg">Net Profit / (Loss)</TableCell><TableCell className={`text-right font-mono font-bold text-lg ${pAndL.net_profit >= 0 ? "text-emerald-500" : "text-red-500"}`}>{formatCurrency(pAndL.net_profit)}</TableCell></TableRow>
                   </TableBody>
                 </Table>
@@ -159,6 +195,15 @@ const FinancialStatementsPage = () => {
                       ))}
                       <TableRow><TableCell>Inventory (at cost)</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.assets.inventory)}</TableCell></TableRow>
                       <TableRow><TableCell>Accounts Receivable</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.assets.accounts_receivable)}</TableCell></TableRow>
+                      {balance.assets.current_assets != null && (
+                        <TableRow className="border-t"><TableCell className="font-semibold">Total Current Assets</TableCell><TableCell className="text-right font-mono font-semibold">{formatCurrency(balance.assets.current_assets)}</TableCell></TableRow>
+                      )}
+                      {balance.assets.fixed_assets_net != null && (
+                        <>
+                          <TableRow><TableCell className="font-semibold pt-4">Non-current Assets</TableCell><TableCell></TableCell></TableRow>
+                          <TableRow><TableCell className="pl-8">Fixed Assets (net of depreciation)</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.assets.fixed_assets_net)}</TableCell></TableRow>
+                        </>
+                      )}
                       <TableRow className="bg-emerald-500/10 border-t"><TableCell className="font-bold">Total Assets</TableCell><TableCell className="text-right font-mono font-bold">{formatCurrency(balance.assets.total)}</TableCell></TableRow>
                     </TableBody>
                   </Table>
@@ -170,12 +215,21 @@ const FinancialStatementsPage = () => {
                 <CardContent>
                   <Table>
                     <TableBody>
-                      <TableRow><TableCell className="font-semibold">Liabilities</TableCell><TableCell></TableCell></TableRow>
+                      <TableRow><TableCell className="font-semibold">Current Liabilities</TableCell><TableCell></TableCell></TableRow>
                       <TableRow><TableCell className="pl-8">Accounts Payable</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.liabilities.accounts_payable)}</TableCell></TableRow>
+                      {balance.liabilities.vat_payable != null && (
+                        <TableRow><TableCell className="pl-8">VAT Payable</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.liabilities.vat_payable)}</TableCell></TableRow>
+                      )}
+                      {balance.liabilities.long_term_liabilities != null && balance.liabilities.long_term_liabilities > 0 && (
+                        <TableRow><TableCell className="pl-8">Long-term Liabilities</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.liabilities.long_term_liabilities)}</TableCell></TableRow>
+                      )}
                       <TableRow className="border-t"><TableCell className="font-semibold">Total Liabilities</TableCell><TableCell className="text-right font-mono font-semibold">{formatCurrency(balance.liabilities.total)}</TableCell></TableRow>
                       <TableRow><TableCell className="font-semibold pt-4">Owner's Equity</TableCell><TableCell></TableCell></TableRow>
                       <TableRow><TableCell className="pl-8">Director Capital</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.equity.director_capital ?? 0)}</TableCell></TableRow>
                       <TableRow><TableCell className="pl-8">Retained Earnings</TableCell><TableCell className="text-right font-mono">{formatCurrency(balance.equity.retained_earnings ?? balance.equity.owner_equity)}</TableCell></TableRow>
+                      {balance.equity.retained_earnings_from_closing != null && balance.equity.retained_earnings_from_closing !== 0 && (
+                        <TableRow><TableCell className="pl-8 text-xs text-muted-foreground">of which formally closed via Fiscal Year Closing</TableCell><TableCell className="text-right font-mono text-xs text-muted-foreground">{formatCurrency(balance.equity.retained_earnings_from_closing)}</TableCell></TableRow>
+                      )}
                       <TableRow className="border-t"><TableCell className="font-semibold">Total Equity</TableCell><TableCell className="text-right font-mono font-semibold">{formatCurrency(balance.equity.owner_equity)}</TableCell></TableRow>
                       <TableRow className="bg-primary/10 border-t"><TableCell className="font-bold">Total Liabilities + Equity</TableCell><TableCell className="text-right font-mono font-bold">{formatCurrency(balance.liabilities.total + balance.equity.total)}</TableCell></TableRow>
                     </TableBody>
@@ -188,6 +242,104 @@ const FinancialStatementsPage = () => {
         </TabsContent>
 
         <TabsContent value="tb" className="space-y-4">
+          <Card>
+            <CardContent className="pt-6 flex items-center justify-between">
+              <div>
+                <Label>Period View (V2 Sprint 6E)</Label>
+                <p className="text-xs text-muted-foreground">Opening/Debit/Credit/Closing columns, filterable by period, fiscal year, and branch.</p>
+              </div>
+              <Switch checked={periodView} onCheckedChange={setPeriodView} />
+            </CardContent>
+          </Card>
+
+          {periodView ? (
+            <>
+              <Card>
+                <CardContent className="pt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div><Label>From</Label><Input type="date" value={tbPeriod.from} onChange={e => setTbPeriod({ ...tbPeriod, from: e.target.value, fiscalYearId: "" })} /></div>
+                  <div><Label>To</Label><Input type="date" value={tbPeriod.to} onChange={e => setTbPeriod({ ...tbPeriod, to: e.target.value, fiscalYearId: "" })} /></div>
+                  <div>
+                    <Label>Fiscal Year (overrides From/To)</Label>
+                    <Select value={tbPeriod.fiscalYearId || "none"} onValueChange={(v) => setTbPeriod({ ...tbPeriod, fiscalYearId: v === "none" ? "" : v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {(fiscalYears?.rows ?? []).map(fy => <SelectItem key={fy.id} value={fy.id}>{fy.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Branch</Label>
+                    <Select value={tbPeriod.branchId || "all"} onValueChange={(v) => setTbPeriod({ ...tbPeriod, branchId: v === "all" ? "" : v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All branches</SelectItem>
+                        {(branches ?? []).map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+              {tbPeriod.branchId && (
+                <p className="text-xs text-muted-foreground">Branch filter covers only activity tagged to a Cost Center mapped to this branch — Sales/Purchase postings are not cost-center-tagged by default, so this view narrows to Journal/Expense/Asset activity.</p>
+              )}
+
+              {periodTbLoading ? <p>Loading…</p> : periodTrial && (
+                <Card>
+                  <CardHeader><CardTitle>Trial Balance — {periodTrial.from ?? "inception"} to {periodTrial.to ?? "present"}</CardTitle></CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Account</TableHead>
+                          <TableHead className="text-right">Opening</TableHead>
+                          <TableHead className="text-right">Debit</TableHead>
+                          <TableHead className="text-right">Credit</TableHead>
+                          <TableHead className="text-right">Closing</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {periodTrial.gl_accounts.map((a, i) => (
+                          <TableRow key={`gl-${i}`}>
+                            <TableCell>{a.accountLabel}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(a.openingBalance)}</TableCell>
+                            <TableCell className="text-right font-mono">{a.periodDebit ? formatCurrency(a.periodDebit) : "—"}</TableCell>
+                            <TableCell className="text-right font-mono">{a.periodCredit ? formatCurrency(a.periodCredit) : "—"}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(a.closingBalance)}</TableCell>
+                          </TableRow>
+                        ))}
+                        {periodTrial.journal_accounts.length > 0 && (
+                          <TableRow><TableCell colSpan={5} className="font-semibold text-muted-foreground pt-4">Manual Journal Accounts</TableCell></TableRow>
+                        )}
+                        {periodTrial.journal_accounts.map((a, i) => (
+                          <TableRow key={`journal-${i}`}>
+                            <TableCell>{a.accountLabel}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(a.openingBalance)}</TableCell>
+                            <TableCell className="text-right font-mono">{a.periodDebit ? formatCurrency(a.periodDebit) : "—"}</TableCell>
+                            <TableCell className="text-right font-mono">{a.periodCredit ? formatCurrency(a.periodCredit) : "—"}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(a.closingBalance)}</TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-primary/10 border-t-2 font-bold">
+                          <TableCell>Totals (Closing)</TableCell>
+                          <TableCell></TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(periodTrial.totals.period_debit)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(periodTrial.totals.period_credit)}</TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatCurrency(periodTrial.totals.closing_debit)} / {formatCurrency(periodTrial.totals.closing_credit)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      GL Spine accounts (Posting Engine — sales/purchases/payments/expenses/assets/cost centers) and Manual Journal accounts (free-text, Sprint 6A's Journal workflow) are kept as two separate groups rather than merged, since journal account names aren't tied to Chart-of-Accounts codes.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+          <>
           <Card>
             <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -262,6 +414,8 @@ const FinancialStatementsPage = () => {
             </Card>
             </>
           )}
+          </>
+          )}
         </TabsContent>
 
         <TabsContent value="cf" className="space-y-4">
@@ -324,6 +478,57 @@ const FinancialStatementsPage = () => {
               </CardContent>
             </Card>
           ) : null}
+
+          {cashFlow?.operating_activities && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Activity Classification (V2 Sprint 6E)</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Activity</TableHead>
+                      <TableHead className="text-right">Inflow</TableHead>
+                      <TableHead className="text-right">Outflow</TableHead>
+                      <TableHead className="text-right">Net</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>Operating Activities</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(cashFlow.operating_activities.inflow)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(cashFlow.operating_activities.outflow)}</TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{formatCurrency(cashFlow.operating_activities.net)}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Investing Activities</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(cashFlow.investing_activities?.inflow ?? 0)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(cashFlow.investing_activities?.outflow ?? 0)}</TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{formatCurrency(cashFlow.investing_activities?.net ?? 0)}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Financing Activities</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(cashFlow.financing_activities?.inflow ?? 0)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(cashFlow.financing_activities?.outflow ?? 0)}</TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{formatCurrency(cashFlow.financing_activities?.net ?? 0)}</TableCell>
+                    </TableRow>
+                    {(cashFlow.internal_transfers ?? 0) !== 0 && (
+                      <TableRow className="text-muted-foreground text-sm">
+                        <TableCell colSpan={3}>Internal transfers (cash ↔ bank, excluded above)</TableCell>
+                        <TableCell className="text-right font-mono">{formatCurrency(cashFlow.internal_transfers ?? 0)}</TableCell>
+                      </TableRow>
+                    )}
+                    <TableRow className="bg-primary/10 border-t-2 font-bold">
+                      <TableCell colSpan={3}>Net Cash Flow (classified)</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(cashFlow.net_cash_flow_classified ?? 0)}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Investing Activities are sourced from the GL Spine (Fixed Asset purchase/disposal cash effects never touch the legacy cash ledger) — this may differ from "Net cash flow" above, which is cash-ledger-only.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

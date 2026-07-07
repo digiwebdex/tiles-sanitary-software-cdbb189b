@@ -109,6 +109,10 @@ import FixedAssetsPage from "./pages/fixed-assets/FixedAssetsPage";
 import FixedAssetDetailPage from "./pages/fixed-assets/FixedAssetDetailPage";
 import BudgetsPage from "./pages/budgets/BudgetsPage";
 import ProjectAccountingPage from "./pages/projects/ProjectAccountingPage";
+import GeneralLedgerPage from "./pages/general-ledger/GeneralLedgerPage";
+import FinancialClosingPage from "./pages/financial-closing/FinancialClosingPage";
+import VatClosingPage from "./pages/vat-closing/VatClosingPage";
+import FinancialDashboardPage from "./pages/financial-dashboard/FinancialDashboardPage";
 import EmiPage from "./pages/emi/EmiPage";
 import HRMPage from "./pages/hrm/HRMPage";
 import LeavesPage from "./pages/hrm/LeavesPage";
@@ -313,6 +317,10 @@ const App = () => (
             <Route path="/fixed-assets" element={<ProtectedRoute><AppLayout><FixedAssetsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/fixed-assets/:id" element={<ProtectedRoute><AppLayout><FixedAssetDetailPage /></AppLayout></ProtectedRoute>} />
             <Route path="/budgets" element={<ProtectedRoute><AppLayout><BudgetsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/general-ledger" element={<ProtectedRoute><AppLayout><GeneralLedgerPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/financial-closing" element={<ProtectedRoute><AppLayout><FinancialClosingPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/vat-closing" element={<ProtectedRoute><AppLayout><VatClosingPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/financial-dashboard" element={<ProtectedRoute><AppLayout><FinancialDashboardPage /></AppLayout></ProtectedRoute>} />
             <Route path="/emi" element={<ProtectedRoute><AppLayout><EmiPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm" element={<ProtectedRoute><AppLayout><HRMPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm/leaves" element={<ProtectedRoute><AppLayout><LeavesPage /></AppLayout></ProtectedRoute>} />

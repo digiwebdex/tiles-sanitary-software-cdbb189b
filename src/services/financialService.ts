@@ -19,6 +19,12 @@ export interface ProfitLoss {
    */
   data_source?: string;
   warnings?: string[];
+  /** V2 Sprint 6E additions — all optional so pre-6E callers are unaffected. */
+  cost_of_sales?: number;
+  operating_expenses?: number;
+  operating_profit?: number;
+  other_income?: number;
+  other_expenses?: number;
 }
 
 export interface BalanceSheet {
@@ -30,9 +36,27 @@ export interface BalanceSheet {
     inventory: number;
     accounts_receivable: number;
     total: number;
+    /** V2 Sprint 6E additions. */
+    fixed_assets_net?: number;
+    current_assets?: number;
+    non_current_assets?: number;
   };
-  liabilities: { accounts_payable: number; total: number };
-  equity: { director_capital?: number; retained_earnings?: number; owner_equity: number; total: number };
+  liabilities: {
+    accounts_payable: number;
+    total: number;
+    /** V2 Sprint 6E additions. */
+    vat_payable?: number;
+    current_liabilities?: number;
+    long_term_liabilities?: number;
+  };
+  equity: {
+    director_capital?: number;
+    retained_earnings?: number;
+    owner_equity: number;
+    total: number;
+    /** V2 Sprint 6E addition — the figure actually posted by Fiscal Year Closing. */
+    retained_earnings_from_closing?: number;
+  };
   warnings?: string[];
 }
 
@@ -44,6 +68,29 @@ export interface TrialBalance {
   difference: number;
   data_source?: "legacy_subledgers" | "gl_spine";
   warnings?: string[];
+}
+
+/** V2 Sprint 6E — period/fiscal-year/branch-filtered Trial Balance, /api/gl/trial-balance. */
+export interface AccountBalanceRow {
+  source: "gl" | "journal";
+  accountKey: string;
+  accountLabel: string;
+  accountType: string | null;
+  openingBalance: number;
+  periodDebit: number;
+  periodCredit: number;
+  closingBalance: number;
+}
+
+export interface PeriodTrialBalance {
+  gl_accounts: AccountBalanceRow[];
+  journal_accounts: AccountBalanceRow[];
+  totals: { opening_debit: number; opening_credit: number; period_debit: number; period_credit: number; closing_debit: number; closing_credit: number };
+  gl_spine_enabled: boolean;
+  from: string | null;
+  to: string | null;
+  branch_id: string | null;
+  fiscal_year_id: string | null;
 }
 
 export interface JournalLine {
@@ -108,7 +155,24 @@ export const financialService = {
     if (!r.ok) throw new Error("Failed to load cash flow");
     return r.json();
   },
+  /** V2 Sprint 6E — period/fiscal-year/branch-filtered Trial Balance (GL Spine, /api/gl/trial-balance). */
+  async trialBalancePeriod(dealerId: string, opts: { from?: string; to?: string; fiscalYearId?: string; branchId?: string } = {}): Promise<PeriodTrialBalance> {
+    const qs = new URLSearchParams({ dealerId });
+    if (opts.from) qs.set("from", opts.from);
+    if (opts.to) qs.set("to", opts.to);
+    if (opts.fiscalYearId) qs.set("fiscalYearId", opts.fiscalYearId);
+    if (opts.branchId) qs.set("branchId", opts.branchId);
+    const r = await vpsAuthedFetch(`/api/gl/trial-balance?${qs}`);
+    if (!r.ok) throw new Error("Failed to load trial balance");
+    return r.json();
+  },
 };
+
+export interface CashFlowActivity {
+  inflow: number;
+  outflow: number;
+  net: number;
+}
 
 export interface CashFlow {
   period: { from: string | null; to: string | null };
@@ -119,6 +183,12 @@ export interface CashFlow {
   total_out: number;
   net_cash_flow: number;
   closing_cash: number;
+  /** V2 Sprint 6E additions. */
+  operating_activities?: CashFlowActivity;
+  investing_activities?: CashFlowActivity;
+  financing_activities?: CashFlowActivity;
+  internal_transfers?: number;
+  net_cash_flow_classified?: number;
 }
 
 export const journalService = {
