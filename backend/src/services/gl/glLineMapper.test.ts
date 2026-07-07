@@ -114,10 +114,23 @@ describe('glLineMapper — cash/bank/expense (unchanged, re-verified)', () => {
     expect(debit).toBe(credit);
   });
 
-  it('maps an expense to debit Expense / credit Clearing', () => {
+  it('maps a standalone expense line to a plain debit Expense (V2 Sprint 6C: no self-contra — pairs against the batch\'s own cash/bank line instead)', () => {
     const drafts = mapPostingLineToGl({ id: 'pl5', line_domain: 'expense', line_type: 'expense', amount: -200 });
-    expect(drafts.find((d) => d.accountCode === GL_CODES.EXPENSE)).toMatchObject({ debit: 200, credit: 0 });
-    expect(drafts.find((d) => d.accountCode === GL_CODES.CLEARING)).toMatchObject({ debit: 0, credit: 200 });
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ accountCode: GL_CODES.EXPENSE, debit: 200, credit: 0 });
+  });
+
+  it('an expense paid from cash balances exactly with no Clearing plug (Sprint 6C: expenses.ts wiring)', () => {
+    const { wasUnbalanced, drafts } = mapPostingLinesToGl([
+      { id: 'a', line_domain: 'expense', line_type: 'expense', amount: -200 },
+      { id: 'b', line_domain: 'cash', line_type: 'payment', amount: -200 },
+    ]);
+    expect(wasUnbalanced).toBe(false);
+    expect(drafts.some((d) => d.accountCode === GL_CODES.CLEARING)).toBe(false);
+    const debit = drafts.reduce((s, d) => s + d.debit, 0);
+    const credit = drafts.reduce((s, d) => s + d.credit, 0);
+    expect(debit).toBe(credit);
+    expect(debit).toBe(200);
   });
 });
 

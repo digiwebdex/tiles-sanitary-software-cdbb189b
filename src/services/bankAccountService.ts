@@ -26,6 +26,26 @@ export interface BankLedgerRow {
   reference_id: string | null;
   entry_date: string;
   created_at: string;
+  /** V2 Sprint 6C additions — all optional so pre-6C callers are unaffected. */
+  cheque_no?: string | null;
+  cheque_status?: "issued" | "presented" | "cleared" | "bounced" | "cancelled" | null;
+  is_cleared?: boolean;
+  cleared_at?: string | null;
+}
+
+export interface CashBankTxResult {
+  ledgerRowIds: string[];
+  batchId: string | null;
+}
+
+export interface BankMovementInput {
+  amount: number;
+  description: string;
+  entry_date?: string;
+  payment_mode?: string | null;
+  cheque_no?: string | null;
+  reference_type?: string | null;
+  reference_id?: string | null;
 }
 
 export const bankAccountService = {
@@ -63,6 +83,21 @@ export const bankAccountService = {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
     });
     if (!r.ok) throw new Error((await r.json()).error || "Entry failed");
+    return r.json();
+  },
+  // V2 Sprint 6C — GL-wired deposit/withdrawal (see backend/src/services/accounting/cashBankTransactions.ts).
+  async deposit(id: string, dealerId: string, data: BankMovementInput): Promise<CashBankTxResult> {
+    const r = await vpsAuthedFetch(`/api/bank-accounts/${id}/deposit?dealerId=${dealerId}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Deposit failed"); }
+    return r.json();
+  },
+  async withdrawal(id: string, dealerId: string, data: BankMovementInput): Promise<CashBankTxResult> {
+    const r = await vpsAuthedFetch(`/api/bank-accounts/${id}/withdrawal?dealerId=${dealerId}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Withdrawal failed"); }
     return r.json();
   },
 };

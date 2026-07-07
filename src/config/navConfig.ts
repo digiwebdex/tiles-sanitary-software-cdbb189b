@@ -7,6 +7,7 @@ import {
   ClipboardCheck, Sparkles, CalendarDays, AlertTriangle, CalendarClock, Building2,
   Megaphone, Award, GraduationCap, Laptop, BadgeDollarSign, Clock, LogOut,
   Calculator, Boxes, Bookmark, Gauge, ClipboardList, FileEdit, Send, FileCheck2, PackageCheck,
+  GitCompareArrows,
 } from "lucide-react";
 
 /** Staff roles below the owner (dealer_admin). Owner + super_admin see all. */
@@ -156,6 +157,8 @@ export const navSections: NavSection[] = [
     items: [
       { path: "/ledger", label: "Ledger", icon: BookOpen, roles: ["manager", "accountant"] },
       { path: "/bank-accounts", label: "Bank Accounts", icon: Landmark, dealerAdminOnly: true },
+      { path: "/bank-accounts/cheque-register", label: "Cheque Register", icon: FileText, dealerAdminOnly: true },
+      { path: "/bank-accounts/reconciliation", label: "Bank Reconciliation", icon: GitCompareArrows, dealerAdminOnly: true },
       { path: "/cashbook", label: "Cashbook", icon: BookOpen, dealerAdminOnly: true },
       { path: "/cash-closing", label: "Day-End Closing", icon: ClipboardCheck, dealerAdminOnly: true },
       { path: "/financials", label: "Financial Statements", icon: Scale, dealerAdminOnly: true },

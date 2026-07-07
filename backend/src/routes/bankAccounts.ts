@@ -1,5 +1,8 @@
 /**
- * Bank Accounts route — Phase 1 (Multi-Bank).
+ * Bank Accounts route — Phase 1 (Multi-Bank), extended V2 Sprint 6C with
+ * GL-wired Deposit/Withdrawal (the Bank Book's own write endpoints — the
+ * pre-existing generic `/entry` below remains unchanged, for backward
+ * compatibility, and still does NOT reach the GL).
  *
  *   GET    /api/bank-accounts?dealerId=
  *   POST   /api/bank-accounts                     (create)
@@ -7,7 +10,9 @@
  *   DELETE /api/bank-accounts/:id                 (soft delete via is_active=false)
  *   GET    /api/bank-accounts/:id/balance         (current computed balance)
  *   GET    /api/bank-accounts/:id/ledger?from=&to=&page=&pageSize=
- *   POST   /api/bank-accounts/:id/entry           ({ type, amount, description, entry_date })
+ *   POST   /api/bank-accounts/:id/entry           ({ type, amount, description, entry_date }) — legacy, no GL
+ *   POST   /api/bank-accounts/:id/deposit         ({ amount, description, entry_date?, payment_mode?, cheque_no? })
+ *   POST   /api/bank-accounts/:id/withdrawal      (same shape)
  *
  * dealer_admin only.
  */
@@ -16,6 +21,8 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { recordBankDeposit, recordBankWithdrawal } from '../services/accounting/cashBankTransactions';
+import { normalizePaymentMode } from '../lib/paymentModes';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -179,6 +186,66 @@ router.post('/:id/entry', async (req, res) => {
     created_by: req.user?.userId ?? null,
   }).returning('*');
   res.status(201).json(row);
+});
+
+const MovementSchema = z.object({
+  amount: z.coerce.number().positive(),
+  description: z.string().trim().min(1).max(500),
+  entry_date: z.string().optional(),
+  payment_mode: z.string().optional().nullable(),
+  cheque_no: z.string().trim().max(30).optional().nullable(),
+  reference_type: z.string().max(50).optional().nullable(),
+  reference_id: z.string().uuid().optional().nullable(),
+});
+
+router.post('/:id/deposit', async (req, res) => {
+  const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
+  const parsed = MovementSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() }); return; }
+  try {
+    const result = await db.transaction((trx) => recordBankDeposit(trx, {
+      dealerId,
+      bankAccountId: req.params.id,
+      amount: parsed.data.amount,
+      description: parsed.data.description,
+      entryDate: parsed.data.entry_date || new Date().toISOString().slice(0, 10),
+      paymentMode: normalizePaymentMode(parsed.data.payment_mode ?? undefined),
+      chequeNo: parsed.data.cheque_no ?? null,
+      referenceType: parsed.data.reference_type ?? null,
+      referenceId: parsed.data.reference_id ?? null,
+      postedBy: req.user?.userId ?? null,
+    }));
+    res.status(201).json(result);
+  } catch (err: any) {
+    console.error('[bank-accounts/deposit]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record bank deposit' });
+  }
+});
+
+router.post('/:id/withdrawal', async (req, res) => {
+  const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
+  const parsed = MovementSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() }); return; }
+  try {
+    const result = await db.transaction((trx) => recordBankWithdrawal(trx, {
+      dealerId,
+      bankAccountId: req.params.id,
+      amount: parsed.data.amount,
+      description: parsed.data.description,
+      entryDate: parsed.data.entry_date || new Date().toISOString().slice(0, 10),
+      paymentMode: normalizePaymentMode(parsed.data.payment_mode ?? undefined),
+      chequeNo: parsed.data.cheque_no ?? null,
+      referenceType: parsed.data.reference_type ?? null,
+      referenceId: parsed.data.reference_id ?? null,
+      postedBy: req.user?.userId ?? null,
+    }));
+    res.status(201).json(result);
+  } catch (err: any) {
+    console.error('[bank-accounts/withdrawal]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record bank withdrawal' });
+  }
 });
 
 export default router;

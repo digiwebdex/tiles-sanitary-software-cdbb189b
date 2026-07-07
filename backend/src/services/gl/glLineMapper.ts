@@ -195,12 +195,21 @@ export function mapPostingLineToGl(line: PostingLineForGl, taxSplit?: TaxSplit):
       break;
     }
     case 'expense': {
+      // V2 Sprint 6C fix (dead code prior to this sprint — zero callers,
+      // confirmed): the original shape self-balanced via a CLEARING contra,
+      // which only makes sense if NO separate cash/bank line exists in the
+      // same batch. Every real caller (expenses.ts, wired this sprint) DOES
+      // pair this with a 'cash'/'bank' line for the actual money movement —
+      // adding a CLEARING contra here on top of that would leave the batch
+      // unbalanced by `a` on every single expense (forcing balanceGlDrafts'
+      // auto-plug to fire routinely, which its own docstring says should be
+      // rare). Fixed the same way Bug A was: retire the self-contra, this
+      // domain's debit now pairs directly against the batch's own cash/bank
+      // line — [EXPENSE debit a] + [CASH/BANK credit a] balances exactly,
+      // no Clearing involved.
       const a = abs(amt);
       if (a > 0) {
-        drafts.push(
-          { ...base, accountCode: GL_CODES.EXPENSE, debit: a, credit: 0 },
-          { ...base, accountCode: GL_CODES.CLEARING, debit: 0, credit: a },
-        );
+        drafts.push({ ...base, accountCode: GL_CODES.EXPENSE, debit: a, credit: 0 });
       }
       break;
     }

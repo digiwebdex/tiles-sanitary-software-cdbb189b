@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { isPostingEngineEnabled, mirrorToPostingTables } from '../services/posting/PostingOrchestrator';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -120,6 +121,29 @@ router.post('/', async (req: Request, res: Response) => {
         reference_id: expense.id,
         entry_date: expense_date,
       });
+
+      // V2 Sprint 6C — mirror into the Posting Engine. glLineMapper.ts's
+      // 'expense' domain case (dead since Sprint 6A, fixed this sprint for
+      // exactly this first caller) pairs against the 'cash' line below and
+      // balances with no Clearing plug.
+      if (isPostingEngineEnabled()) {
+        await mirrorToPostingTables(
+          {
+            trx,
+            dealerId,
+            documentType: 'expense',
+            documentId: expense.id,
+            eventType: 'posted',
+            entryDate: expense_date,
+            postedBy: req.user?.userId ?? null,
+            idempotencyKey: `expense:post:${expense.id}`,
+          },
+          [
+            { lineDomain: 'expense', lineType: 'expense', amount: -amount, entryDate: expense_date },
+            { lineDomain: 'cash', lineType: 'payment', amount: -amount, entryDate: expense_date },
+          ],
+        );
+      }
 
       return expense;
     });

@@ -96,6 +96,8 @@ import WhatsAppLogsPage from "./pages/whatsapp/WhatsAppLogsPage";
 import UserGuidePage from "./pages/UserGuidePage";
 import BankAccountsPage from "./pages/bank-accounts/BankAccountsPage";
 import BankAccountDetailPage from "./pages/bank-accounts/BankAccountDetailPage";
+import ChequeRegisterPage from "./pages/bank-accounts/ChequeRegisterPage";
+import BankReconciliationPage from "./pages/bank-accounts/BankReconciliationPage";
 import CashbookPage from "./pages/cashbook/CashbookPage";
 import CashClosingPage from "./pages/cash-closing/CashClosingPage";
 import FinancialStatementsPage from "./pages/financials/FinancialStatementsPage";
@@ -291,6 +293,8 @@ const App = () => (
             <Route path="/notices" element={<ProtectedRoute allowReadonly><AppLayout><NoticesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/bank-accounts" element={<ProtectedRoute><AppLayout><BankAccountsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/bank-accounts/:id" element={<ProtectedRoute><AppLayout><BankAccountDetailPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/bank-accounts/cheque-register" element={<ProtectedRoute><AppLayout><ChequeRegisterPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/bank-accounts/reconciliation" element={<ProtectedRoute><AppLayout><BankReconciliationPage /></AppLayout></ProtectedRoute>} />
             <Route path="/cashbook" element={<ProtectedRoute><AppLayout><CashbookPage /></AppLayout></ProtectedRoute>} />
             <Route path="/cash-closing" element={<ProtectedRoute><AppLayout><CashClosingPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/auto-draft" element={<ProtectedRoute><AppLayout><AutoPoDraftPage /></AppLayout></ProtectedRoute>} />

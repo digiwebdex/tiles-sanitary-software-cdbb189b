@@ -14,7 +14,12 @@ export type PostingDocumentType =
   | 'purchase_return'
   | 'landed_cost'
   | 'stock_cost_adjustment'
-  | 'opening_balance';
+  | 'opening_balance'
+  | 'cash_receipt'
+  | 'cash_payment'
+  | 'bank_deposit'
+  | 'bank_withdrawal'
+  | 'transfer';
 
 export type PostingEventType = 'posted' | 'reversed';
 

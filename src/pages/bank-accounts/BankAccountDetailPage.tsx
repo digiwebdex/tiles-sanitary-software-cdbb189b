@@ -7,12 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDealerId } from "@/hooks/useDealerId";
 import { bankAccountService } from "@/services/bankAccountService";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const BankAccountDetailPage = () => {
@@ -48,6 +48,37 @@ const BankAccountDetailPage = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
+  // V2 Sprint 6C — GL-wired Deposit/Withdrawal (see bankAccountService.deposit/withdrawal).
+  const [movementDialog, setMovementDialog] = useState<{ open: boolean; kind: "deposit" | "withdrawal" }>({ open: false, kind: "deposit" });
+  const [movementForm, setMovementForm] = useState({ amount: "", description: "", entry_date: new Date().toISOString().slice(0, 10), payment_mode: "bank", cheque_no: "" });
+
+  const resetMovementForm = () => {
+    setMovementDialog({ open: false, kind: "deposit" });
+    setMovementForm({ amount: "", description: "", entry_date: new Date().toISOString().slice(0, 10), payment_mode: "bank", cheque_no: "" });
+  };
+
+  const recordMovement = useMutation({
+    mutationFn: () => {
+      const input = {
+        amount: Number(movementForm.amount),
+        description: movementForm.description,
+        entry_date: movementForm.entry_date,
+        payment_mode: movementForm.payment_mode,
+        cheque_no: movementForm.payment_mode === "cheque" ? (movementForm.cheque_no.trim() || null) : null,
+      };
+      return movementDialog.kind === "deposit"
+        ? bankAccountService.deposit(id!, dealerId, input)
+        : bankAccountService.withdrawal(id!, dealerId, input);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bank-ledger", id] });
+      qc.invalidateQueries({ queryKey: ["bank-accounts"] });
+      toast.success(movementDialog.kind === "deposit" ? "Deposit recorded" : "Withdrawal recorded");
+      resetMovementForm();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   return (
     <div className="container mx-auto p-6 space-y-4">
       <div className="flex items-center gap-2">
@@ -66,9 +97,15 @@ const BankAccountDetailPage = () => {
         </Card>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2 flex-wrap">
+        <Button variant="outline" onClick={() => setMovementDialog({ open: true, kind: "deposit" })}>
+          <ArrowDownCircle className="h-4 w-4 mr-2 text-emerald-500" /> Deposit
+        </Button>
+        <Button variant="outline" onClick={() => setMovementDialog({ open: true, kind: "withdrawal" })}>
+          <ArrowUpCircle className="h-4 w-4 mr-2 text-red-500" /> Withdrawal
+        </Button>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" /> Add Entry</Button></DialogTrigger>
+          <DialogTrigger asChild><Button variant="ghost"><Plus className="h-4 w-4 mr-2" /> Add Entry (legacy)</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>New Bank Entry</DialogTitle></DialogHeader>
             <div className="space-y-3">
@@ -95,6 +132,43 @@ const BankAccountDetailPage = () => {
         </Dialog>
       </div>
 
+      <Dialog open={movementDialog.open} onOpenChange={(o) => { if (!o) resetMovementForm(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{movementDialog.kind === "deposit" ? "Record Deposit" : "Record Withdrawal"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Amount (৳)</Label><Input type="number" min={1} value={movementForm.amount} onChange={e => setMovementForm({ ...movementForm, amount: e.target.value })} /></div>
+            <div><Label>Description</Label><Input value={movementForm.description} onChange={e => setMovementForm({ ...movementForm, description: e.target.value })} /></div>
+            <div><Label>Date</Label><Input type="date" value={movementForm.entry_date} onChange={e => setMovementForm({ ...movementForm, entry_date: e.target.value })} /></div>
+            <div>
+              <Label>Payment Mode</Label>
+              <Select value={movementForm.payment_mode} onValueChange={v => setMovementForm({ ...movementForm, payment_mode: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                  <SelectItem value="card">Card</SelectItem>
+                  <SelectItem value="bkash">bKash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="rocket">Rocket</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {movementForm.payment_mode === "cheque" && (
+              <div><Label>Cheque No.</Label><Input value={movementForm.cheque_no} onChange={e => setMovementForm({ ...movementForm, cheque_no: e.target.value })} placeholder="e.g. 0012345" /></div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetMovementForm} disabled={recordMovement.isPending}>Cancel</Button>
+            <Button
+              onClick={() => recordMovement.mutate()}
+              disabled={recordMovement.isPending || !(Number(movementForm.amount) > 0) || !movementForm.description.trim()}
+            >
+              {recordMovement.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader><CardTitle>Transactions</CardTitle></CardHeader>
         <CardContent>
@@ -107,7 +181,11 @@ const BankAccountDetailPage = () => {
                 <TableRow key={r.id}>
                   <TableCell>{new Date(r.entry_date).toLocaleDateString()}</TableCell>
                   <TableCell><Badge variant="outline">{r.type}</Badge></TableCell>
-                  <TableCell>{r.description || "—"}</TableCell>
+                  <TableCell>
+                    {r.description || "—"}
+                    {r.cheque_no && <span className="ml-2 text-xs text-muted-foreground">Cheque #{r.cheque_no} ({r.cheque_status})</span>}
+                    {r.is_cleared && <Badge variant="secondary" className="ml-2 text-xs">Cleared</Badge>}
+                  </TableCell>
                   <TableCell className={`text-right font-mono ${Number(r.amount) >= 0 ? "text-emerald-500" : "text-red-500"}`}>{formatCurrency(Math.abs(Number(r.amount)))}</TableCell>
                 </TableRow>
               ))}
