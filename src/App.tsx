@@ -100,6 +100,8 @@ import CashbookPage from "./pages/cashbook/CashbookPage";
 import CashClosingPage from "./pages/cash-closing/CashClosingPage";
 import FinancialStatementsPage from "./pages/financials/FinancialStatementsPage";
 import JournalPage from "./pages/journal/JournalPage";
+import ChartOfAccountsPage from "./pages/journal/ChartOfAccountsPage";
+import FiscalYearPage from "./pages/journal/FiscalYearPage";
 import EmiPage from "./pages/emi/EmiPage";
 import HRMPage from "./pages/hrm/HRMPage";
 import LeavesPage from "./pages/hrm/LeavesPage";
@@ -296,6 +298,8 @@ const App = () => (
             <Route path="/customers/:customerId/statement" element={<ProtectedRoute><AppLayout><CustomerStatementPage /></AppLayout></ProtectedRoute>} />
             <Route path="/financials" element={<ProtectedRoute><AppLayout><FinancialStatementsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/journal" element={<ProtectedRoute><AppLayout><JournalPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/journal/chart-of-accounts" element={<ProtectedRoute><AppLayout><ChartOfAccountsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/journal/fiscal-years" element={<ProtectedRoute><AppLayout><FiscalYearPage /></AppLayout></ProtectedRoute>} />
             <Route path="/emi" element={<ProtectedRoute><AppLayout><EmiPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm" element={<ProtectedRoute><AppLayout><HRMPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm/leaves" element={<ProtectedRoute><AppLayout><LeavesPage /></AppLayout></ProtectedRoute>} />

@@ -160,6 +160,8 @@ export const navSections: NavSection[] = [
       { path: "/cash-closing", label: "Day-End Closing", icon: ClipboardCheck, dealerAdminOnly: true },
       { path: "/financials", label: "Financial Statements", icon: Scale, dealerAdminOnly: true },
       { path: "/journal", label: "Journal Entries", icon: BookOpen, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/journal/chart-of-accounts", label: "Chart of Accounts", icon: Landmark, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/journal/fiscal-years", label: "Fiscal Years", icon: CalendarClock, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/emi", label: "EMI Plans", icon: CalendarClock, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/directors", label: "Directors", icon: Crown, dealerAdminOnly: true, planFeature: "advanced_finance" },
     ],

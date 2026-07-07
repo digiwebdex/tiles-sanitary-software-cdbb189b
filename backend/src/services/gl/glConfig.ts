@@ -1,7 +1,13 @@
 import { env } from '../../config/env';
 
-/** True when USE_GL_SPINE=true|1 — mirrors posting_batches into gl_journal_entries. */
+/**
+ * True unless USE_GL_SPINE is explicitly set to a falsy value (false|0).
+ * Default ON as of V2 Sprint 6A, once the mapper bugs found during Phase 6
+ * review were fixed (docs/ACCOUNTING_V2_ARCHITECTURE.md §1.0) — the env var
+ * remains as an emergency kill-switch only.
+ */
 export function isGlSpineEnabled(): boolean {
   const v = (env.USE_GL_SPINE ?? '').toLowerCase();
-  return v === 'true' || v === '1';
+  if (v === 'false' || v === '0') return false;
+  return true;
 }

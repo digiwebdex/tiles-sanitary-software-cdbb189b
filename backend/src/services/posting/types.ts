@@ -1,7 +1,19 @@
 import type { Knex } from 'knex';
 
-/** Business documents supported by the posting engine (MVP: purchase + sale). */
-export type PostingDocumentType = 'purchase' | 'sale';
+/**
+ * Business documents supported by the posting engine. Widened in V2 Sprint
+ * 6A per the approved architecture (Revision 1's `'purchase' | 'sale'`-only
+ * union was a documented gap) — additive, no existing value's meaning
+ * changes.
+ */
+export type PostingDocumentType =
+  | 'purchase'
+  | 'sale'
+  | 'payment'
+  | 'expense'
+  | 'purchase_return'
+  | 'landed_cost'
+  | 'stock_cost_adjustment';
 
 export type PostingEventType = 'posted' | 'reversed';
 

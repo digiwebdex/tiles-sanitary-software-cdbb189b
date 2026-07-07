@@ -54,6 +54,9 @@ export interface JournalLine {
   line_narration?: string | null;
 }
 
+/** V2 Sprint 6A — Draft/Approve/Post/Reverse workflow status. */
+export type JournalEntryStatus = "draft" | "approved" | "posted";
+
 export interface JournalEntry {
   id: string;
   voucher_no: string;
@@ -63,6 +66,12 @@ export interface JournalEntry {
   total_credit?: number;
   lines?: JournalLine[];
   created_at?: string;
+  /** V2 Sprint 6A additions — all optional so pre-6A callers are unaffected. */
+  status?: JournalEntryStatus;
+  posted_at?: string | null;
+  approved_at?: string | null;
+  reverses_journal_entry_id?: string | null;
+  reversed_by_journal_entry_id?: string | null;
 }
 
 export const financialService = {
@@ -113,12 +122,13 @@ export interface CashFlow {
 }
 
 export const journalService = {
-  async list(dealerId: string, opts: { from?: string; to?: string; limit?: number; offset?: number } = {}): Promise<{ rows: JournalEntry[]; total: number }> {
+  async list(dealerId: string, opts: { from?: string; to?: string; limit?: number; offset?: number; status?: JournalEntryStatus } = {}): Promise<{ rows: JournalEntry[]; total: number }> {
     const qs = new URLSearchParams({ dealerId });
     if (opts.from) qs.set("from", opts.from);
     if (opts.to) qs.set("to", opts.to);
     if (opts.limit != null) qs.set("limit", String(opts.limit));
     if (opts.offset != null) qs.set("offset", String(opts.offset));
+    if (opts.status) qs.set("status", opts.status);
     const r = await vpsAuthedFetch(`/api/journal?${qs}`);
     if (!r.ok) throw new Error("Failed to load journal");
     return r.json();
@@ -139,6 +149,35 @@ export const journalService = {
   },
   async remove(dealerId: string, id: string): Promise<void> {
     const r = await vpsAuthedFetch(`/api/journal/${id}?dealerId=${dealerId}`, { method: "DELETE" });
-    if (!r.ok) throw new Error("Failed to delete entry");
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Failed to delete entry"); }
+  },
+  // ── V2 Sprint 6A — Draft / Approve / Post / Reverse workflow ──
+  async createDraft(dealerId: string, payload: { entry_date: string; narration?: string; lines: JournalLine[] }): Promise<{ id: string; voucher_no: string }> {
+    const r = await vpsAuthedFetch(`/api/journal/draft?dealerId=${dealerId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dealerId, ...payload }),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Failed to save draft"); }
+    return r.json();
+  },
+  async approve(dealerId: string, id: string): Promise<JournalEntry> {
+    const r = await vpsAuthedFetch(`/api/journal/${id}/approve?dealerId=${dealerId}`, { method: "POST" });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Failed to approve entry"); }
+    return r.json();
+  },
+  async post(dealerId: string, id: string): Promise<JournalEntry> {
+    const r = await vpsAuthedFetch(`/api/journal/${id}/post?dealerId=${dealerId}`, { method: "POST" });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Failed to post entry"); }
+    return r.json();
+  },
+  async reverse(dealerId: string, id: string, opts: { entry_date?: string; narration?: string } = {}): Promise<{ original_id: string; reversal: { id: string; voucher_no: string } }> {
+    const r = await vpsAuthedFetch(`/api/journal/${id}/reverse?dealerId=${dealerId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Failed to reverse entry"); }
+    return r.json();
   },
 };

@@ -4,7 +4,7 @@
 import type { Knex } from 'knex';
 import { db } from '../../db/connection';
 import { DEFAULT_GL_CHART } from '../../lib/glChart';
-import { mapPostingLinesToGl, type PostingLineForGl } from './glLineMapper';
+import { mapPostingLinesToGl, type PostingLineForGl, type TaxSplit } from './glLineMapper';
 
 export async function ensureDealerGlChart(trx: Knex.Transaction, dealerId: string) {
   const existing = await trx('gl_accounts').where({ dealer_id: dealerId }).first('id');
@@ -16,6 +16,10 @@ export async function ensureDealerGlChart(trx: Knex.Transaction, dealerId: strin
     name: a.name,
     account_type: a.account_type,
     parent_code: a.parent_code ?? null,
+    normal_balance: a.normal_balance,
+    is_contra: a.is_contra ?? false,
+    is_group: a.is_group ?? false,
+    category: a.category ?? null,
     is_system: true,
     is_active: true,
   }));
@@ -39,6 +43,39 @@ export interface MirrorGlInput {
   description?: string | null;
   postingLineIds: string[];
   postingLines: PostingLineForGl[];
+  /** 'posted' | 'reversed' — determines which batch's tax_posting_lines to look up (Bug A fix). */
+  eventType?: string;
+  /** The original batch id, when this is a reversal (mirrors posting_batches.reverses_batch_id). */
+  reversesBatchId?: string | null;
+}
+
+/**
+ * Look up the output-VAT effect for a batch's customer/sale line, per the
+ * approved architecture's Bug A fix: VAT is sourced from `tax_posting_lines`
+ * directly rather than duplicating VAT computation into a second code path.
+ *
+ * For a 'reversed' batch, the tax effect is looked up against the ORIGINAL
+ * batch being reversed (`reversesBatchId`), not the reversal batch's own id
+ * — the reversal batch never gets its own tax_posting_lines row (that gap
+ * is Sprint 6E-scoped, per the roadmap), so without this lookup a reversal
+ * would post an uncorrected gross amount to Sales Revenue and never touch
+ * VAT Payable, leaving both accounts permanently wrong after any reversal.
+ */
+async function lookupTaxSplit(
+  trx: Knex.Transaction,
+  dealerId: string,
+  input: Pick<MirrorGlInput, 'postingBatchId' | 'eventType' | 'reversesBatchId'>,
+): Promise<TaxSplit | undefined> {
+  const lookupBatchId =
+    input.eventType === 'reversed' && input.reversesBatchId ? input.reversesBatchId : input.postingBatchId;
+  const rows = await trx('tax_posting_lines')
+    .where({ dealer_id: dealerId, posting_batch_id: lookupBatchId })
+    .select('tax_amount', 'sd_amount');
+  if (!rows.length) return undefined;
+  const taxAmount = rows.reduce((sum, r) => sum + Number(r.tax_amount || 0), 0);
+  const sdAmount = rows.reduce((sum, r) => sum + Number(r.sd_amount || 0), 0);
+  if (taxAmount <= 0 && sdAmount <= 0) return undefined;
+  return { taxAmount, sdAmount };
 }
 
 export async function mirrorPostingBatchToGl(trx: Knex.Transaction, input: MirrorGlInput) {
@@ -52,7 +89,14 @@ export async function mirrorPostingBatchToGl(trx: Knex.Transaction, input: Mirro
   await ensureDealerGlChart(trx, input.dealerId);
   const accountMap = await getAccountIdMap(trx, input.dealerId);
 
-  const drafts = mapPostingLinesToGl(input.postingLines);
+  const taxSplit = await lookupTaxSplit(trx, input.dealerId, input);
+  const { drafts, wasUnbalanced } = mapPostingLinesToGl(input.postingLines, taxSplit);
+  if (wasUnbalanced) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[gl] posting batch ${input.postingBatchId} (${input.documentType}/${input.documentId}) required a Clearing plug — expected only for expense/landed-cost/cost-adjustment events, investigate if this fires for a plain sale/purchase.`,
+    );
+  }
   if (!drafts.length) return null;
 
   const [entry] = await trx('gl_journal_entries')
@@ -105,7 +149,7 @@ export async function backfillGlForDealer(
     .whereNull('je.id')
     .orderBy('pb.posted_at', 'asc')
     .limit(limit)
-    .select('pb.id', 'pb.dealer_id', 'pb.document_type', 'pb.document_id', 'pb.notes');
+    .select('pb.id', 'pb.dealer_id', 'pb.document_type', 'pb.document_id', 'pb.notes', 'pb.event_type', 'pb.reverses_batch_id');
 
   let mirrored = 0;
   let skipped = 0;
@@ -131,6 +175,8 @@ export async function backfillGlForDealer(
         documentId: batch.document_id as string,
         description: (batch.notes as string) ?? null,
         postingLineIds: lines.map((l) => l.id as string),
+        eventType: batch.event_type as string,
+        reversesBatchId: (batch.reverses_batch_id as string) ?? null,
         postingLines: lines.map((r) => ({
           id: r.id as string,
           line_domain: r.line_domain as string,
