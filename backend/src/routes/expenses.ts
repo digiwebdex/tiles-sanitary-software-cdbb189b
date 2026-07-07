@@ -76,6 +76,9 @@ const CreateSchema = z.object({
   amount: z.coerce.number().positive(),
   expense_date: z.string().min(1),
   category: z.string().nullable().optional(),
+  // V2 Sprint 6D — optional Project/Cost Center tagging.
+  project_id: z.string().uuid().nullable().optional(),
+  cost_center_id: z.string().uuid().nullable().optional(),
 });
 
 router.post('/', async (req: Request, res: Response) => {
@@ -88,7 +91,7 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(400).json({ error: parsed.error.flatten().fieldErrors });
     return;
   }
-  const { description, amount, expense_date, category } = parsed.data;
+  const { description, amount, expense_date, category, project_id, cost_center_id } = parsed.data;
 
   try {
     const result = await db.transaction(async (trx) => {
@@ -100,6 +103,8 @@ router.post('/', async (req: Request, res: Response) => {
           expense_date,
           category: category ?? null,
           created_by: req.user?.userId ?? null,
+          project_id: project_id ?? null,
+          cost_center_id: cost_center_id ?? null,
         })
         .returning('*');
 
@@ -139,7 +144,10 @@ router.post('/', async (req: Request, res: Response) => {
             idempotencyKey: `expense:post:${expense.id}`,
           },
           [
-            { lineDomain: 'expense', lineType: 'expense', amount: -amount, entryDate: expense_date },
+            {
+              lineDomain: 'expense', lineType: 'expense', amount: -amount, entryDate: expense_date,
+              projectId: project_id ?? null, costCenterId: cost_center_id ?? null,
+            },
             { lineDomain: 'cash', lineType: 'payment', amount: -amount, entryDate: expense_date },
           ],
         );

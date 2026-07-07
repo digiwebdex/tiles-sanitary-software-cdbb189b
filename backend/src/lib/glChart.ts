@@ -42,11 +42,13 @@ export const DEFAULT_GL_CHART: GlAccountTemplate[] = [
   { code: '3100', name: 'Retained Earnings', account_type: 'equity', normal_balance: 'credit', category: 'retained_earnings' },
   { code: '3200', name: 'Opening Balance Equity', account_type: 'equity', normal_balance: 'credit', category: 'capital' },
   { code: '4000', name: 'Sales Revenue', account_type: 'income', normal_balance: 'credit', category: 'operating_revenue' },
+  { code: '4100', name: 'Gain on Disposal of Fixed Assets', account_type: 'income', normal_balance: 'credit', category: 'other_income' },
   { code: '5000', name: 'Cost of Goods Sold', account_type: 'expense', normal_balance: 'debit', category: 'cogs' },
   { code: '5100', name: 'Operating Expenses', account_type: 'expense', normal_balance: 'debit', category: 'operating_expense' },
   { code: '5900', name: 'GL Clearing / Suspense', account_type: 'asset', normal_balance: 'debit', category: 'other_asset' },
   { code: '6000', name: 'Depreciation Expense', account_type: 'expense', normal_balance: 'debit', category: 'operating_expense' },
   { code: '6100', name: 'Bad Debt Expense', account_type: 'expense', normal_balance: 'debit', category: 'operating_expense' },
+  { code: '6200', name: 'Loss on Disposal of Fixed Assets', account_type: 'expense', normal_balance: 'debit', category: 'other_expense' },
 ];
 
 /** Standard account codes referenced by the posting mapper. */
@@ -64,9 +66,11 @@ export const GL_CODES = {
   RETAINED_EARNINGS: '3100',
   OPENING_BALANCE_EQUITY: '3200',
   SALES: '4000',
+  GAIN_ON_DISPOSAL: '4100',
   COGS: '5000',
   EXPENSE: '5100',
   CLEARING: '5900',
   DEPRECIATION_EXPENSE: '6000',
   BAD_DEBT_EXPENSE: '6100',
+  LOSS_ON_DISPOSAL: '6200',
 } as const;

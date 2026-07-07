@@ -242,6 +242,42 @@ export function mapPostingLineToGl(line: PostingLineForGl, taxSplit?: TaxSplit):
       // 'purchase_in': intentionally no drafts (Bug D).
       break;
     }
+    case 'asset': {
+      // V2 Sprint 6D addition — Fixed Asset Purchase/Disposal/Depreciation
+      // (see services/accounting/assetPosting.ts). Each line_type here is a
+      // single leg of a larger balanced batch built by the caller (e.g. a
+      // depreciation posting also carries a matching 'expense'-shaped
+      // entry, an asset purchase pairs against 'supplier'/'cash'/'bank').
+      const a = abs(amt);
+      if (a === 0) break;
+      if (line.line_type === 'purchase') {
+        // Capitalize: debit Fixed Assets. Paired supplier/cash/bank line
+        // in the same batch supplies the credit side.
+        if (amt > 0) {
+          drafts.push({ ...base, accountCode: GL_CODES.FIXED_ASSETS, debit: a, credit: 0 });
+        } else {
+          drafts.push({ ...base, accountCode: GL_CODES.FIXED_ASSETS, debit: 0, credit: a });
+        }
+      } else if (line.line_type === 'depreciation') {
+        // Monthly depreciation: debit Depreciation Expense, credit
+        // Accumulated Depreciation (contra-asset) — self-balanced pair.
+        drafts.push(
+          { ...base, accountCode: GL_CODES.DEPRECIATION_EXPENSE, debit: a, credit: 0 },
+          { ...base, accountCode: GL_CODES.ACCUMULATED_DEPRECIATION, debit: 0, credit: a },
+        );
+      } else if (line.line_type === 'disposal_cost') {
+        // Disposal leg 1: remove the asset's original cost — credit Fixed Assets.
+        drafts.push({ ...base, accountCode: GL_CODES.FIXED_ASSETS, debit: 0, credit: a });
+      } else if (line.line_type === 'disposal_accumulated_depreciation') {
+        // Disposal leg 2: clear accumulated depreciation — debit Accumulated Depreciation.
+        drafts.push({ ...base, accountCode: GL_CODES.ACCUMULATED_DEPRECIATION, debit: a, credit: 0 });
+      } else if (line.line_type === 'disposal_gain') {
+        drafts.push({ ...base, accountCode: GL_CODES.GAIN_ON_DISPOSAL, debit: 0, credit: a });
+      } else if (line.line_type === 'disposal_loss') {
+        drafts.push({ ...base, accountCode: GL_CODES.LOSS_ON_DISPOSAL, debit: a, credit: 0 });
+      }
+      break;
+    }
     default:
       break;
   }

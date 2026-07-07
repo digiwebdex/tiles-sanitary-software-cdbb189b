@@ -7,7 +7,7 @@ import {
   ClipboardCheck, Sparkles, CalendarDays, AlertTriangle, CalendarClock, Building2,
   Megaphone, Award, GraduationCap, Laptop, BadgeDollarSign, Clock, LogOut,
   Calculator, Boxes, Bookmark, Gauge, ClipboardList, FileEdit, Send, FileCheck2, PackageCheck,
-  GitCompareArrows,
+  GitCompareArrows, FolderKanban,
 } from "lucide-react";
 
 /** Staff roles below the owner (dealer_admin). Owner + super_admin see all. */
@@ -165,6 +165,10 @@ export const navSections: NavSection[] = [
       { path: "/journal", label: "Journal Entries", icon: BookOpen, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/journal/chart-of-accounts", label: "Chart of Accounts", icon: Landmark, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/journal/fiscal-years", label: "Fiscal Years", icon: CalendarClock, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/cost-centers", label: "Cost Centers", icon: Building2, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/projects/accounting", label: "Project Accounting", icon: FolderKanban, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/fixed-assets", label: "Fixed Assets", icon: Boxes, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/budgets", label: "Budget Management", icon: Wallet, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/emi", label: "EMI Plans", icon: CalendarClock, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/directors", label: "Directors", icon: Crown, dealerAdminOnly: true, planFeature: "advanced_finance" },
     ],

@@ -83,6 +83,8 @@ export async function insertPostingLines(
     currency: line.currency ?? 'BDT',
     entry_date: line.entryDate,
     metadata: JSON.stringify(line.metadata ?? {}),
+    cost_center_id: line.costCenterId ?? null,
+    project_id: line.projectId ?? null,
   }));
 
   const inserted = await trx('posting_lines').insert(rows).returning('id');

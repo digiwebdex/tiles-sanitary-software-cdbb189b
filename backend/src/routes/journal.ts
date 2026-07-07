@@ -60,6 +60,8 @@ const lineSchema = z.object({
   debit: z.coerce.number().min(0).default(0),
   credit: z.coerce.number().min(0).default(0),
   line_narration: z.string().optional().nullable(),
+  // V2 Sprint 6D — optional per-line Cost Center assignment.
+  cost_center_id: z.string().uuid().optional().nullable(),
 });
 
 const createSchema = z.object({
@@ -222,6 +224,7 @@ router.post('/', restrictSuperAdminOnFinancials(), async (req, res) => {
         credit: l.credit,
         line_narration: l.line_narration ?? null,
         line_order: i,
+        cost_center_id: l.cost_center_id ?? null,
       }));
       await trx('journal_entry_lines').insert(lineRows);
       await auditLog(trx, req, dealerId, 'journal_create_posted', hdr.id, null, { voucher_no: hdr.voucher_no, entry_date, lines });
@@ -273,6 +276,7 @@ router.post('/draft', restrictSuperAdminOnFinancials(), async (req, res) => {
         credit: l.credit,
         line_narration: l.line_narration ?? null,
         line_order: i,
+        cost_center_id: l.cost_center_id ?? null,
       }));
       await trx('journal_entry_lines').insert(lineRows);
       await auditLog(trx, req, dealerId, 'journal_draft_create', hdr.id, null, { voucher_no: hdr.voucher_no, entry_date, lines });
@@ -403,6 +407,7 @@ router.post('/:id/reverse', restrictSuperAdminOnFinancials(), async (req, res) =
         credit: Number(l.debit),
         line_narration: l.line_narration,
         line_order: i,
+        cost_center_id: l.cost_center_id ?? null,
       }));
       await trx('journal_entry_lines').insert(mirroredLines);
       await auditLog(trx, req, dealerId, 'journal_reverse', original.id, { status: 'posted' }, { reversed_by: reversal.id });

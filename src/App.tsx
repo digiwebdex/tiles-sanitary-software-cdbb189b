@@ -104,6 +104,11 @@ import FinancialStatementsPage from "./pages/financials/FinancialStatementsPage"
 import JournalPage from "./pages/journal/JournalPage";
 import ChartOfAccountsPage from "./pages/journal/ChartOfAccountsPage";
 import FiscalYearPage from "./pages/journal/FiscalYearPage";
+import CostCentersPage from "./pages/cost-centers/CostCentersPage";
+import FixedAssetsPage from "./pages/fixed-assets/FixedAssetsPage";
+import FixedAssetDetailPage from "./pages/fixed-assets/FixedAssetDetailPage";
+import BudgetsPage from "./pages/budgets/BudgetsPage";
+import ProjectAccountingPage from "./pages/projects/ProjectAccountingPage";
 import EmiPage from "./pages/emi/EmiPage";
 import HRMPage from "./pages/hrm/HRMPage";
 import LeavesPage from "./pages/hrm/LeavesPage";
@@ -304,6 +309,10 @@ const App = () => (
             <Route path="/journal" element={<ProtectedRoute><AppLayout><JournalPage /></AppLayout></ProtectedRoute>} />
             <Route path="/journal/chart-of-accounts" element={<ProtectedRoute><AppLayout><ChartOfAccountsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/journal/fiscal-years" element={<ProtectedRoute><AppLayout><FiscalYearPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/cost-centers" element={<ProtectedRoute><AppLayout><CostCentersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/fixed-assets" element={<ProtectedRoute><AppLayout><FixedAssetsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/fixed-assets/:id" element={<ProtectedRoute><AppLayout><FixedAssetDetailPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/budgets" element={<ProtectedRoute><AppLayout><BudgetsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/emi" element={<ProtectedRoute><AppLayout><EmiPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm" element={<ProtectedRoute><AppLayout><HRMPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm/leaves" element={<ProtectedRoute><AppLayout><LeavesPage /></AppLayout></ProtectedRoute>} />
@@ -403,6 +412,7 @@ const App = () => (
             <Route path="/sales-orders/new" element={<ProtectedRoute><AppLayout><CreateSalesOrder /></AppLayout></ProtectedRoute>} />
             <Route path="/sales-orders/:id/edit" element={<ProtectedRoute><AppLayout><EditSalesOrder /></AppLayout></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><AppLayout><ProjectsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/projects/accounting" element={<ProtectedRoute><AppLayout><ProjectAccountingPage /></AppLayout></ProtectedRoute>} />
             <Route path="/referrals" element={<ProtectedRoute><AppLayout><ReferralSourcesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/display-sample" element={<ProtectedRoute><AppLayout><DisplaySampleStockPage /></AppLayout></ProtectedRoute>} />
             <Route path="/whatsapp-logs" element={<ProtectedRoute><AppLayout><WhatsAppLogsPage /></AppLayout></ProtectedRoute>} />

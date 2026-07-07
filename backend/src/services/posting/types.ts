@@ -19,7 +19,10 @@ export type PostingDocumentType =
   | 'cash_payment'
   | 'bank_deposit'
   | 'bank_withdrawal'
-  | 'transfer';
+  | 'transfer'
+  | 'fixed_asset_purchase'
+  | 'fixed_asset_disposal'
+  | 'depreciation';
 
 export type PostingEventType = 'posted' | 'reversed';
 
@@ -30,7 +33,8 @@ export type PostingLineDomain =
   | 'cash'
   | 'bank'
   | 'expense'
-  | 'tax';
+  | 'tax'
+  | 'asset';
 
 export interface CreatePostingBatchInput {
   dealerId: string;
@@ -59,6 +63,9 @@ export interface PostingLineInput {
   qtyUnit?: string | null;
   currency?: string;
   metadata?: Record<string, unknown>;
+  /** V2 Sprint 6D — optional cost-center/project tagging, any line domain. */
+  costCenterId?: string | null;
+  projectId?: string | null;
 }
 
 export interface PostingBatchResult {

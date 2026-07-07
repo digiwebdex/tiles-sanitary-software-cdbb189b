@@ -169,6 +169,62 @@ describe('glLineMapper — opening_balance (V2 Sprint 6B)', () => {
   });
 });
 
+describe('glLineMapper — asset domain (V2 Sprint 6D: purchase/depreciation/disposal)', () => {
+  it('maps an asset purchase to a plain debit Fixed Assets', () => {
+    const drafts = mapPostingLineToGl({ id: 'a1', line_domain: 'asset', line_type: 'purchase', amount: 50000 });
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ accountCode: GL_CODES.FIXED_ASSETS, debit: 50000, credit: 0 });
+  });
+
+  it('an asset purchase funded by cash balances exactly with no Clearing plug', () => {
+    const { wasUnbalanced, drafts } = mapPostingLinesToGl([
+      { id: 'a', line_domain: 'asset', line_type: 'purchase', amount: 50000 },
+      { id: 'b', line_domain: 'cash', line_type: 'payment', amount: -50000 },
+    ]);
+    expect(wasUnbalanced).toBe(false);
+    const debit = drafts.reduce((s, d) => s + d.debit, 0);
+    const credit = drafts.reduce((s, d) => s + d.credit, 0);
+    expect(debit).toBe(credit);
+  });
+
+  it('maps depreciation to a self-balanced Dr Depreciation Expense / Cr Accumulated Depreciation pair from one line', () => {
+    const drafts = mapPostingLineToGl({ id: 'a2', line_domain: 'asset', line_type: 'depreciation', amount: 833.33 });
+    expect(drafts).toHaveLength(2);
+    expect(drafts.find((d) => d.accountCode === GL_CODES.DEPRECIATION_EXPENSE)).toMatchObject({ debit: 833.33, credit: 0 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.ACCUMULATED_DEPRECIATION)).toMatchObject({ debit: 0, credit: 833.33 });
+  });
+
+  it('a full disposal-at-a-gain batch (cost + accumulated depreciation + gain + cash proceeds) balances exactly', () => {
+    // cost 50000, accumulated 45000 -> book value 5000; proceeds 7000 -> gain 2000.
+    const { wasUnbalanced, drafts } = mapPostingLinesToGl([
+      { id: 'a', line_domain: 'asset', line_type: 'disposal_cost', amount: 50000 },
+      { id: 'b', line_domain: 'asset', line_type: 'disposal_accumulated_depreciation', amount: 45000 },
+      { id: 'c', line_domain: 'asset', line_type: 'disposal_gain', amount: 2000 },
+      { id: 'd', line_domain: 'cash', line_type: 'receipt', amount: 7000 },
+    ]);
+    expect(wasUnbalanced).toBe(false);
+    expect(drafts.find((d) => d.accountCode === GL_CODES.FIXED_ASSETS)).toMatchObject({ debit: 0, credit: 50000 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.ACCUMULATED_DEPRECIATION)).toMatchObject({ debit: 45000, credit: 0 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.GAIN_ON_DISPOSAL)).toMatchObject({ debit: 0, credit: 2000 });
+    expect(drafts.find((d) => d.accountCode === GL_CODES.CASH)).toMatchObject({ debit: 7000, credit: 0 });
+  });
+
+  it('a full disposal-at-a-loss batch (scrapped, zero proceeds) balances exactly', () => {
+    // cost 50000, accumulated 30000 -> book value 20000; proceeds 0 -> full loss of 20000.
+    const { wasUnbalanced, drafts } = mapPostingLinesToGl([
+      { id: 'a', line_domain: 'asset', line_type: 'disposal_cost', amount: 50000 },
+      { id: 'b', line_domain: 'asset', line_type: 'disposal_accumulated_depreciation', amount: 30000 },
+      { id: 'c', line_domain: 'asset', line_type: 'disposal_loss', amount: 20000 },
+    ]);
+    expect(wasUnbalanced).toBe(false);
+    expect(drafts.find((d) => d.accountCode === GL_CODES.LOSS_ON_DISPOSAL)).toMatchObject({ debit: 20000, credit: 0 });
+    const debit = drafts.reduce((s, d) => s + d.debit, 0);
+    const credit = drafts.reduce((s, d) => s + d.credit, 0);
+    expect(debit).toBe(credit);
+    expect(debit).toBe(50000);
+  });
+});
+
 describe('balanceGlDrafts — posting validation', () => {
   it('adds a clearing line and flags wasUnbalanced when a batch is unbalanced', () => {
     const result = balanceGlDrafts([
