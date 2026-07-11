@@ -5,6 +5,8 @@ import {
   sumPurchaseLedgerPayments,
 } from './purchasePaymentSummary';
 import { getSupplierOutstandingFromReadModel } from '../services/reportQueryService';
+import { isPostingEngineEnabled, mirrorToPostingTables } from '../services/posting/PostingOrchestrator';
+import { buildSupplierPaymentLines } from '../services/posting/LedgerPostingEngine';
 
 export interface RecordSupplierPaymentInput {
   dealerId: string;
@@ -116,8 +118,11 @@ async function loadPurchasesToPay(
   supplierId: string,
   purchaseId?: string,
 ): Promise<Array<PurchaseRow & { due_amount: number; paid_amount: number }>> {
+  // V2 Sprint 6B fix: a draft (not-yet-finalized) Purchase Invoice must not
+  // be payable, whether reached via FIFO or targeted by purchaseId — only a
+  // posted bill has a real, final due amount.
   let q = trx('purchases')
-    .where({ dealer_id: dealerId, supplier_id: supplierId })
+    .where({ dealer_id: dealerId, supplier_id: supplierId, document_status: 'posted' })
     .orderBy('purchase_date', 'asc')
     .orderBy('invoice_number', 'asc')
     .forUpdate();
@@ -189,6 +194,7 @@ export async function recordSupplierPaymentFifo(
 
   let remaining = input.amount;
   const allocations: SupplierPaymentAllocation[] = [];
+  let firstLedgerRowId: string | undefined;
 
   for (const purchase of purchasesToPay) {
     if (remaining <= 0) break;
@@ -205,15 +211,18 @@ export async function recordSupplierPaymentFifo(
         ? `Payment for Purchase ${invoiceLabel}`
         : `Payment allocated to Purchase ${invoiceLabel}`);
 
-    await trx('supplier_ledger').insert({
-      dealer_id: input.dealerId,
-      supplier_id: input.supplierId,
-      purchase_id: purchase.id,
-      type: 'payment',
-      amount: apply,
-      description,
-      entry_date: entryDate,
-    });
+    const [ledgerRow] = await trx('supplier_ledger')
+      .insert({
+        dealer_id: input.dealerId,
+        supplier_id: input.supplierId,
+        purchase_id: purchase.id,
+        type: 'payment',
+        amount: apply,
+        description,
+        entry_date: entryDate,
+      })
+      .returning('id');
+    firstLedgerRowId ??= ledgerRow.id as string;
 
     const dueAfter = round2(Math.max(0, due - apply));
     const payment_status =
@@ -249,6 +258,29 @@ export async function recordSupplierPaymentFifo(
     referenceId: allocations[0]?.purchaseId ?? null,
     entryDate,
   });
+
+  // V2 Sprint 6B — mirror into the Posting Engine (buildSupplierPaymentLines
+  // already existed, unused, since Sprint 6A; this is its first caller).
+  if (isPostingEngineEnabled() && firstLedgerRowId) {
+    await mirrorToPostingTables(
+      {
+        trx,
+        dealerId: input.dealerId,
+        documentType: 'payment',
+        documentId: firstLedgerRowId,
+        eventType: 'posted',
+        entryDate,
+        idempotencyKey: `supplier_payment:${firstLedgerRowId}`,
+      },
+      buildSupplierPaymentLines({
+        supplierId: input.supplierId,
+        entryDate,
+        paidAccountId,
+        allocations: allocations.map((a) => ({ purchaseId: a.purchaseId, amount: a.amount })),
+        totalApplied,
+      }),
+    );
+  }
 
   return { allocations, totalApplied };
 }

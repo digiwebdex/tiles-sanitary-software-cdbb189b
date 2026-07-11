@@ -1,16 +1,22 @@
 /**
- * Cashbook (Consolidated Cash + Bank movements) — Phase 1.
+ * Cashbook (Consolidated Cash + Bank movements) — Phase 1, extended V2
+ * Sprint 6C with the Cash Ledger's own write endpoints.
  *
- *   GET /api/cashbook?dealerId=&from=&to=&account=cash|bank|all&bankAccountId=
+ *   GET  /api/cashbook?dealerId=&from=&to=&account=cash|bank|all&bankAccountId=
+ *   POST /api/cashbook/receipt   ({ amount, description, entry_date?, payment_mode?, reference_type?, reference_id? })
+ *   POST /api/cashbook/payment   (same shape)
  *
  * Returns merged ledger rows from `cash_ledger` (account='cash') and
  * `bank_ledger` (account='bank') with running balance, opening/closing
  * totals, and a category summary. dealer_admin only.
  */
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { recordCashReceipt, recordCashPayment } from '../services/accounting/cashBankTransactions';
+import { normalizePaymentMode } from '../lib/paymentModes';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -116,6 +122,61 @@ router.get('/', async (req, res) => {
     summary,
     filters: { from, to, account, bankAccountId: bankAccountId ?? null },
   });
+});
+
+const MovementSchema = z.object({
+  amount: z.coerce.number().positive(),
+  description: z.string().trim().min(1).max(500),
+  entry_date: z.string().optional(),
+  payment_mode: z.string().optional().nullable(),
+  reference_type: z.string().max(50).optional().nullable(),
+  reference_id: z.string().uuid().optional().nullable(),
+});
+
+router.post('/receipt', async (req, res) => {
+  const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
+  const parsed = MovementSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() }); return; }
+  try {
+    const result = await db.transaction((trx) => recordCashReceipt(trx, {
+      dealerId,
+      amount: parsed.data.amount,
+      description: parsed.data.description,
+      entryDate: parsed.data.entry_date || new Date().toISOString().slice(0, 10),
+      paymentMode: normalizePaymentMode(parsed.data.payment_mode ?? undefined),
+      referenceType: parsed.data.reference_type ?? null,
+      referenceId: parsed.data.reference_id ?? null,
+      postedBy: req.user?.userId ?? null,
+    }));
+    res.status(201).json(result);
+  } catch (err: any) {
+    console.error('[cashbook/receipt]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record cash receipt' });
+  }
+});
+
+router.post('/payment', async (req, res) => {
+  const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  if (!requireAdmin(req, res)) return;
+  const parsed = MovementSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() }); return; }
+  try {
+    const result = await db.transaction((trx) => recordCashPayment(trx, {
+      dealerId,
+      amount: parsed.data.amount,
+      description: parsed.data.description,
+      entryDate: parsed.data.entry_date || new Date().toISOString().slice(0, 10),
+      paymentMode: normalizePaymentMode(parsed.data.payment_mode ?? undefined),
+      referenceType: parsed.data.reference_type ?? null,
+      referenceId: parsed.data.reference_id ?? null,
+      postedBy: req.user?.userId ?? null,
+    }));
+    res.status(201).json(result);
+  } catch (err: any) {
+    console.error('[cashbook/payment]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record cash payment' });
+  }
 });
 
 export default router;

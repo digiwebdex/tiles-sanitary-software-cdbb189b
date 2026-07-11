@@ -24,6 +24,13 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole, hasRole } from '../middleware/roles';
+import {
+  computeBackorderOutstanding,
+  shapePriceLevels,
+  shapeFacets,
+  FACET_COLUMNS,
+  type FacetColumn,
+} from '../services/productMasterService';
 
 /**
  * Strip cost_price for users that lack 'dealer_admin' or 'super_admin'.
@@ -47,6 +54,8 @@ const SORTABLE = new Set([
   'default_sale_rate',
   'reorder_level',
   'category',
+  'series',
+  'tile_type',
 ]);
 
 const FILTERABLE = new Set([
@@ -58,6 +67,15 @@ const FILTERABLE = new Set([
   'barcode',
   'product_group',
   'grade',
+  // V2 Sprint 2 — Product Master taxonomy (additive)
+  'series',
+  'collection_name',
+  'tile_type',
+  'finish',
+  'surface',
+  'country_of_origin',
+  // V2 Sprint 2.1 — Product List filters
+  'size',
 ]);
 
 const WRITABLE = new Set([
@@ -89,6 +107,17 @@ const WRITABLE = new Set([
   'reorder_level',
   'active',
   'image_url',
+  // V2 Sprint 2 — Product Master taxonomy (additive, all optional/nullable)
+  'series',
+  'collection_name',
+  'tile_type',
+  'finish',
+  'surface',
+  'shade_family',
+  'caliber_spec',
+  'thickness_mm',
+  'country_of_origin',
+  'default_rack',
 ]);
 
 const productWriteSchema = z.object({
@@ -120,6 +149,18 @@ const productWriteSchema = z.object({
   reorder_level: z.number().finite().min(0).optional(),
   active: z.boolean().optional(),
   image_url: z.string().trim().max(500).nullable().optional(),
+  // V2 Sprint 2 — Product Master taxonomy (additive, all optional/nullable so
+  // existing clients that never send these keep working unchanged).
+  series: z.string().trim().max(100).nullable().optional(),
+  collection_name: z.string().trim().max(100).nullable().optional(),
+  tile_type: z.string().trim().max(100).nullable().optional(),
+  finish: z.string().trim().max(50).nullable().optional(),
+  surface: z.string().trim().max(50).nullable().optional(),
+  shade_family: z.string().trim().max(50).nullable().optional(),
+  caliber_spec: z.string().trim().max(30).nullable().optional(),
+  thickness_mm: z.number().finite().positive().nullable().optional(),
+  country_of_origin: z.string().trim().max(100).nullable().optional(),
+  default_rack: z.string().trim().max(50).nullable().optional(),
 });
 
 function resolveDealerScope(req: Request, res: Response): string | null {
@@ -181,10 +222,17 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (search) {
+      // V2 Sprint 2.1 — additive: sku/name/barcode still match exactly as
+      // before (nothing removed), series/collection_name are OR'd in so a
+      // dealer can find a product by its line name too. Existing callers
+      // that only cared about sku/name/barcode results are unaffected —
+      // this can only ADD matches, never remove any.
       q = q.andWhere(function () {
         this.whereILike('sku', `%${search}%`)
           .orWhereILike('name', `%${search}%`)
-          .orWhereILike('barcode', `%${search}%`);
+          .orWhereILike('barcode', `%${search}%`)
+          .orWhereILike('series', `%${search}%`)
+          .orWhereILike('collection_name', `%${search}%`);
       });
     }
 
@@ -215,6 +263,35 @@ router.get('/', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[products/list]', err.message);
     res.status(500).json({ error: 'Failed to list products' });
+  }
+});
+
+// ── GET /api/products/facets ───────────────────────────────────────────────
+// V2 Sprint 2.1 — distinct values (across ALL of the dealer's products, not
+// just the current page) for the Product List's filter dropdowns. Read-only;
+// reuses the `products` table, no new columns/tables.
+router.get('/facets', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealerScope(req, res);
+    if (!dealerId) return;
+
+    const perColumn = await Promise.all(
+      FACET_COLUMNS.map((col) =>
+        db(TABLE)
+          .distinct(col)
+          .where({ dealer_id: dealerId })
+          .whereNotNull(col)
+          .select(col),
+      ),
+    );
+
+    const rawByColumn = {} as Record<FacetColumn, Array<Record<string, unknown>>>;
+    FACET_COLUMNS.forEach((col, i) => { rawByColumn[col] = perColumn[i]; });
+
+    res.json(shapeFacets(rawByColumn));
+  } catch (err: any) {
+    console.error('[products/facets]', err.message);
+    res.status(500).json({ error: 'Failed to load product facets' });
   }
 });
 
@@ -564,7 +641,7 @@ router.get('/:id/stock-summary', async (req: Request, res: Response) => {
   const productId = req.params.id;
   const isFinancial = hasRole(req, 'dealer_admin') || hasRole(req, 'super_admin');
   try {
-    const [stock, purchSum, soldSum, returnSum, lastPurch, batches] = await Promise.all([
+    const [stock, purchSum, soldSum, returnSum, lastPurch, batches, backorderRows, displayRow] = await Promise.all([
       db('stock')
         .where({ product_id: productId, dealer_id: dealerId })
         .first(['box_qty', 'piece_qty', 'sft_qty', 'reserved_box_qty', 'reserved_piece_qty', 'average_cost_per_unit']),
@@ -591,7 +668,24 @@ router.get('/:id/stock-summary', async (req: Request, res: Response) => {
       db('product_batches')
         .where({ product_id: productId, dealer_id: dealerId })
         .orderBy('created_at', 'asc'),
+      // V2 Sprint 2 — outstanding backorder qty for this product, using the
+      // same backorder_qty/allocated_qty fields + formula as
+      // GET /api/backorders/shortage-demand (reused, not reinvented).
+      db('sale_items')
+        .where({ product_id: productId, dealer_id: dealerId })
+        .where('backorder_qty', '>', 0)
+        .sum({ backorder_qty: 'backorder_qty', allocated_qty: 'allocated_qty' })
+        .first(),
+      // V2 Sprint 2 — display/showroom sample qty (display_stock, existing table).
+      db('display_stock')
+        .where({ product_id: productId, dealer_id: dealerId })
+        .first(['display_qty']),
     ]);
+
+    const backorderOutstanding = computeBackorderOutstanding(
+      Number((backorderRows as any)?.backorder_qty ?? 0),
+      Number((backorderRows as any)?.allocated_qty ?? 0),
+    );
 
     res.json({
       stock: stock
@@ -609,6 +703,10 @@ router.get('/:id/stock-summary', async (req: Request, res: Response) => {
       totalReturned: Number((returnSum as any)?.s ?? 0),
       lastPurchaseRate: lastPurch ? Number((lastPurch as any).landed_cost ?? 0) : 0,
       batches,
+      // V2 Sprint 2 additions (additive — existing consumers reading only the
+      // fields above are unaffected):
+      backorderQty: backorderOutstanding,
+      displaySampleQty: Number((displayRow as any)?.display_qty ?? 0),
     });
   } catch (err: any) {
     console.error('[products/:id/stock-summary]', err.message);
@@ -748,6 +846,49 @@ router.get('/:id/last-purchase', async (req: Request, res: Response) => {
 });
 
 // (last-purchase-map route lives above /:id; see line ~299)
+
+// ── GET /api/products/:id/price-levels ────────────────────────────────────
+// V2 Sprint 2 — Product Master "Price Levels" panel.
+//
+// Reuses the EXISTING price_tiers / price_tier_items tables (Settings →
+// Pricing Tiers) rather than adding dedicated Dealer/Retail/Wholesale/Project
+// columns — those four are simply the dealer's own named tiers (or whatever
+// names a dealer already uses; nothing here assumes fixed tier names).
+// Read-only aggregation: for every active tier belonging to this dealer,
+// return this product's rate if one has been set (else null so the UI can
+// show "not set — falls back to default price"). default_sale_rate is
+// included as the base/list price for reference.
+//
+// Writes reuse the EXISTING PUT /api/pricing-tiers/:tierId/items/:productId
+// endpoint unchanged — no new write path was added.
+router.get('/:id/price-levels', async (req: Request, res: Response) => {
+  try {
+    const dealerId = resolveDealerScope(req, res);
+    if (!dealerId) return;
+
+    const product = await db(TABLE)
+      .where({ id: req.params.id, dealer_id: dealerId })
+      .first('id', 'default_sale_rate');
+    if (!product) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+
+    const tiers = await db('price_tiers as t')
+      .leftJoin('price_tier_items as i', function () {
+        this.on('i.tier_id', '=', 't.id').andOn('i.product_id', '=', db.raw('?', [req.params.id]));
+      })
+      .where({ 't.dealer_id': dealerId, 't.status': 'active' })
+      .select('t.id as tier_id', 't.name as tier_name', 't.is_default', 'i.rate')
+      .orderBy('t.is_default', 'desc')
+      .orderBy('t.name', 'asc');
+
+    res.json(shapePriceLevels(Number(product.default_sale_rate ?? 0), tiers as any[]));
+  } catch (err: any) {
+    console.error('[products/:id/price-levels]', err.message);
+    res.status(500).json({ error: 'Failed to load price levels' });
+  }
+});
 
 // ── POST /api/products/:id/cost-price ─────────────────────────────────────
 // dealer_admin only. Manually sets the average_cost_per_unit on the dealer's

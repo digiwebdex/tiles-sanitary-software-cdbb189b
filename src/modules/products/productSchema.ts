@@ -5,6 +5,14 @@ const optNum = z.preprocess(
   z.coerce.number().min(0).nullable().optional(),
 );
 
+// V2 Sprint 2 — like optNum, but requires > 0 when set (matches the service-
+// layer optionalPositiveNumber() in src/lib/validators.ts). Used for fields
+// where 0 isn't a physically meaningful value (e.g. tile thickness).
+const optPositiveNum = z.preprocess(
+  (v) => (v === "" || v === null || v === undefined ? null : v),
+  z.coerce.number().positive().nullable().optional(),
+);
+
 export const productSchema = z
   .object({
     sku: z.string().trim().min(1, "Product code is required").max(50, "Product code too long"),
@@ -36,6 +44,19 @@ export const productSchema = z
     weight: z.string().trim().max(30).optional().or(z.literal("")),
     warranty: z.string().trim().max(50).optional().or(z.literal("")),
     image_url: z.string().trim().max(500).optional().nullable().or(z.literal("")),
+
+    // V2 Sprint 2 — Product Master taxonomy. All optional/nullable: existing
+    // products with none of these set remain perfectly valid.
+    series: z.string().trim().max(100).optional().or(z.literal("")),
+    collection_name: z.string().trim().max(100).optional().or(z.literal("")),
+    tile_type: z.string().trim().max(100).optional().or(z.literal("")),
+    finish: z.string().trim().max(50).optional().or(z.literal("")),
+    surface: z.string().trim().max(50).optional().or(z.literal("")),
+    shade_family: z.string().trim().max(50).optional().or(z.literal("")),
+    caliber_spec: z.string().trim().max(30).optional().or(z.literal("")),
+    thickness_mm: optPositiveNum,
+    country_of_origin: z.string().trim().max(100).optional().or(z.literal("")),
+    default_rack: z.string().trim().max(50).optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     if (data.unit_type === "box_sft" && (!data.per_box_sft || data.per_box_sft <= 0)) {

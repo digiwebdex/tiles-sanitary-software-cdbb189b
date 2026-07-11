@@ -6,6 +6,7 @@ import type {
 } from './types';
 import { isGlSpineEnabled } from '../gl/glConfig';
 import { mirrorPostingBatchToGl } from '../gl/glJournalWriter';
+import { assertPeriodOpen } from '../accounting/periodLock';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -82,6 +83,8 @@ export async function insertPostingLines(
     currency: line.currency ?? 'BDT',
     entry_date: line.entryDate,
     metadata: JSON.stringify(line.metadata ?? {}),
+    cost_center_id: line.costCenterId ?? null,
+    project_id: line.projectId ?? null,
   }));
 
   const inserted = await trx('posting_lines').insert(rows).returning('id');
@@ -93,6 +96,10 @@ export async function persistPostingBatch(
   batch: CreatePostingBatchInput,
   lines: PostingLineInput[],
 ): Promise<PostingBatchResult> {
+  if (lines[0]?.entryDate) {
+    await assertPeriodOpen(trx, batch.dealerId, lines[0].entryDate);
+  }
+
   const batchId = await createPostingBatch(trx, batch);
   const lineIds = await insertPostingLines(trx, batch.dealerId, batchId, lines);
 
@@ -107,6 +114,8 @@ export async function persistPostingBatch(
       documentId: batch.documentId,
       description: batch.notes ?? null,
       postingLineIds: lineIds,
+      eventType: batch.eventType,
+      reversesBatchId: batch.reversesBatchId ?? null,
       postingLines: postingRows.map((r) => ({
         id: r.id as string,
         line_domain: r.line_domain as string,

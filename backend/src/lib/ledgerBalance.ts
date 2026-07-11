@@ -19,7 +19,7 @@ export function computeCustomerBalance(rows: CustomerLedgerRow[]): number {
   let balance = 0;
   for (const row of rows) {
     const amt = num(row.amount);
-    if (row.type === 'sale' || row.type === 'adjustment') {
+    if (row.type === 'sale' || row.type === 'adjustment' || row.type === 'opening_balance') {
       balance += amt;
     } else if (row.type === 'payment' || row.type === 'refund') {
       balance -= amt;

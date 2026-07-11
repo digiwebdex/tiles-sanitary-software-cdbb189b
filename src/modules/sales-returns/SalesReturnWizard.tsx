@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { salesService } from "@/services/salesService";
 import { salesReturnService } from "@/services/salesReturnService";
+import { bankAccountService } from "@/services/bankAccountService";
 import type { SalesReturnFormValues } from "@/modules/sales-returns/salesReturnSchema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeft, ArrowRight, Check, Package, Receipt, Layers } from "lucide-react";
+import { PAYMENT_MODES, paymentModeRequiresBankAccount } from "@/lib/paymentModes";
+import { ArrowLeft, ArrowRight, Check, Package, Receipt, Layers, ShieldCheck, Wallet } from "lucide-react";
 
 const STEPS = ["Select Sale", "Select Item", "Batch / Shade", "Confirm"] as const;
 
@@ -39,6 +41,15 @@ export default function SalesReturnWizard({ dealerId, onSubmit, isLoading }: Sal
   const [reason, setReason] = useState("");
   const [returnDate, setReturnDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  // V2 Sprint 4D — how the refund settles: a real payment mode, or 'credit' (Credit Note, no cash/bank movement).
+  const [refundMode, setRefundMode] = useState("cash");
+  const [refundPaidAccountId, setRefundPaidAccountId] = useState<string | null>(null);
+
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bank-accounts", dealerId],
+    queryFn: () => bankAccountService.list(dealerId),
+    enabled: !!dealerId,
+  });
 
   const { data: sales = [] } = useQuery({
     queryKey: ["sales-for-return-wizard", dealerId],
@@ -113,6 +124,8 @@ export default function SalesReturnWizard({ dealerId, onSubmit, isLoading }: Sal
       reason,
       is_broken: isBroken,
       refund_amount: refundAmount,
+      refund_mode: refundAmount > 0 ? refundMode : null,
+      refund_paid_account_id: refundAmount > 0 && paymentModeRequiresBankAccount(refundMode) ? refundPaidAccountId : null,
       return_date: returnDate,
     };
     if (isTile && selectedItem) {
@@ -228,6 +241,12 @@ export default function SalesReturnWizard({ dealerId, onSubmit, isLoading }: Sal
                 </div>
               </div>
             )}
+            {selectedItem?.products?.warranty && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                This product carries a {selectedItem.products.warranty} warranty (informational only — no claims workflow yet).
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -299,6 +318,35 @@ export default function SalesReturnWizard({ dealerId, onSubmit, isLoading }: Sal
               <Switch checked={isBroken} onCheckedChange={setIsBroken} />
               <Label>Broken / damaged (no restock)</Label>
             </div>
+            {refundAmount > 0 && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>Refund Settlement</Label>
+                  <Select value={refundMode} onValueChange={(v) => { setRefundMode(v); if (v === "cash" || v === "credit") setRefundPaidAccountId(null); }}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_MODES.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                      ))}
+                      <SelectItem value="credit">Credit Note (store credit, no cash out)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {paymentModeRequiresBankAccount(refundMode) && (
+                  <div>
+                    <Label className="flex items-center gap-1"><Wallet className="h-3 w-3" /> Refunded From (required)</Label>
+                    <Select value={refundPaidAccountId ?? ""} onValueChange={setRefundPaidAccountId}>
+                      <SelectTrigger><SelectValue placeholder="Choose bank account" /></SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map((b: any) => (
+                          <SelectItem key={b.id} value={b.id}>{b.bank_name} — {b.account_number}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <Label>Return note</Label>
               <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for return…" />
@@ -316,7 +364,11 @@ export default function SalesReturnWizard({ dealerId, onSubmit, isLoading }: Sal
             Next <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         ) : (
-          <Button type="button" disabled={isLoading} onClick={handleSubmit}>
+          <Button
+            type="button"
+            disabled={isLoading || (refundAmount > 0 && paymentModeRequiresBankAccount(refundMode) && !refundPaidAccountId)}
+            onClick={handleSubmit}
+          >
             {isLoading ? "Processing…" : "Submit Return"}
           </Button>
         )}

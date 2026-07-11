@@ -17,6 +17,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { notifyPaymentSubmitted } from '../services/subscriptionNotifyService';
+import { getEntitlements } from '../services/entitlementsService';
 
 const router = Router();
 
@@ -271,6 +272,42 @@ router.post('/upgrade-request', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[subscription/upgrade-request]', err.message);
     res.status(500).json({ error: err.message || 'Failed to submit request' });
+  }
+});
+
+/**
+ * GET /api/subscription/entitlements — resolved plan features + limits + current
+ * usage for the authenticated dealer. Single source of truth the frontend gates
+ * on (see useEntitlements). Additive; safe for all dealer roles.
+ */
+router.get('/entitlements', async (req: Request, res: Response) => {
+  try {
+    if (req.user?.roles.includes('super_admin')) {
+      res.json({ is_super_admin: true, entitlements: null, usage: null });
+      return;
+    }
+    const dealerId = req.user?.dealerId;
+    if (!dealerId) {
+      res.json({ is_super_admin: false, entitlements: null, usage: null });
+      return;
+    }
+
+    const entitlements = await getEntitlements(dealerId);
+
+    const [branches, warehouses, staff] = await Promise.all([
+      db('branches').where({ dealer_id: dealerId }).count<{ c: string }>('* as c').first().then((r) => Number(r?.c ?? 0)).catch(() => 0),
+      db('warehouses').where({ dealer_id: dealerId }).count<{ c: string }>('* as c').first().then((r) => Number(r?.c ?? 0)).catch(() => 0),
+      db('profiles').where({ dealer_id: dealerId }).count<{ c: string }>('* as c').first().then((r) => Number(r?.c ?? 0)).catch(() => 0),
+    ]);
+
+    res.json({
+      is_super_admin: false,
+      entitlements,
+      usage: { branches, warehouses, staffUsers: staff },
+    });
+  } catch (err: any) {
+    console.error('[subscription/entitlements]', err.message);
+    res.status(500).json({ error: 'Failed to load entitlements' });
   }
 });
 

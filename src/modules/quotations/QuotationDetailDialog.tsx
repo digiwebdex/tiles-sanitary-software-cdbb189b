@@ -2,13 +2,14 @@ import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Printer, X, GitBranch, ShoppingCart, ExternalLink, MessageCircle } from "lucide-react";
+import { Printer, X, GitBranch, ShoppingCart, ExternalLink, MessageCircle, ClipboardList } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { quotationService, formatQuotationDisplayNo } from "@/services/quotationService";
+import { salesOrderService } from "@/services/salesOrderService";
 import { projectService } from "@/services/projectService";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
 import { useDealerId } from "@/hooks/useDealerId";
@@ -102,6 +103,17 @@ const QuotationDetailDialog = ({ quotationId, open, onOpenChange }: Props) => {
     }
   };
 
+  const convertToSalesOrderMutation = useMutation({
+    mutationFn: () => salesOrderService.createFromQuotation(quotationId, dealerId),
+    onSuccess: (so) => {
+      toast.success(`Sales order ${so.so_number} created as a draft`);
+      qc.invalidateQueries({ queryKey: ["quotations"] });
+      onOpenChange(false);
+      navigate(`/sales-orders/${so.id}/edit`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const handlePrint = () => {
     if (!printRef.current) return;
     const w = window.open("", "_blank", "width=900,height=1100");
@@ -175,6 +187,16 @@ const QuotationDetailDialog = ({ quotationId, open, onOpenChange }: Props) => {
             {canConvert && (
               <Button size="sm" onClick={handleConvert}>
                 <ShoppingCart className="h-4 w-4 mr-1" /> Convert to Sale
+              </Button>
+            )}
+            {canConvert && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => convertToSalesOrderMutation.mutate()}
+                disabled={convertToSalesOrderMutation.isPending}
+              >
+                <ClipboardList className="h-4 w-4 mr-1" /> Convert to Sales Order
               </Button>
             )}
             <Button

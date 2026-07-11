@@ -24,6 +24,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import PaymentReceipt from "./PaymentReceipt";
 import FollowUpPanel from "./FollowUpPanel";
+import AdjustmentDialog from "./AdjustmentDialog";
+import AdvancePaymentDialog from "./AdvancePaymentDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 import { notificationService } from "@/services/notificationService";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
 import SendWhatsAppDialog from "@/components/whatsapp/SendWhatsAppDialog";
@@ -75,13 +78,18 @@ const AGING_BADGE: Record<string, { label: string; variant: string }> = {
 
 export default function CollectionTracker({ dealerId }: { dealerId: string }) {
   const { profile } = useAuth();
+  const { isDealerAdmin } = usePermissions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: dealerInfo } = useDealerInfo();
   const receiptRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [payDialog, setPayDialog] = useState<{ open: boolean; customer?: CustomerOutstanding }>({ open: false });
+  // V2 Sprint 4A — "Collection Adjustment" (dealer_admin only)
+  const [adjustDialog, setAdjustDialog] = useState<{ open: boolean; customer: { id: string; name: string } | null }>({ open: false, customer: null });
+  const [advanceDialog, setAdvanceDialog] = useState<{ open: boolean; customer: { id: string; name: string } | null }>({ open: false, customer: null });
   const [payAmount, setPayAmount] = useState("");
+  const [paySaleId, setPaySaleId] = useState("");
   const [payNote, setPayNote] = useState("");
   const [paidAccountId, setPaidAccountId] = useState<string | null>(null);
   const [payPaymentMode, setPayPaymentMode] = useState("cash");
@@ -134,12 +142,14 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
       note,
       paid_account_id,
       payment_mode,
+      sale_id,
     }: {
       customerId: string;
       amount: number;
       note: string;
       paid_account_id?: string | null;
       payment_mode: string;
+      sale_id?: string;
     }) => {
       return collectionsService.recordPayment(dealerId, {
         customer_id: customerId,
@@ -147,6 +157,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
         note: note || undefined,
         paid_account_id: paid_account_id ?? null,
         payment_mode: payment_mode || undefined,
+        sale_id: sale_id || undefined,
       });
     },
     onSuccess: (result, variables) => {
@@ -166,7 +177,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
       queryClient.invalidateQueries({ queryKey: ["recent-collections"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-top-overdue"] });
       queryClient.invalidateQueries({ queryKey: ["sale"] });
-      setPayDialog({ open: false }); setPayAmount(""); setPayNote(""); setPaidAccountId(null);
+      setPayDialog({ open: false }); setPayAmount(""); setPayNote(""); setPaidAccountId(null); setPaySaleId("");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -302,9 +313,17 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-center gap-1">
-                    <Button size="sm" variant="default" onClick={() => { setPayDialog({ open: true, customer: c }); setPayAmount(""); setPayNote(""); }}>
+                    <Button size="sm" variant="default" onClick={() => { setPayDialog({ open: true, customer: c }); setPayAmount(""); setPayNote(""); setPaySaleId(""); }}>
                       <DollarSign className="h-3 w-3 mr-1" /> Collect
                     </Button>
+                    <Button size="sm" variant="outline" onClick={() => setAdvanceDialog({ open: true, customer: { id: c.id, name: c.name } })} title="Record advance payment">
+                      Advance
+                    </Button>
+                    {isDealerAdmin && (
+                      <Button size="sm" variant="outline" onClick={() => setAdjustDialog({ open: true, customer: { id: c.id, name: c.name } })} title="Adjust balance">
+                        Adjust
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => setFollowUpCustomer({ id: c.id, name: c.name })} title="Follow-up history">
                       <MessageSquareText className="h-3 w-3" />
                     </Button>
@@ -514,6 +533,25 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
               <span className="font-bold text-destructive">৳{payDialog.customer?.outstanding.toLocaleString()}</span>
             </div>
             <div className="space-y-2">
+              <Label>Apply To</Label>
+              <Select
+                value={paySaleId || "__fifo__"}
+                onValueChange={(v) => setPaySaleId(v === "__fifo__" ? "" : v)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__fifo__">FIFO — oldest invoices first</SelectItem>
+                  {(payDialog.customer?.invoices ?? [])
+                    .filter((inv) => inv.due_amount > 0.01)
+                    .map((inv) => (
+                      <SelectItem key={inv.sale_id} value={inv.sale_id}>
+                        {inv.invoice_number} — due ৳{inv.due_amount.toLocaleString()}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Amount (৳)</Label>
               <Input type="number" min={1} max={payDialog.customer?.outstanding} placeholder="Enter amount" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
             </div>
@@ -581,6 +619,7 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
                   note: payNote,
                   paid_account_id: paidAccountId,
                   payment_mode: payPaymentMode,
+                  sale_id: paySaleId || undefined,
                 });
               }}
             >
@@ -589,6 +628,22 @@ export default function CollectionTracker({ dealerId }: { dealerId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* V2 Sprint 4A — Collection Adjustment Dialog */}
+      <AdjustmentDialog
+        dealerId={dealerId}
+        customer={adjustDialog.customer}
+        open={adjustDialog.open}
+        onOpenChange={(open) => setAdjustDialog({ open, customer: open ? adjustDialog.customer : null })}
+      />
+
+      {/* V2 Sprint 4C — Advance Payment Dialog */}
+      <AdvancePaymentDialog
+        dealerId={dealerId}
+        customer={advanceDialog.customer}
+        open={advanceDialog.open}
+        onOpenChange={(open) => setAdvanceDialog({ open, customer: open ? advanceDialog.customer : null })}
+      />
 
       {/* Receipt Dialog */}
       <Dialog open={!!receiptData} onOpenChange={(o) => !o && setReceiptData(null)}>

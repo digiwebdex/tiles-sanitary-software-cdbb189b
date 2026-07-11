@@ -1,7 +1,28 @@
 import type { Knex } from 'knex';
 
-/** Business documents supported by the posting engine (MVP: purchase + sale). */
-export type PostingDocumentType = 'purchase' | 'sale';
+/**
+ * Business documents supported by the posting engine. Widened in V2 Sprint
+ * 6A per the approved architecture (Revision 1's `'purchase' | 'sale'`-only
+ * union was a documented gap) — additive, no existing value's meaning
+ * changes.
+ */
+export type PostingDocumentType =
+  | 'purchase'
+  | 'sale'
+  | 'payment'
+  | 'expense'
+  | 'purchase_return'
+  | 'landed_cost'
+  | 'stock_cost_adjustment'
+  | 'opening_balance'
+  | 'cash_receipt'
+  | 'cash_payment'
+  | 'bank_deposit'
+  | 'bank_withdrawal'
+  | 'transfer'
+  | 'fixed_asset_purchase'
+  | 'fixed_asset_disposal'
+  | 'depreciation';
 
 export type PostingEventType = 'posted' | 'reversed';
 
@@ -12,7 +33,8 @@ export type PostingLineDomain =
   | 'cash'
   | 'bank'
   | 'expense'
-  | 'tax';
+  | 'tax'
+  | 'asset';
 
 export interface CreatePostingBatchInput {
   dealerId: string;
@@ -41,6 +63,9 @@ export interface PostingLineInput {
   qtyUnit?: string | null;
   currency?: string;
   metadata?: Record<string, unknown>;
+  /** V2 Sprint 6D — optional cost-center/project tagging, any line domain. */
+  costCenterId?: string | null;
+  projectId?: string | null;
 }
 
 export interface PostingBatchResult {

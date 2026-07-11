@@ -9,6 +9,7 @@
  *
  *   GET /api/sales?dealerId=&page=1&search=&projectId=&siteId=
  *   GET /api/sales/:id
+ *   GET /api/sales/:id/timeline   (V2 Sprint 4C — Invoice Timeline / Audit Trail)
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
@@ -20,6 +21,7 @@ import { computeLineCogs, InvalidProductPerBoxSftError } from '../lib/cogsLine';
 import { postCustomerReceipt, recordCustomerPayment } from '../lib/customerPayment';
 import { computeVatBreakdown, normalizeDealerVatSettings } from '../lib/vatMath';
 import { normalizePaymentMode, paymentModeRequiresBankAccount } from '../lib/paymentModes';
+import { buildInvoiceTimeline } from '../services/invoiceTimelineService';
 import { insertTaxPostingLine } from '../services/taxPostingService';
 import {
   isPostingEngineEnabled,
@@ -444,6 +446,24 @@ router.get('/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[sales.getById] error', err);
     res.status(500).json({ error: 'Failed to load sale' });
+  }
+});
+
+// ── GET /api/sales/:id/timeline — V2 Sprint 4C Invoice Timeline / Audit Trail ──
+// Read-only aggregation of the sale's own audit_logs plus its linked
+// challans/deliveries/payments — reuses the existing audit trail, never
+// duplicates any of the logging those flows already do.
+router.get('/:id/timeline', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  try {
+    const sale = await db('sales').where({ id: req.params.id, dealer_id: dealerId }).first('id');
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+    const events = await buildInvoiceTimeline(dealerId, req.params.id);
+    res.json({ data: events });
+  } catch (err: any) {
+    console.error('[sales.timeline] error', err.message);
+    res.status(500).json({ error: 'Failed to load invoice timeline' });
   }
 });
 

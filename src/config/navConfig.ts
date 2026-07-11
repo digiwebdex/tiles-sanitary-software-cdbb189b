@@ -6,7 +6,8 @@ import {
   MessageCircle, UserCog, Inbox, HelpCircle, Crown, Landmark, Scale, Warehouse,
   ClipboardCheck, Sparkles, CalendarDays, AlertTriangle, CalendarClock, Building2,
   Megaphone, Award, GraduationCap, Laptop, BadgeDollarSign, Clock, LogOut,
-  Calculator,
+  Calculator, Boxes, Bookmark, Gauge, ClipboardList, FileEdit, Send, FileCheck2, PackageCheck,
+  GitCompareArrows, FolderKanban, Lock,
 } from "lucide-react";
 
 /** Staff roles below the owner (dealer_admin). Owner + super_admin see all. */
@@ -102,6 +103,7 @@ export const navSections: NavSection[] = [
       { path: "/leads/options", label: "Lead Options", icon: HandCoins, dealerAdminOnly: true, planFeature: "leads" },
       { path: "/projects", label: "Projects", icon: Folder, planFeature: "projects", roles: ["manager", "salesman"] },
       { path: "/quotations", label: "Quotations", icon: FileSignature, planFeature: "quotations", roles: ["manager", "salesman"] },
+      { path: "/sales-orders", label: "Sales Orders", icon: ClipboardList, planFeature: "quotations", roles: ["manager", "salesman"] },
       { path: "/collections", label: "Collections", icon: Wallet, roles: ["manager", "salesman", "accountant"] },
     ],
   },
@@ -111,11 +113,22 @@ export const navSections: NavSection[] = [
     defaultOpen: true,
     items: [
       { path: "/suppliers", label: "Suppliers", icon: Truck, roles: ["manager", "accountant"] },
+      { path: "/purchase-requests", label: "Purchase Requests", icon: FileEdit, roles: ["manager"] },
+      { path: "/rfqs", label: "RFQs", icon: Send, roles: ["manager"], tier: "advanced" },
+      { path: "/purchase-orders", label: "Purchase Orders", icon: FileCheck2, roles: ["manager"] },
+      { path: "/goods-receipts", label: "Goods Receipt (GRN)", icon: PackageCheck, roles: ["manager"] },
+      { path: "/purchase-invoices", label: "Purchase Invoices", icon: Receipt, roles: ["manager", "accountant"] },
       { path: "/purchases", label: "Purchases", icon: ShoppingCart, roles: ["manager"] },
       { path: "/purchases/auto-draft", label: "Auto-PO Drafts", icon: Sparkles, dealerAdminOnly: true, tier: "advanced" },
       { path: "/purchase-returns", label: "Purchase Returns", icon: Undo2, roles: ["manager"] },
       { path: "/payables", label: "Supplier Payables", icon: Truck, dealerAdminOnly: true },
       { path: "/payables/pay", label: "Pay Supplier", icon: Wallet, dealerAdminOnly: true },
+      { path: "/supplier-ledger/statement", label: "Supplier Statement", icon: FileText, roles: ["manager", "accountant"] },
+      { path: "/supplier-ledger/aging", label: "Payables Aging", icon: CalendarClock, dealerAdminOnly: true },
+      { path: "/purchase-returns-v2", label: "Purchase Returns (V2)", icon: RotateCcw, roles: ["manager", "accountant"] },
+      { path: "/landed-cost", label: "Landed Cost", icon: Calculator, dealerAdminOnly: true },
+      { path: "/stock-cost-adjustments", label: "Stock Cost Update", icon: Scale, dealerAdminOnly: true },
+      { path: "/import-lc", label: "Import LC", icon: Landmark, roles: ["manager", "accountant"], tier: "advanced" },
     ],
   },
   {
@@ -124,10 +137,17 @@ export const navSections: NavSection[] = [
     defaultOpen: false,
     items: [
       { path: "/products", label: "Products", icon: Package, roles: ["manager", "salesman"] },
+      // V2 Sprint 3A — Inventory Core: dealer-wide current stock, stock
+      // ledger/history, movement, adjustment, and summary.
+      { path: "/inventory", label: "Current Stock", icon: Boxes, roles: ["manager", "salesman"] },
       { path: "/damage", label: "Damage / Broken", icon: AlertTriangle, dealerAdminOnly: true },
       // Warehouses visible on all plans — quantity is limited by plan (enforced in backend)
       { path: "/warehouses", label: "Warehouses", icon: Warehouse, dealerAdminOnly: true },
       { path: "/display-sample", label: "Display & Samples", icon: MonitorSpeaker, roles: ["manager", "salesman"] },
+      // V2 Sprint 3C — Reservation, Backorder & Availability Engine.
+      { path: "/reservations", label: "Reservations & Backorders", icon: Bookmark, roles: ["manager", "salesman"] },
+      // V2 Sprint 3D — Inventory Intelligence.
+      { path: "/inventory-intelligence", label: "Inventory Intelligence", icon: Gauge, dealerAdminOnly: true },
     ],
   },
   {
@@ -137,10 +157,22 @@ export const navSections: NavSection[] = [
     items: [
       { path: "/ledger", label: "Ledger", icon: BookOpen, roles: ["manager", "accountant"] },
       { path: "/bank-accounts", label: "Bank Accounts", icon: Landmark, dealerAdminOnly: true },
+      { path: "/bank-accounts/cheque-register", label: "Cheque Register", icon: FileText, dealerAdminOnly: true },
+      { path: "/bank-accounts/reconciliation", label: "Bank Reconciliation", icon: GitCompareArrows, dealerAdminOnly: true },
       { path: "/cashbook", label: "Cashbook", icon: BookOpen, dealerAdminOnly: true },
       { path: "/cash-closing", label: "Day-End Closing", icon: ClipboardCheck, dealerAdminOnly: true },
       { path: "/financials", label: "Financial Statements", icon: Scale, dealerAdminOnly: true },
       { path: "/journal", label: "Journal Entries", icon: BookOpen, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/journal/chart-of-accounts", label: "Chart of Accounts", icon: Landmark, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/journal/fiscal-years", label: "Fiscal Years", icon: CalendarClock, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/cost-centers", label: "Cost Centers", icon: Building2, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/projects/accounting", label: "Project Accounting", icon: FolderKanban, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/fixed-assets", label: "Fixed Assets", icon: Boxes, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/budgets", label: "Budget Management", icon: Wallet, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/general-ledger", label: "General Ledger", icon: BookOpen, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/financial-closing", label: "Financial Closing", icon: Lock, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/vat-closing", label: "VAT Closing", icon: Receipt, dealerAdminOnly: true, planFeature: "advanced_finance" },
+      { path: "/financial-dashboard", label: "Financial Dashboard", icon: Gauge, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/emi", label: "EMI Plans", icon: CalendarClock, dealerAdminOnly: true, planFeature: "advanced_finance" },
       { path: "/directors", label: "Directors", icon: Crown, dealerAdminOnly: true, planFeature: "advanced_finance" },
     ],
@@ -171,6 +203,7 @@ export const navSections: NavSection[] = [
       { path: "/reports", label: "Reports Hub", icon: BarChart3, readonlyAllowed: true, roles: ["manager", "accountant"] },
       { path: "/reports/operations", label: "Operations Reports", icon: Scale, dealerAdminOnly: true, planFeature: "advanced_reports" },
       { path: "/reports/credit", label: "Credit Report", icon: ShieldCheck, readonlyAllowed: true, roles: ["manager", "accountant"] },
+      { path: "/reports/vat", label: "VAT Reports", icon: Landmark, dealerAdminOnly: true },
     ],
   },
   {

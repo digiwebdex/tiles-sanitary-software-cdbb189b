@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge";
 interface EditDataType {
   challan_date: string;
   driver_name: string;
+  driver_phone: string;
   transport_name: string;
   vehicle_no: string;
+  scheduled_delivery_date: string;
   notes: string;
 }
 
@@ -179,6 +181,7 @@ const ModernChallanDocument = ({ sale, items, customer, challan, showPrices, dea
               <div className="space-y-2 text-[12px]">
                 {([
                   { label: "Driver", field: "driver_name" as const },
+                  { label: "Driver Phone", field: "driver_phone" as const },
                   { label: "Transport", field: "transport_name" as const },
                   { label: "Vehicle", field: "vehicle_no" as const },
                 ] as const).map((t) => (
@@ -192,14 +195,25 @@ const ModernChallanDocument = ({ sale, items, customer, challan, showPrices, dea
                     />
                   </div>
                 ))}
+                <div className="flex items-baseline gap-2">
+                  <span className="text-muted-foreground w-[70px] shrink-0 text-[11px]">Scheduled:</span>
+                  <input
+                    type="date"
+                    value={editData.scheduled_delivery_date}
+                    onChange={(e) => onEditChange({ ...editData, scheduled_delivery_date: e.target.value })}
+                    className="flex-1 border border-border rounded px-2 py-1 text-[12px] bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
               </div>
             ) : (
               <div className="space-y-2 text-[12px]">
                 {[
                   { label: "Driver", value: (challan as any).driver_name },
+                  { label: "Driver Phone", value: (challan as any).driver_phone },
                   { label: "Transport", value: (challan as any).transport_name },
                   { label: "Vehicle", value: (challan as any).vehicle_no },
-                ].map((t) => (
+                  { label: "Scheduled", value: (challan as any).scheduled_delivery_date },
+                ].filter((t) => t.label !== "Driver Phone" && t.label !== "Scheduled" ? true : !!t.value).map((t) => (
                   <div key={t.label} className="flex items-baseline gap-2">
                     <span className="text-muted-foreground w-[70px] shrink-0 text-[11px]">{t.label}:</span>
                     <span className="font-medium text-foreground">{t.value || "—"}</span>

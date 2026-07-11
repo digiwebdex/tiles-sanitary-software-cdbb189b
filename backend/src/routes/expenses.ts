@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
+import { isPostingEngineEnabled, mirrorToPostingTables } from '../services/posting/PostingOrchestrator';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -75,6 +76,9 @@ const CreateSchema = z.object({
   amount: z.coerce.number().positive(),
   expense_date: z.string().min(1),
   category: z.string().nullable().optional(),
+  // V2 Sprint 6D — optional Project/Cost Center tagging.
+  project_id: z.string().uuid().nullable().optional(),
+  cost_center_id: z.string().uuid().nullable().optional(),
 });
 
 router.post('/', async (req: Request, res: Response) => {
@@ -87,7 +91,7 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(400).json({ error: parsed.error.flatten().fieldErrors });
     return;
   }
-  const { description, amount, expense_date, category } = parsed.data;
+  const { description, amount, expense_date, category, project_id, cost_center_id } = parsed.data;
 
   try {
     const result = await db.transaction(async (trx) => {
@@ -99,6 +103,8 @@ router.post('/', async (req: Request, res: Response) => {
           expense_date,
           category: category ?? null,
           created_by: req.user?.userId ?? null,
+          project_id: project_id ?? null,
+          cost_center_id: cost_center_id ?? null,
         })
         .returning('*');
 
@@ -120,6 +126,32 @@ router.post('/', async (req: Request, res: Response) => {
         reference_id: expense.id,
         entry_date: expense_date,
       });
+
+      // V2 Sprint 6C — mirror into the Posting Engine. glLineMapper.ts's
+      // 'expense' domain case (dead since Sprint 6A, fixed this sprint for
+      // exactly this first caller) pairs against the 'cash' line below and
+      // balances with no Clearing plug.
+      if (isPostingEngineEnabled()) {
+        await mirrorToPostingTables(
+          {
+            trx,
+            dealerId,
+            documentType: 'expense',
+            documentId: expense.id,
+            eventType: 'posted',
+            entryDate: expense_date,
+            postedBy: req.user?.userId ?? null,
+            idempotencyKey: `expense:post:${expense.id}`,
+          },
+          [
+            {
+              lineDomain: 'expense', lineType: 'expense', amount: -amount, entryDate: expense_date,
+              projectId: project_id ?? null, costCenterId: cost_center_id ?? null,
+            },
+            { lineDomain: 'cash', lineType: 'payment', amount: -amount, entryDate: expense_date },
+          ],
+        );
+      }
 
       return expense;
     });

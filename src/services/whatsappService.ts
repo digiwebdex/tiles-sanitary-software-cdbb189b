@@ -11,7 +11,9 @@ export type WhatsAppMessageType =
   | "invoice_share"
   | "payment_receipt"
   | "overdue_reminder"
-  | "delivery_update";
+  | "delivery_update"
+  // V2 Sprint 5B
+  | "purchase_order_share";
 
 export type WhatsAppMessageStatus =
   | "pending"
@@ -77,6 +79,8 @@ interface InvoiceTemplateData { dealerName: string; customerName?: string | null
 interface PaymentReceiptTemplateData { dealerName: string; customerName?: string | null; receiptNo: string; amount: number; remainingDue: number; date: string; }
 interface OverdueReminderTemplateData { dealerName: string; dealerPhone?: string | null; customerName?: string | null; outstanding: number; daysOverdue: number; oldestInvoiceDate?: string | null; }
 interface DeliveryUpdateTemplateData { dealerName: string; customerName?: string | null; deliveryNo: string; status: string; itemCount: number; deliveryDate?: string | null; invoiceNo?: string | null; receiverName?: string | null; }
+/** V2 Sprint 5B — addressed to the SUPPLIER (not a customer), unlike every other template above. */
+interface PurchaseOrderTemplateData { dealerName: string; supplierName?: string | null; poNumber: string; totalAmount: number; itemCount: number; expectedDeliveryDate?: string | null; }
 
 const fmtBdt = (n: number) =>
   `৳${Number(n || 0).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -122,6 +126,13 @@ export function buildDeliveryUpdateMessage(d: DeliveryUpdateTemplateData): strin
     `Delivery No: ${d.deliveryNo}${invLine}${dateLine}`, `Items: ${d.itemCount}`,
     `Status: ${d.status}${recvLine}`, "", "Thank you for your business.", "", `${d.dealerName}`].join("\n");
 }
+export function buildPurchaseOrderMessage(d: PurchaseOrderTemplateData): string {
+  const greeting = d.supplierName ? `Dear ${d.supplierName},` : "Dear Supplier,";
+  const deliveryLine = d.expectedDeliveryDate ? `\nExpected Delivery: ${d.expectedDeliveryDate}` : "";
+  return [greeting, "", `Please find our purchase order details below.`, "",
+    `PO Number: ${d.poNumber}`, `Items: ${d.itemCount}`, `Total: ${fmtBdt(d.totalAmount)}${deliveryLine}`, "",
+    "Kindly confirm receipt and expected delivery.", "", `Thanks,\n${d.dealerName}`].join("\n");
+}
 
 /* ---------- Settings ---------- */
 export interface WhatsAppSettings {
@@ -131,11 +142,15 @@ export interface WhatsAppSettings {
   enable_payment_receipt: boolean;
   enable_overdue_reminder: boolean;
   enable_delivery_update: boolean;
+  // V2 Sprint 5B
+  enable_purchase_order_share: boolean;
   template_quotation_share: string | null;
   template_invoice_share: string | null;
   template_payment_receipt: string | null;
   template_overdue_reminder: string | null;
   template_delivery_update: string | null;
+  // V2 Sprint 5B
+  template_purchase_order_share: string | null;
   prefer_manual_send: boolean;
   default_country_code: string;
 }
@@ -147,11 +162,13 @@ export const DEFAULT_WHATSAPP_SETTINGS = (dealerId: string): WhatsAppSettings =>
   enable_payment_receipt: true,
   enable_overdue_reminder: true,
   enable_delivery_update: true,
+  enable_purchase_order_share: true,
   template_quotation_share: null,
   template_invoice_share: null,
   template_payment_receipt: null,
   template_overdue_reminder: null,
   template_delivery_update: null,
+  template_purchase_order_share: null,
   prefer_manual_send: true,
   default_country_code: "880",
 });
@@ -162,6 +179,7 @@ const ENABLE_KEY: Record<WhatsAppMessageType, keyof WhatsAppSettings> = {
   payment_receipt: "enable_payment_receipt",
   overdue_reminder: "enable_overdue_reminder",
   delivery_update: "enable_delivery_update",
+  purchase_order_share: "enable_purchase_order_share",
 };
 
 export function isMessageTypeEnabled(

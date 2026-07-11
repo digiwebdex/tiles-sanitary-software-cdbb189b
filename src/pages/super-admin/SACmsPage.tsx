@@ -251,7 +251,7 @@ const PricingForm = ({
   const [title, setTitle]       = useState(data?.title ?? "");
   const [subtitle, setSubtitle] = useState(data?.subtitle ?? "");
   const [plans, setPlans] = useState<PricingPlan[]>(
-    ex.plans ?? [{ name: "Starter", price: "999", period: "/month", features: ["Up to 2 users", "Basic reports"], highlighted: false }]
+    ex.plans ?? [{ name: "Starter", price: "999", period: "/month", features: ["Up to 5 users", "Basic reports"], highlighted: false }]
   );
 
   const addPlan = () => setPlans(prev => [...prev, { name: "", price: "", period: "/month", features: [""], highlighted: false }]);

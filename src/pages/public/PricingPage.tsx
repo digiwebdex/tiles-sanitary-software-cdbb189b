@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   CheckCircle2, XCircle, ArrowRight, Zap, Layers, Phone, Mail, MapPin,
   Users, Package, BarChart2, Bell, MessageCircle, ShieldCheck,
-  TrendingUp, Sparkles, GitBranch, HeadphonesIcon, Building2,
+  TrendingUp, Sparkles, GitBranch, HeadphonesIcon, Building2, Database,
 } from "lucide-react";
 
 /* ─── NAV ─── */
@@ -95,11 +95,12 @@ const PLANS = [
     yearlyPrice: 10000,
     isPremium: false,
     features: [
-      { icon: Users,       text: "Up to 3 users" },
+      { icon: Users,       text: "Up to 5 users" },
       { icon: Package,     text: "Inventory management" },
       { icon: BarChart2,   text: "Basic reports" },
       { icon: ShieldCheck, text: "Customer ledger" },
       { icon: Mail,        text: "Email notifications" },
+      { icon: Database,    text: "Excel backup & Google Drive auto-backup" },
     ],
   },
   {
@@ -116,7 +117,7 @@ const PLANS = [
       { icon: Users,           text: "Up to 8 users" },
       { icon: Package,         text: "All Starter features" },
       { icon: TrendingUp,      text: "Advanced analytics" },
-      { icon: GitBranch,       text: "Multi-branch (2 branches)" },
+      { icon: GitBranch,       text: "Multi-branch (3 branches)" },
       { icon: HeadphonesIcon,  text: "Priority support" },
       { icon: Mail,            text: "Email & SMS notifications" },
       { icon: MessageCircle,   text: "Backorders management" },
@@ -133,9 +134,9 @@ const PLANS = [
     yearlyPrice: 30000,
     isPremium: false,
     features: [
-      { icon: Users,           text: "Unlimited users" },
+      { icon: Users,           text: "Up to 20 users" },
       { icon: Package,         text: "All Pro features" },
-      { icon: Building2,       text: "Up to 5 branches & warehouses" },
+      { icon: Building2,       text: "Up to 10 branches & 5 warehouses" },
       { icon: MessageCircle,   text: "WhatsApp notifications" },
       { icon: ShieldCheck,     text: "HRM module" },
       { icon: TrendingUp,      text: "Directors / Shareholder accounts" },
@@ -166,10 +167,12 @@ const PLANS = [
 
 /* ─── COMPARISON TABLE ─── */
 const COMPARISON = [
-  { feature: "Max Users",                 starter: "3",    pro: "8",    business: "Unlimited", premium: "Unlimited" },
-  { feature: "Warehouses",               starter: "1",    pro: "2",    business: "5",          premium: "Unlimited" },
-  { feature: "Branches",                 starter: "1",    pro: "2",    business: "5",          premium: "Unlimited" },
+  { feature: "Max Users",                 starter: "5",    pro: "8",    business: "20",        premium: "Unlimited" },
+  { feature: "Warehouses",               starter: "1",    pro: "3",    business: "5",          premium: "Unlimited" },
+  { feature: "Branches",                 starter: "1",    pro: "3",    business: "10",         premium: "Unlimited" },
   { feature: "Inventory Management",     starter: true,   pro: true,   business: true,         premium: true },
+  { feature: "Excel Data Backup",         starter: true,   pro: true,   business: true,         premium: true },
+  { feature: "Google Drive Auto-Backup",  starter: true,   pro: true,   business: true,         premium: true },
   { feature: "Customer Ledger",          starter: true,   pro: true,   business: true,         premium: true },
   { feature: "Email Notifications",      starter: true,   pro: true,   business: true,         premium: true },
   { feature: "SMS Notifications",        starter: false,  pro: true,   business: true,         premium: true },
@@ -185,9 +188,9 @@ const COMPARISON = [
 ];
 
 const CellValue = ({ val, highlighted }: { val: boolean | string; highlighted?: boolean }) => {
-  if (val === true)  return <CheckCircle2 className={`h-5 w-5 mx-auto ${highlighted ? "text-primary-foreground" : "text-primary"}`} />;
-  if (val === false) return <XCircle className="h-5 w-5 mx-auto text-muted-foreground/40" />;
-  return <span className={`text-xs font-medium ${highlighted ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{val}</span>;
+  if (val === true)  return <CheckCircle2 className={`h-5 w-5 mx-auto ${highlighted ? "text-blue-600" : "text-primary"}`} />;
+  if (val === false) return <XCircle className="h-5 w-5 mx-auto text-muted-foreground/50" />;
+  return <span className={`text-sm font-bold ${highlighted ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>{val}</span>;
 };
 
 /* ─── MAIN PAGE ─── */
@@ -377,7 +380,7 @@ const PricingPage = () => {
                   <tr key={i} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/20"}`}>
                     <td className="p-4 text-sm text-foreground">{row.feature}</td>
                     <td className="p-4 text-center"><CellValue val={row.starter} /></td>
-                    <td className="p-4 text-center bg-primary/5"><CellValue val={row.pro} highlighted /></td>
+                    <td className="p-4 text-center bg-blue-50 dark:bg-blue-950/25"><CellValue val={row.pro} highlighted /></td>
                     <td className="p-4 text-center"><CellValue val={row.business} /></td>
                     <td className="p-4 text-center bg-amber-50/50 dark:bg-amber-950/20"><CellValue val={row.premium} /></td>
                   </tr>

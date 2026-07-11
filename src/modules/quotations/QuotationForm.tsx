@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Trash2, ArrowLeft, Save, FileCheck, Calculator, Ruler } from "lucide-react";
 import AreaCalculatorDialog, { type AreaCalculatorInsertPayload } from "./AreaCalculatorDialog";
+import AvailabilityCell from "./AvailabilityCell";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -432,6 +433,7 @@ const QuotationForm = ({ initialQuotation, initialItems }: Props) => {
                 <thead className="border-b">
                   <tr className="text-left text-xs text-muted-foreground uppercase">
                     <th className="py-2 pr-2">Description</th>
+                    <th className="py-2 px-2 w-28">Available</th>
                     <th className="py-2 px-2 w-24">Qty</th>
                     <th className="py-2 px-2 w-28">Rate</th>
                     <th className="py-2 px-2 w-28">Line Disc.</th>
@@ -469,6 +471,9 @@ const QuotationForm = ({ initialQuotation, initialItems }: Props) => {
                               <span className="text-muted-foreground">(edit)</span>
                             </button>
                           )}
+                        </td>
+                        <td className="py-2 px-2">
+                          <AvailabilityCell productId={it?.product_id ?? null} dealerId={dealerId} />
                         </td>
                         <td className="py-2 px-2">
                           <Input type="number" step="0.01" {...form.register(`items.${idx}.quantity`)} />

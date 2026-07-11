@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useDealerId } from "@/hooks/useDealerId";
 import { useAuth } from "@/contexts/AuthContext";
 import { salesService } from "@/services/salesService";
+import { productService } from "@/services/productService";
+import { customerService } from "@/services/customerService";
 import { bankAccountService } from "@/services/bankAccountService";
 import { PayFromAccountSelect } from "@/components/PayFromAccountSelect";
 import { PaymentModeSelect } from "@/components/PaymentModeSelect";
@@ -77,18 +78,17 @@ const POSSalePage = () => {
   const { data: products = [] } = useQuery({
     queryKey: ["pos-products", dealerId, search],
     queryFn: async () => {
-      let query = supabase
-        .from("products")
-        .select("id, name, sku, unit_type, per_box_sft, default_sale_rate, barcode")
-        .eq("dealer_id", dealerId)
-        .eq("active", true)
-        .order("name")
-        .limit(20);
-      if (search.trim()) {
-        query = query.or(`name.ilike.%${search.trim()}%,sku.ilike.%${search.trim()}%,barcode.ilike.%${search.trim()}%`);
-      }
-      const { data } = await query;
-      return data ?? [];
+      // V2 Sprint 4E — ported off Supabase onto the existing VPS products
+      // endpoint (already used by every other module). orderBy/pageSize
+      // reproduce the prior `.order("name").limit(20)` at the DB level
+      // (not client-side), since a client-side sort+slice of an
+      // arbitrarily-ordered page would drop the true alphabetically-first
+      // rows whenever more than one page of products matches.
+      const { data } = await productService.list(
+        dealerId, search, 1, { active: true },
+        { column: "name", direction: "asc" }, 20,
+      );
+      return data;
     },
     enabled: !!dealerId,
   });
@@ -96,14 +96,13 @@ const POSSalePage = () => {
   const { data: customers = [] } = useQuery({
     queryKey: ["pos-customers", dealerId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("customers")
-        .select("id, name, price_tier_id")
-        .eq("dealer_id", dealerId)
-        .eq("status", "active")
-        .order("name");
-      return data ?? [];
+      // V2 Sprint 4E — ported off Supabase onto the existing VPS customers
+      // endpoint. pageSize=200 (the backend's own max) mirrors the prior
+      // unbounded Supabase query closely enough for any realistic dealer.
+      const { data } = await customerService.list(dealerId, "", "", 1, "active", 200);
+      return data;
     },
+    enabled: !!dealerId,
   });
 
   const selectedCustomer = customers.find((c) => c.id === customerId);

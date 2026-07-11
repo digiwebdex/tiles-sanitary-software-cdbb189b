@@ -384,7 +384,17 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
         .first('id');
       if (!existing) throw new Error('Delivery not found');
 
-      await trx('deliveries').where({ id }).update({ status });
+      // V2 Sprint 4C — Delivery Confirmation: stamp who/when the moment a
+      // delivery is actually confirmed as delivered, distinct from just the
+      // status string flipping (which could otherwise be set by any bulk
+      // update with no audited "confirmation" moment).
+      const isConfirming = status === 'delivered';
+      await trx('deliveries')
+        .where({ id })
+        .update({
+          status,
+          ...(isConfirming ? { confirmed_by: userId, confirmed_at: trx.fn.now() } : {}),
+        });
 
       await trx('audit_logs').insert({
         dealer_id: dealerId,
@@ -392,7 +402,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
         action: 'delivery_status_update',
         table_name: 'deliveries',
         record_id: id,
-        new_data: { status },
+        new_data: { status, confirmed: isConfirming },
         ip_address: ip,
         user_agent: ua,
       });

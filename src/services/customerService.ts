@@ -6,7 +6,11 @@
  */
 import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
 
-export type CustomerType = "retailer" | "customer" | "project";
+// V2 Sprint 4A — extended with Dealer/Contractor/Builder/Corporate Customer
+// (migration 089, additive; the original 3 values are unchanged).
+export type CustomerType =
+  | "retailer" | "customer" | "project"
+  | "dealer" | "contractor" | "builder" | "corporate";
 
 export interface Customer {
   id: string;
@@ -24,6 +28,10 @@ export interface Customer {
   max_overdue_days: number;
   price_tier_id: string | null;
   tax_id: string | null;
+  // V2 Sprint 4A
+  customer_group: string | null;
+  default_discount_type: "flat" | "percent" | null;
+  default_discount_value: number;
 }
 
 export interface CustomerWithBalance extends Customer {
@@ -43,6 +51,10 @@ export interface CustomerFormData {
   max_overdue_days: number;
   price_tier_id: string | null;
   tax_id: string;
+  // V2 Sprint 4A
+  customer_group: string;
+  default_discount_type: "flat" | "percent" | null;
+  default_discount_value: number;
 }
 
 const PAGE_SIZE = 25;
@@ -72,21 +84,31 @@ function buildWritePayload(form: Partial<CustomerFormData>): Record<string, unkn
   if (form.max_overdue_days !== undefined) payload.max_overdue_days = form.max_overdue_days;
   if (form.price_tier_id !== undefined) payload.price_tier_id = form.price_tier_id;
   if (form.tax_id !== undefined) payload.tax_id = form.tax_id.trim() || null;
+  if (form.customer_group !== undefined) payload.customer_group = form.customer_group.trim() || null;
+  if (form.default_discount_type !== undefined) payload.default_discount_type = form.default_discount_type;
+  if (form.default_discount_value !== undefined) payload.default_discount_value = form.default_discount_value;
   return payload;
 }
 
 export const customerService = {
-  async list(dealerId: string, search = "", typeFilter = "", page = 1) {
+  /**
+   * `statusFilter` and `pageSize` are new in V2 Sprint 4E — both optional,
+   * so every existing call site that only passes (dealerId, search,
+   * typeFilter, page) behaves exactly as before (no status filter, the
+   * existing 25-row page size).
+   */
+  async list(dealerId: string, search = "", typeFilter = "", page = 1, statusFilter = "", pageSize = PAGE_SIZE) {
     const trimmed = search.trim();
     const params = new URLSearchParams({
       dealerId,
       page: String(Math.max(0, page - 1)),
-      pageSize: String(PAGE_SIZE),
+      pageSize: String(pageSize),
       orderBy: "name",
       orderDir: "asc",
     });
     if (trimmed) params.set("search", trimmed);
     if (typeFilter) params.set("f.type", typeFilter);
+    if (statusFilter) params.set("f.status", statusFilter);
     const body = await vpsRequest<{ rows: Customer[]; total: number }>(
       `/api/customers?${params.toString()}`,
     );

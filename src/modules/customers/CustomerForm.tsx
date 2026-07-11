@@ -20,9 +20,13 @@ import { Separator } from "@/components/ui/separator";
 
 const NO_TIER = "__none";
 
+// V2 Sprint 4A — extended with Dealer/Contractor/Builder/Corporate Customer
+// (migration 089, additive; the original 3 values are unchanged).
+const CUSTOMER_TYPES = ["retailer", "customer", "project", "dealer", "contractor", "builder", "corporate"] as const;
+
 const schema = z.object({
   name:             z.string().min(1, "Customer name is required").max(100),
-  type:             z.enum(["retailer", "customer", "project"]),
+  type:             z.enum(CUSTOMER_TYPES),
   phone:            z.string().max(20).default(""),
   email:            z.string().email("Invalid email").or(z.literal("")).default(""),
   address:          z.string().max(250).default(""),
@@ -33,6 +37,11 @@ const schema = z.object({
   max_overdue_days: z.coerce.number().int().min(0, "Must be 0 or more").default(0),
   price_tier_id:    z.string().nullable().default(null),
   tax_id:           z.string().max(50).default(""),
+  // V2 Sprint 4A — Customer Group (free label) + Customer Discount Policy
+  // (a default hint for quotations, not an enforced discount).
+  customer_group:          z.string().max(100).default(""),
+  default_discount_type:   z.enum(["flat", "percent"]).nullable().default(null),
+  default_discount_value:  z.coerce.number().min(0, "Discount cannot be negative").default(0),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -69,6 +78,9 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
       max_overdue_days: customer?.max_overdue_days ?? 0,
       price_tier_id:   customer?.price_tier_id ?? null,
       tax_id:          customer?.tax_id ?? "",
+      customer_group:          customer?.customer_group ?? "",
+      default_discount_type:   customer?.default_discount_type ?? null,
+      default_discount_value:  customer?.default_discount_value ?? 0,
     },
   });
 
@@ -87,6 +99,9 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
         max_overdue_days: values.max_overdue_days,
         price_tier_id: values.price_tier_id,
         tax_id: values.tax_id,
+        customer_group: values.customer_group,
+        default_discount_type: values.default_discount_type,
+        default_discount_value: values.default_discount_value,
       };
       if (isEdit) {
         await customerService.update(customer!.id, payload);
@@ -129,6 +144,10 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
                     <SelectItem value="retailer">Retailer</SelectItem>
                     <SelectItem value="customer">Regular</SelectItem>
                     <SelectItem value="project">Project</SelectItem>
+                    <SelectItem value="dealer">Dealer</SelectItem>
+                    <SelectItem value="contractor">Contractor</SelectItem>
+                    <SelectItem value="builder">Builder</SelectItem>
+                    <SelectItem value="corporate">Corporate Customer</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -162,17 +181,30 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
           />
         </div>
 
-        <FormField
-          control={form.control}
-          name="reference_name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Reference Name</FormLabel>
-              <FormControl><Input placeholder="Who referred this customer?" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="reference_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reference Name</FormLabel>
+                <FormControl><Input placeholder="Who referred this customer?" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="customer_group"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Customer Group</FormLabel>
+                <FormControl><Input placeholder="e.g. VIP, Wholesale Batch A (optional)" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <FormField
           control={form.control}
@@ -303,6 +335,49 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
                 <FormItem>
                   <FormLabel>Max Overdue Days</FormLabel>
                   <FormControl><Input type="number" min={0} step="1" placeholder="0 = no restriction" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+
+        <Separator />
+
+        <div>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Discount Policy</h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Optional default — pre-fills (but does not force) the discount on new quotations for this customer.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="default_discount_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Discount Type</FormLabel>
+                  <Select
+                    value={field.value ?? NO_TIER}
+                    onValueChange={(v) => field.onChange(v === NO_TIER ? null : (v as "flat" | "percent"))}
+                  >
+                    <FormControl><SelectTrigger><SelectValue placeholder="No default" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value={NO_TIER}>No default</SelectItem>
+                      <SelectItem value="flat">Flat amount</SelectItem>
+                      <SelectItem value="percent">Percentage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="default_discount_value"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Discount Value</FormLabel>
+                  <FormControl><Input type="number" min={0} step="0.01" placeholder="0" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}

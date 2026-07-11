@@ -41,7 +41,7 @@ const SORTABLE = new Set([
 ]);
 
 // Equality filters via ?f.<col>=
-const FILTERABLE = new Set(['status', 'type', 'name', 'price_tier_id']);
+const FILTERABLE = new Set(['status', 'type', 'name', 'price_tier_id', 'customer_group']);
 
 // Columns the frontend may write (everything else is rejected)
 const WRITABLE = new Set([
@@ -57,9 +57,15 @@ const WRITABLE = new Set([
   'max_overdue_days',
   'price_tier_id',
   'tax_id',
+  // V2 Sprint 4A
+  'customer_group',
+  'default_discount_type',
+  'default_discount_value',
 ]);
 
-const CUSTOMER_TYPES = ['retailer', 'customer', 'project'] as const;
+// V2 Sprint 4A — extended with Dealer/Contractor/Builder/Corporate Customer
+// (migration 089, additive ALTER TYPE — the original 3 values are unchanged).
+const CUSTOMER_TYPES = ['retailer', 'customer', 'project', 'dealer', 'contractor', 'builder', 'corporate'] as const;
 
 const customerWriteSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
@@ -74,6 +80,11 @@ const customerWriteSchema = z.object({
   max_overdue_days: z.number().int().min(0).optional(),
   price_tier_id: z.string().uuid().nullable().optional(),
   tax_id: z.string().trim().max(50).nullable().optional(),
+  // V2 Sprint 4A — Customer Group (free-form label) + Customer Discount Policy
+  // (a default hint for quotations, not an enforced discount).
+  customer_group: z.string().trim().max(100).nullable().optional(),
+  default_discount_type: z.enum(['flat', 'percent']).nullable().optional(),
+  default_discount_value: z.number().finite().min(0).optional(),
 });
 
 function resolveDealerScope(req: Request, res: Response): string | null {

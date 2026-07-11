@@ -15,6 +15,12 @@
  *   GET /api/backorders/oldest-pending        — single oldest pending line
  *   GET /api/backorders/dashboard-stats       — counts for dashboard widget
  *   GET /api/backorders/sale/:saleId          — fulfillment summary for a specific sale
+ *   GET /api/backorders/supplier-links        — V2 Sprint 3C "Supplier Backorder":
+ *                                               which purchase (supplier) is expected
+ *                                               to cover which customer backorder.
+ *                                               Reuses the existing `purchase_shortage_links`
+ *                                               table (already written by
+ *                                               purchasePlanning.ts) — no new table.
  */
 import { Router, Request, Response } from 'express';
 import { db } from '../db/connection';
@@ -376,6 +382,73 @@ router.get('/sale/:saleId', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[backorders/sale]', err);
     res.status(500).json({ error: err.message ?? 'Failed to load fulfillment summary' });
+  }
+});
+
+// ── GET /api/backorders/supplier-links — "Supplier Backorder" (V2 Sprint 3C) ──
+router.get('/supplier-links', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  try {
+    const rows = await db('purchase_shortage_links as psl')
+      .innerJoin('sale_items as si', 'si.id', 'psl.sale_item_id')
+      .leftJoin('products as p', 'p.id', 'si.product_id')
+      .leftJoin('sales as s', 's.id', 'si.sale_id')
+      .leftJoin('customers as c', 'c.id', 's.customer_id')
+      .leftJoin('purchases as pu', 'pu.id', 'psl.purchase_id')
+      .leftJoin('suppliers as sup', 'sup.id', 'pu.supplier_id')
+      .where('psl.dealer_id', dealerId)
+      .select(
+        'psl.id',
+        'psl.planned_qty',
+        'psl.link_type',
+        'psl.notes',
+        'psl.created_at',
+        'si.id as sale_item_id',
+        'si.backorder_qty',
+        'si.allocated_qty',
+        'si.fulfillment_status',
+        'p.name as product_name',
+        'p.sku as product_sku',
+        's.invoice_number',
+        'c.name as customer_name',
+        'pu.id as purchase_id',
+        'pu.invoice_number as purchase_invoice_number',
+        'pu.purchase_date',
+        'sup.name as supplier_name',
+      )
+      .orderBy('psl.created_at', 'desc');
+
+    res.json({
+      rows: rows.map((r: any) => ({
+        id: r.id,
+        planned_qty: r.planned_qty,
+        link_type: r.link_type,
+        notes: r.notes,
+        created_at: r.created_at,
+        sale_item: {
+          id: r.sale_item_id,
+          backorder_qty: r.backorder_qty,
+          allocated_qty: r.allocated_qty,
+          fulfillment_status: r.fulfillment_status,
+          product_name: r.product_name,
+          product_sku: r.product_sku,
+          invoice_number: r.invoice_number,
+          customer_name: r.customer_name,
+        },
+        purchase: r.purchase_id
+          ? {
+              id: r.purchase_id,
+              invoice_number: r.purchase_invoice_number,
+              purchase_date: r.purchase_date,
+              supplier_name: r.supplier_name,
+            }
+          : null,
+      })),
+    });
+  } catch (err: any) {
+    console.error('[backorders/supplier-links]', err);
+    res.status(500).json({ error: err.message ?? 'Failed to load supplier backorder links' });
   }
 });
 

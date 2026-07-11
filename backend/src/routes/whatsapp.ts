@@ -113,7 +113,8 @@ router.get('/logs', async (req: Request, res: Response) => {
 });
 
 const createLogSchema = z.object({
-  message_type: z.enum(['quotation_share', 'invoice_share', 'payment_receipt', 'overdue_reminder', 'delivery_update']),
+  // 'purchase_order_share' is new in V2 Sprint 5B — additive (see migration 094).
+  message_type: z.enum(['quotation_share', 'invoice_share', 'payment_receipt', 'overdue_reminder', 'delivery_update', 'purchase_order_share']),
   source_type: z.string().min(1),
   source_id: z.string().uuid().nullable().optional(),
   recipient_phone: z.string().min(1),
@@ -379,11 +380,15 @@ router.put('/settings', async (req: Request, res: Response) => {
       enable_payment_receipt: !!body.enable_payment_receipt,
       enable_overdue_reminder: !!body.enable_overdue_reminder,
       enable_delivery_update: !!body.enable_delivery_update,
+      // V2 Sprint 5B
+      enable_purchase_order_share: !!body.enable_purchase_order_share,
       template_quotation_share: body.template_quotation_share ?? null,
       template_invoice_share: body.template_invoice_share ?? null,
       template_payment_receipt: body.template_payment_receipt ?? null,
       template_overdue_reminder: body.template_overdue_reminder ?? null,
       template_delivery_update: body.template_delivery_update ?? null,
+      // V2 Sprint 5B
+      template_purchase_order_share: body.template_purchase_order_share ?? null,
       prefer_manual_send: body.prefer_manual_send !== false,
       default_country_code: body.default_country_code ?? '880',
       updated_at: new Date().toISOString(),

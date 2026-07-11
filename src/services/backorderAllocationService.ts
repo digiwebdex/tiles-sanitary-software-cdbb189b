@@ -107,6 +107,14 @@ export const backorderAllocationService = {
     }
   },
 
+  /** V2 Sprint 3C — "Supplier Backorder": which purchase covers which shortage. */
+  async getSupplierLinks(dealerId: string) {
+    const body = await vpsGet<{ rows: any[] }>(
+      `/api/backorders/supplier-links?dealerId=${encodeURIComponent(dealerId)}`,
+    );
+    return body.rows ?? [];
+  },
+
   async getDashboardStats(dealerId: string) {
     try {
       return await vpsGet<{

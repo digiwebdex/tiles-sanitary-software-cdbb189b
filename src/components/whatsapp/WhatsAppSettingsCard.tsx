@@ -20,6 +20,7 @@ import {
   buildPaymentReceiptMessage,
   buildOverdueReminderMessage,
   buildDeliveryUpdateMessage,
+  buildPurchaseOrderMessage,
   type WhatsAppSettings,
   type WhatsAppMessageType,
 } from "@/services/whatsappService";
@@ -113,6 +114,22 @@ const TYPE_META: {
         deliveryDate: "13 Apr 2026",
         invoiceNo: "INV-00541",
         receiverName: "Site Engineer",
+      }),
+  },
+  {
+    type: "purchase_order_share",
+    label: "Purchase Order Share",
+    enableKey: "enable_purchase_order_share",
+    templateKey: "template_purchase_order_share",
+    hint: "Used when sharing a purchase order with a supplier via WhatsApp.",
+    defaultPreview: () =>
+      buildPurchaseOrderMessage({
+        dealerName: "Your Business",
+        supplierName: "ABC Tiles Ltd.",
+        poNumber: "PO-00045",
+        totalAmount: 85000,
+        itemCount: 6,
+        expectedDeliveryDate: "20 Apr 2026",
       }),
   },
 ];

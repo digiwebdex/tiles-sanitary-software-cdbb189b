@@ -1,12 +1,27 @@
 /**
  * Collections aggregation route — VPS migration phase 3F.
  *
- *   GET /api/collections/outstanding?dealerId=<uuid>
+ *   GET /api/collections/outstanding?dealerId=<uuid>&customerId=<uuid>
  *     → { customers: [...] }  matches CustomerOutstanding[] shape used by
- *       src/modules/collections/CollectionTracker.tsx.
+ *       src/modules/collections/CollectionTracker.tsx. `customerId` is
+ *       optional (V2 Sprint 4A) — scopes the result to one customer for the
+ *       new Customer Profile "ledger summary" view; omitted, it behaves
+ *       exactly as before (dealer-wide, outstanding-only).
  *
  *   GET /api/collections/recent?dealerId=<uuid>&limit=20
  *     → { rows: [...] }  recent customer payment entries.
+ *
+ *   POST /api/collections/adjustment (V2 Sprint 4A)
+ *     → manual signed customer_ledger entry (type='adjustment') for
+ *       corrections outside the normal payment flow — e.g. a write-off or
+ *       a balance correction. dealer_admin only.
+ *
+ *   POST /api/collections/advance (V2 Sprint 4C)
+ *     → record a payment with no invoice attached (sale_id=NULL); see
+ *       advancePaymentService.ts.
+ *   GET  /api/collections/advance-balance?customerId=<uuid> (V2 Sprint 4C)
+ *   POST /api/collections/advance/apply (V2 Sprint 4C)
+ *     → apply previously-received advance credit to a specific invoice.
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
@@ -15,6 +30,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
 import { recordCustomerPayment } from '../lib/customerPayment';
+import { receiveAdvancePayment, applyAdvanceToSale, getAdvanceBalance } from '../services/advancePaymentService';
 import {
   getCustomerAggById,
   getCustomerOutstandingMapFromReadModel,
@@ -55,12 +71,17 @@ function getAgingBucket(daysOverdue: number): string {
 router.get('/outstanding', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
   if (!dealerId) return;
+  // V2 Sprint 4A — optional single-customer scope for the new Customer
+  // Profile view. Existing dealer-wide callers (CollectionTracker.tsx)
+  // never send this param, so their behavior is unchanged.
+  const customerId = (req.query.customerId as string | undefined) || undefined;
 
   try {
     const [custs, sales, followups, aggMap, outstandingMap, oldestMap] = await Promise.all([
       db('customers')
         .select('id', 'name', 'phone', 'type', 'max_overdue_days')
         .where({ dealer_id: dealerId, status: 'active' })
+        .modify((qb) => { if (customerId) qb.andWhere('id', customerId); })
         .orderBy('name'),
       db('sales')
         .select('customer_id', 'invoice_number', 'sale_date', 'id', 'due_amount')
@@ -83,11 +104,14 @@ router.get('/outstanding', async (req: Request, res: Response) => {
       }
     }
 
-    const invoiceMap = new Map<string, { invoice_number: string; sale_id: string; sale_date: string }[]>();
+    // V2 Sprint 6B — due_amount added (already fetched above, just not
+    // surfaced before) so the frontend can offer manual bill selection for
+    // a payment instead of only implicit FIFO.
+    const invoiceMap = new Map<string, { invoice_number: string; sale_id: string; sale_date: string; due_amount: number }[]>();
     for (const s of sales) {
       if (!s.invoice_number) continue;
       const arr = invoiceMap.get(s.customer_id) ?? [];
-      arr.push({ invoice_number: s.invoice_number, sale_id: s.id, sale_date: String(s.sale_date) });
+      arr.push({ invoice_number: s.invoice_number, sale_id: s.id, sale_date: String(s.sale_date), due_amount: Number(s.due_amount) || 0 });
       invoiceMap.set(s.customer_id, arr);
     }
 
@@ -122,7 +146,12 @@ router.get('/outstanding', async (req: Request, res: Response) => {
         lastFollowupStatus: fu?.status ?? null,
         maxOverdueDays: Number(c.max_overdue_days ?? 0),
       };
-    }).filter((c) => c.outstanding > 0);
+    })
+      // V2 Sprint 4A — scoped to a single customer (Customer Profile), return
+      // the row regardless of outstanding balance (0 or credit is a valid,
+      // informative state there); the dealer-wide list keeps its existing
+      // "outstanding only" behavior.
+      .filter((c: any) => (customerId ? true : c.outstanding > 0));
 
     res.json({ customers: result });
   } catch (err: any) {
@@ -140,6 +169,9 @@ const collectionPaymentSchema = z.object({
   note: z.string().trim().max(500).optional(),
   payment_mode: z.string().trim().max(50).optional(),
   paid_account_id: z.string().uuid().optional().nullable(),
+  // V2 Sprint 6B — optional manual bill targeting (mirrors the supplier
+  // side's existing purchase_id targeting); omitted = FIFO, unchanged.
+  sale_id: z.string().uuid().optional(),
 });
 
 router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'salesman'), async (req: Request, res: Response) => {
@@ -152,7 +184,7 @@ router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'sa
     return;
   }
 
-  const { customer_id, amount, note, payment_mode, paid_account_id } = parsed.data;
+  const { customer_id, amount, note, payment_mode, paid_account_id, sale_id } = parsed.data;
 
   try {
     const result = await db.transaction(async (trx) =>
@@ -163,6 +195,7 @@ router.post('/payment', requireRole('dealer_admin', 'manager', 'accountant', 'sa
         note,
         payment_mode,
         paid_account_id,
+        saleId: sale_id,
       }),
     );
     res.status(201).json({ ok: true, ...result });
@@ -263,6 +296,125 @@ router.post('/followups', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[collections/followups.create]', err.message);
     res.status(500).json({ error: 'Failed to add follow-up' });
+  }
+});
+
+// ─── Advance Payment (V2 Sprint 4C) ───────────────────────────────────────
+// recordCustomerPayment() (above) rejects a payment with no outstanding due
+// sale. These three endpoints let a customer pay ahead of any invoice, and
+// later apply that credit to one — see advancePaymentService.ts header.
+const advancePaymentSchema = z.object({
+  customer_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+  note: z.string().trim().max(500).optional(),
+  payment_mode: z.string().trim().max(50).optional(),
+  paid_account_id: z.string().uuid().optional().nullable(),
+});
+
+router.post('/advance', requireRole('dealer_admin', 'manager', 'accountant', 'salesman'), async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = advancePaymentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { customer_id, amount, note, payment_mode, paid_account_id } = parsed.data;
+  try {
+    const result = await db.transaction((trx) =>
+      receiveAdvancePayment(trx, { dealerId, customerId: customer_id, amount, note, payment_mode, paid_account_id }),
+    );
+    res.status(201).json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[collections/advance]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to record advance payment' });
+  }
+});
+
+router.get('/advance-balance', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const customerId = (req.query.customerId as string | undefined) || '';
+  if (!customerId) return res.status(400).json({ error: 'customerId is required' });
+  try {
+    const balance = await getAdvanceBalance(dealerId, customerId);
+    res.json({ balance });
+  } catch (err: any) {
+    console.error('[collections/advance-balance]', err.message);
+    res.status(500).json({ error: 'Failed to load advance balance' });
+  }
+});
+
+const applyAdvanceSchema = z.object({
+  customer_id: z.string().uuid(),
+  sale_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+});
+
+router.post('/advance/apply', requireRole('dealer_admin', 'manager', 'accountant'), async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = applyAdvanceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { customer_id, sale_id, amount } = parsed.data;
+  try {
+    const result = await db.transaction((trx) =>
+      applyAdvanceToSale(trx, { dealerId, customerId: customer_id, saleId: sale_id, amount, appliedBy: req.user?.userId ?? null }),
+    );
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[collections/advance-apply]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to apply advance payment' });
+  }
+});
+
+// ─── POST /api/collections/adjustment — "Collection Adjustment" (V2 Sprint 4A) ───
+// A manual, signed customer_ledger entry outside the normal FIFO payment
+// flow — e.g. correcting a data-entry error or writing off a small balance.
+// Reuses the exact ledger semantics customerStatements.ts already relies on:
+// type='adjustment' is summed the SAME way 'sale' is (a positive amount
+// increases due_balance); passing a negative amount decreases it (e.g. a
+// write-off). dealer_admin only, since it bypasses invoice-level tracking.
+const adjustmentSchema = z.object({
+  customer_id: z.string().uuid(),
+  amount: z.coerce.number().refine((v) => v !== 0, 'Amount must not be zero'),
+  reason: z.string().trim().min(1, 'A reason is required').max(500),
+});
+
+router.post('/adjustment', requireRole('dealer_admin'), async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+
+  const parsed = adjustmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { customer_id, amount, reason } = parsed.data;
+
+  try {
+    const customer = await db('customers').where({ id: customer_id, dealer_id: dealerId }).first('id');
+    if (!customer) {
+      res.status(404).json({ error: 'Customer not found' });
+      return;
+    }
+    const [row] = await db('customer_ledger')
+      .insert({
+        dealer_id: dealerId,
+        customer_id,
+        type: 'adjustment',
+        amount,
+        description: reason,
+        entry_date: new Date().toISOString().slice(0, 10),
+      })
+      .returning('*');
+    res.status(201).json({ row });
+  } catch (err: any) {
+    console.error('[collections/adjustment]', err.message);
+    res.status(500).json({ error: err.message || 'Failed to record adjustment' });
   }
 });
 

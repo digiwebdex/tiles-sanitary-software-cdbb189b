@@ -1,4 +1,5 @@
 import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
+import type { LocationStockRow } from "@/services/godownService";
 
 export interface Warehouse {
   id: string;
@@ -14,14 +15,24 @@ export interface Warehouse {
 }
 
 export type TransferStatus = "requested" | "approved" | "rejected" | "received" | "cancelled";
+export type TransferLevel = "warehouse" | "godown" | "rack";
 
 export interface WarehouseTransfer {
   id: string;
   transfer_no: string | null;
+  transfer_level: TransferLevel;
   from_warehouse_id: string | null;
   to_warehouse_id: string | null;
   from_warehouse_name?: string | null;
   to_warehouse_name?: string | null;
+  from_godown_id?: string | null;
+  to_godown_id?: string | null;
+  from_godown_name?: string | null;
+  to_godown_name?: string | null;
+  from_rack_id?: string | null;
+  to_rack_id?: string | null;
+  from_rack_name?: string | null;
+  to_rack_name?: string | null;
   product_id: string | null;
   product_name_snapshot: string | null;
   quantity: number;
@@ -82,4 +93,6 @@ export const warehouseService = {
     }).then(j),
   receiveTransfer: (id: string, dealerId: string) =>
     vpsAuthedFetch(`/api/warehouses/transfers/${id}/receive?dealerId=${dealerId}`, { method: "POST" }).then(j),
+  stock: (id: string, dealerId: string) =>
+    vpsAuthedFetch(`/api/warehouses/${id}/stock?dealerId=${dealerId}`).then(j) as Promise<{ rows: LocationStockRow[] }>,
 };

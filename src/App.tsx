@@ -22,6 +22,7 @@ import SubscriptionPage from "./pages/subscription/SubscriptionPage";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ProductsPage from "./pages/products/ProductsPage";
+import InventoryPage from "./pages/inventory/InventoryPage";
 import CreateProductRoute from "./pages/products/CreateProductRoute";
 import EditProduct from "./pages/products/EditProduct";
 import DamagePage from "./pages/damage/DamagePage";
@@ -40,10 +41,36 @@ import ReportsPage from "./pages/reports/ReportsPage";
 import SuppliersPage from "./pages/suppliers/SuppliersPage";
 import CreateSupplier from "./pages/suppliers/CreateSupplier";
 import EditSupplier from "./pages/suppliers/EditSupplier";
+import PurchaseRequestsPage from "./pages/purchase-requests/PurchaseRequestsPage";
+import CreatePurchaseRequest from "./pages/purchase-requests/CreatePurchaseRequest";
+import PurchaseRequestDetail from "./pages/purchase-requests/PurchaseRequestDetail";
+import RfqsPage from "./pages/rfq/RfqsPage";
+import CreateRfq from "./pages/rfq/CreateRfq";
+import RfqDetail from "./pages/rfq/RfqDetail";
+import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
+import CreatePurchaseOrder from "./pages/purchase-orders/CreatePurchaseOrder";
+import PurchaseOrderDetail from "./pages/purchase-orders/PurchaseOrderDetail";
+import GoodsReceiptsPage from "./pages/goods-receipts/GoodsReceiptsPage";
+import CreateGoodsReceipt from "./pages/goods-receipts/CreateGoodsReceipt";
+import GoodsReceiptDetail from "./pages/goods-receipts/GoodsReceiptDetail";
+import PurchaseInvoicesPage from "./pages/purchase-invoices/PurchaseInvoicesPage";
+import CreatePurchaseInvoice from "./pages/purchase-invoices/CreatePurchaseInvoice";
+import PurchaseInvoiceDetail from "./pages/purchase-invoices/PurchaseInvoiceDetail";
+import SupplierStatementPage from "./pages/supplier-ledger/SupplierStatementPage";
+import SupplierAgingPage from "./pages/supplier-ledger/SupplierAgingPage";
+import PurchaseReturnsV2Page from "./pages/purchase-returns-v2/PurchaseReturnsV2Page";
+import CreatePurchaseReturnV2 from "./pages/purchase-returns-v2/CreatePurchaseReturnV2";
+import PurchaseReturnV2Detail from "./pages/purchase-returns-v2/PurchaseReturnV2Detail";
+import LandedCostSheetsPage from "./pages/landed-cost/LandedCostSheetsPage";
+import LandedCostSheetDetail from "./pages/landed-cost/LandedCostSheetDetail";
+import StockCostAdjustmentsPage from "./pages/stock-cost-adjustments/StockCostAdjustmentsPage";
+import ImportLcPage from "./pages/import-lc/ImportLcPage";
 import CustomersPage from "./pages/customers/CustomersPage";
 import CreateCustomer from "./pages/customers/CreateCustomer";
 import EditCustomer from "./pages/customers/EditCustomer";
+import CustomerProfilePage from "./pages/customers/CustomerProfilePage";
 import CreditReportPage from "./pages/reports/CreditReportPage";
+import VatReportsPage from "./pages/reports/VatReportsPage";
 import ChallansPage from "./pages/challans/ChallansPage";
 import PurchaseReturnsPage from "./pages/purchase-returns/PurchaseReturnsPage";
 import CreatePurchaseReturn from "./pages/purchase-returns/CreatePurchaseReturn";
@@ -59,6 +86,9 @@ import ApprovalsPage from "./pages/approvals/ApprovalsPage";
 import QuotationsPage from "./pages/quotations/QuotationsPage";
 import CreateQuotation from "./pages/quotations/CreateQuotation";
 import EditQuotation from "./pages/quotations/EditQuotation";
+import SalesOrdersPage from "./pages/salesOrders/SalesOrdersPage";
+import CreateSalesOrder from "./pages/salesOrders/CreateSalesOrder";
+import EditSalesOrder from "./pages/salesOrders/EditSalesOrder";
 import ProjectsPage from "./pages/projects/ProjectsPage";
 import ReferralSourcesPage from "./pages/referrals/ReferralSourcesPage";
 import DisplaySampleStockPage from "./pages/display-sample/DisplaySampleStockPage";
@@ -66,10 +96,23 @@ import WhatsAppLogsPage from "./pages/whatsapp/WhatsAppLogsPage";
 import UserGuidePage from "./pages/UserGuidePage";
 import BankAccountsPage from "./pages/bank-accounts/BankAccountsPage";
 import BankAccountDetailPage from "./pages/bank-accounts/BankAccountDetailPage";
+import ChequeRegisterPage from "./pages/bank-accounts/ChequeRegisterPage";
+import BankReconciliationPage from "./pages/bank-accounts/BankReconciliationPage";
 import CashbookPage from "./pages/cashbook/CashbookPage";
 import CashClosingPage from "./pages/cash-closing/CashClosingPage";
 import FinancialStatementsPage from "./pages/financials/FinancialStatementsPage";
 import JournalPage from "./pages/journal/JournalPage";
+import ChartOfAccountsPage from "./pages/journal/ChartOfAccountsPage";
+import FiscalYearPage from "./pages/journal/FiscalYearPage";
+import CostCentersPage from "./pages/cost-centers/CostCentersPage";
+import FixedAssetsPage from "./pages/fixed-assets/FixedAssetsPage";
+import FixedAssetDetailPage from "./pages/fixed-assets/FixedAssetDetailPage";
+import BudgetsPage from "./pages/budgets/BudgetsPage";
+import ProjectAccountingPage from "./pages/projects/ProjectAccountingPage";
+import GeneralLedgerPage from "./pages/general-ledger/GeneralLedgerPage";
+import FinancialClosingPage from "./pages/financial-closing/FinancialClosingPage";
+import VatClosingPage from "./pages/vat-closing/VatClosingPage";
+import FinancialDashboardPage from "./pages/financial-dashboard/FinancialDashboardPage";
 import EmiPage from "./pages/emi/EmiPage";
 import HRMPage from "./pages/hrm/HRMPage";
 import LeavesPage from "./pages/hrm/LeavesPage";
@@ -84,6 +127,8 @@ import EmployeeExitsPage from "./pages/hrm/EmployeeExitsPage";
 import PayslipPage from "./pages/hrm/PayslipPage";
 import DirectorsPage from "./pages/directors/DirectorsPage";
 import WarehousesPage from "./pages/warehouses/WarehousesPage";
+import ReservationsPage from "./pages/reservations/ReservationsPage";
+import InventoryIntelligencePage from "./pages/inventory-intelligence/InventoryIntelligencePage";
 import Phase3ReportsPage from "./pages/reports/Phase3ReportsPage";
 import SalaryVoucherPage from "./pages/vouchers/SalaryVoucherPage";
 import DirectorVoucherPage from "./pages/vouchers/DirectorVoucherPage";
@@ -245,6 +290,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedRoute allowReadonly><AppLayout><Index /></AppLayout></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute allowReadonly><AppLayout><ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/credit" element={<ProtectedRoute allowReadonly><AppLayout><CreditReportPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/reports/vat" element={<ProtectedRoute><AppLayout><VatReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings/login-history" element={<ProtectedRoute><AppLayout><LoginHistoryPage /></AppLayout></ProtectedRoute>} />
             <Route path="/subscription" element={<ProtectedRoute allowReadonly><AppLayout><SubscriptionPage /></AppLayout></ProtectedRoute>} />
@@ -256,6 +302,8 @@ const App = () => (
             <Route path="/notices" element={<ProtectedRoute allowReadonly><AppLayout><NoticesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/bank-accounts" element={<ProtectedRoute><AppLayout><BankAccountsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/bank-accounts/:id" element={<ProtectedRoute><AppLayout><BankAccountDetailPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/bank-accounts/cheque-register" element={<ProtectedRoute><AppLayout><ChequeRegisterPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/bank-accounts/reconciliation" element={<ProtectedRoute><AppLayout><BankReconciliationPage /></AppLayout></ProtectedRoute>} />
             <Route path="/cashbook" element={<ProtectedRoute><AppLayout><CashbookPage /></AppLayout></ProtectedRoute>} />
             <Route path="/cash-closing" element={<ProtectedRoute><AppLayout><CashClosingPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/auto-draft" element={<ProtectedRoute><AppLayout><AutoPoDraftPage /></AppLayout></ProtectedRoute>} />
@@ -263,6 +311,16 @@ const App = () => (
             <Route path="/customers/:customerId/statement" element={<ProtectedRoute><AppLayout><CustomerStatementPage /></AppLayout></ProtectedRoute>} />
             <Route path="/financials" element={<ProtectedRoute><AppLayout><FinancialStatementsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/journal" element={<ProtectedRoute><AppLayout><JournalPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/journal/chart-of-accounts" element={<ProtectedRoute><AppLayout><ChartOfAccountsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/journal/fiscal-years" element={<ProtectedRoute><AppLayout><FiscalYearPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/cost-centers" element={<ProtectedRoute><AppLayout><CostCentersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/fixed-assets" element={<ProtectedRoute><AppLayout><FixedAssetsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/fixed-assets/:id" element={<ProtectedRoute><AppLayout><FixedAssetDetailPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/budgets" element={<ProtectedRoute><AppLayout><BudgetsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/general-ledger" element={<ProtectedRoute><AppLayout><GeneralLedgerPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/financial-closing" element={<ProtectedRoute><AppLayout><FinancialClosingPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/vat-closing" element={<ProtectedRoute><AppLayout><VatClosingPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/financial-dashboard" element={<ProtectedRoute><AppLayout><FinancialDashboardPage /></AppLayout></ProtectedRoute>} />
             <Route path="/emi" element={<ProtectedRoute><AppLayout><EmiPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm" element={<ProtectedRoute><AppLayout><HRMPage /></AppLayout></ProtectedRoute>} />
             <Route path="/hrm/leaves" element={<ProtectedRoute><AppLayout><LeavesPage /></AppLayout></ProtectedRoute>} />
@@ -277,6 +335,8 @@ const App = () => (
             <Route path="/hrm/payslip/:id" element={<ProtectedRoute><AppLayout><PayslipPage /></AppLayout></ProtectedRoute>} />
             <Route path="/directors" element={<ProtectedRoute><AppLayout><DirectorsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/warehouses" element={<ProtectedRoute><AppLayout><WarehousesPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/reservations" element={<ProtectedRoute><AppLayout><ReservationsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/inventory-intelligence" element={<ProtectedRoute><AppLayout><InventoryIntelligencePage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/operations" element={<ProtectedRoute><AppLayout><Phase3ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/vouchers/salary/:id" element={<ProtectedRoute><AppLayout><SalaryVoucherPage /></AppLayout></ProtectedRoute>} />
             <Route path="/vouchers/director/:id" element={<ProtectedRoute><AppLayout><DirectorVoucherPage /></AppLayout></ProtectedRoute>} />
@@ -285,16 +345,49 @@ const App = () => (
             <Route path="/products" element={<ProtectedRoute><AppLayout><ProductsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/products/new" element={<ProtectedRoute><AppLayout><CreateProductRoute /></AppLayout></ProtectedRoute>} />
             <Route path="/products/:id/edit" element={<ProtectedRoute><AppLayout><EditProduct /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 3A — Inventory Core */}
+            <Route path="/inventory" element={<ProtectedRoute><AppLayout><InventoryPage /></AppLayout></ProtectedRoute>} />
             <Route path="/damage" element={<ProtectedRoute><AppLayout><DamagePage /></AppLayout></ProtectedRoute>} />
             <Route path="/suppliers" element={<ProtectedRoute><AppLayout><SuppliersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/suppliers/new" element={<ProtectedRoute><AppLayout><CreateSupplier /></AppLayout></ProtectedRoute>} />
             <Route path="/suppliers/:id/edit" element={<ProtectedRoute><AppLayout><EditSupplier /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 5A — Purchase Request & RFQ */}
+            <Route path="/purchase-requests" element={<ProtectedRoute><AppLayout><PurchaseRequestsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-requests/new" element={<ProtectedRoute><AppLayout><CreatePurchaseRequest /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-requests/:id/edit" element={<ProtectedRoute><AppLayout><CreatePurchaseRequest /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-requests/:id" element={<ProtectedRoute><AppLayout><PurchaseRequestDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/rfqs" element={<ProtectedRoute><AppLayout><RfqsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/rfqs/new" element={<ProtectedRoute><AppLayout><CreateRfq /></AppLayout></ProtectedRoute>} />
+            <Route path="/rfqs/:id" element={<ProtectedRoute><AppLayout><RfqDetail /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 5B — Purchase Order */}
+            <Route path="/purchase-orders" element={<ProtectedRoute><AppLayout><PurchaseOrdersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-orders/new" element={<ProtectedRoute><AppLayout><CreatePurchaseOrder /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-orders/:id/edit" element={<ProtectedRoute><AppLayout><CreatePurchaseOrder /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-orders/:id" element={<ProtectedRoute><AppLayout><PurchaseOrderDetail /></AppLayout></ProtectedRoute>} />
+            {/* V2 Sprint 5C — Goods Receipt (GRN) */}
+            <Route path="/goods-receipts" element={<ProtectedRoute><AppLayout><GoodsReceiptsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/goods-receipts/new" element={<ProtectedRoute><AppLayout><CreateGoodsReceipt /></AppLayout></ProtectedRoute>} />
+            <Route path="/goods-receipts/:id/edit" element={<ProtectedRoute><AppLayout><CreateGoodsReceipt /></AppLayout></ProtectedRoute>} />
+            <Route path="/goods-receipts/:id" element={<ProtectedRoute><AppLayout><GoodsReceiptDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-invoices" element={<ProtectedRoute><AppLayout><PurchaseInvoicesPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-invoices/new" element={<ProtectedRoute><AppLayout><CreatePurchaseInvoice /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-invoices/:id" element={<ProtectedRoute><AppLayout><PurchaseInvoiceDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/supplier-ledger/statement" element={<ProtectedRoute><AppLayout><SupplierStatementPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/supplier-ledger/aging" element={<ProtectedRoute><AppLayout><SupplierAgingPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-returns-v2" element={<ProtectedRoute><AppLayout><PurchaseReturnsV2Page /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-returns-v2/new" element={<ProtectedRoute><AppLayout><CreatePurchaseReturnV2 /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchase-returns-v2/:id" element={<ProtectedRoute><AppLayout><PurchaseReturnV2Detail /></AppLayout></ProtectedRoute>} />
+            <Route path="/landed-cost" element={<ProtectedRoute><AppLayout><LandedCostSheetsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/landed-cost/:id" element={<ProtectedRoute><AppLayout><LandedCostSheetDetail /></AppLayout></ProtectedRoute>} />
+            <Route path="/stock-cost-adjustments" element={<ProtectedRoute><AppLayout><StockCostAdjustmentsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/import-lc" element={<ProtectedRoute><AppLayout><ImportLcPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases" element={<ProtectedRoute><AppLayout><PurchasesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/new" element={<ProtectedRoute><AppLayout><CreatePurchase /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/:id" element={<ProtectedRoute><AppLayout><ViewPurchase /></AppLayout></ProtectedRoute>} />
             <Route path="/customers" element={<ProtectedRoute><AppLayout><CustomersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/new" element={<ProtectedRoute><AppLayout><CreateCustomer /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/:id/edit" element={<ProtectedRoute><AppLayout><EditCustomer /></AppLayout></ProtectedRoute>} />
+            <Route path="/customers/:id" element={<ProtectedRoute><AppLayout><CustomerProfilePage /></AppLayout></ProtectedRoute>} />
             <Route path="/leads" element={<ProtectedRoute><AppLayout><LeadsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/leads/visits" element={<ProtectedRoute><AppLayout><LeadVisitRegisterPage /></AppLayout></ProtectedRoute>} />
             <Route path="/leads/options" element={<ProtectedRoute><AppLayout><LeadOptionsPage /></AppLayout></ProtectedRoute>} />
@@ -323,7 +416,11 @@ const App = () => (
             <Route path="/quotations" element={<ProtectedRoute><AppLayout><QuotationsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/quotations/new" element={<ProtectedRoute><AppLayout><CreateQuotation /></AppLayout></ProtectedRoute>} />
             <Route path="/quotations/:id/edit" element={<ProtectedRoute><AppLayout><EditQuotation /></AppLayout></ProtectedRoute>} />
+            <Route path="/sales-orders" element={<ProtectedRoute><AppLayout><SalesOrdersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/sales-orders/new" element={<ProtectedRoute><AppLayout><CreateSalesOrder /></AppLayout></ProtectedRoute>} />
+            <Route path="/sales-orders/:id/edit" element={<ProtectedRoute><AppLayout><EditSalesOrder /></AppLayout></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><AppLayout><ProjectsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/projects/accounting" element={<ProtectedRoute><AppLayout><ProjectAccountingPage /></AppLayout></ProtectedRoute>} />
             <Route path="/referrals" element={<ProtectedRoute><AppLayout><ReferralSourcesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/display-sample" element={<ProtectedRoute><AppLayout><DisplaySampleStockPage /></AppLayout></ProtectedRoute>} />
             <Route path="/whatsapp-logs" element={<ProtectedRoute><AppLayout><WhatsAppLogsPage /></AppLayout></ProtectedRoute>} />

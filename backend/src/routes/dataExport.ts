@@ -18,6 +18,12 @@ import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { requireRole } from '../middleware/roles';
+import {
+  sumCustomerOutstandingFromSales,
+  sumSupplierPayable,
+  sumInventoryValuationWac,
+  getCustomerOutstandingMapFromReadModel,
+} from '../services/reportQueryService';
 
 const router = Router();
 router.use(authenticate, tenantGuard, requireRole('dealer_admin'));
@@ -196,6 +202,21 @@ function sheetName(label: string): string {
   // Excel sheet names: max 31 chars, cannot contain \ / ? * [ ] :
   return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet';
 }
+function round2(n: unknown): number {
+  const v = Number(n) || 0;
+  return Math.round(v * 100) / 100;
+}
+// snake_case DB column → friendly "Title Case" header
+function prettyHeader(h: string): string {
+  return h
+    .replace(/_/g, ' ')
+    .replace(/\bid\b/gi, 'ID')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const TEAL = 'FF0F766E';
+const TEAL_LIGHT = 'FFCCFBF1';
+const MONEY_FMT = '#,##0.00';
 
 router.get('/full-backup.xlsx', async (req: Request, res: Response) => {
   const dealerId = resolveDealer(req, res);
@@ -208,47 +229,188 @@ router.get('/full-backup.xlsx', async (req: Request, res: Response) => {
   );
   res.setHeader('Content-Disposition', `attachment; filename="full_backup_${stamp}.xlsx"`);
 
-  const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+  const wb = new ExcelJS.Workbook();
 
-  // Summary sheet first.
-  const summary = wb.addWorksheet('Summary');
-  summary.addRow(['SaniTiles ERP — Full Data Backup']).font = { bold: true, size: 14 };
-  summary.addRow([`Generated: ${new Date().toISOString()}`]);
-  summary.addRow([]);
-  const head = summary.addRow(['Data area', 'Records']);
-  head.font = { bold: true };
+  // ─── Sheet 1: Dashboard (business summary, first sheet) ───
+  const dash = wb.addWorksheet('Dashboard', { views: [{ showGridLines: false }] });
+  dash.columns = [{ width: 36 }, { width: 22 }];
 
-  const counts: Array<{ label: string; count: number }> = [];
+  const dealer = await db('dealers').where({ id: dealerId }).first().catch(() => null);
+  dash.addRow(['SaniTiles ERP — Business Backup & Summary']).font = { bold: true, size: 16, color: { argb: TEAL } };
+  dash.addRow([(dealer as any)?.business_name || (dealer as any)?.name || 'Dealer']).font = { bold: true, size: 12 };
+  dash.addRow([`Generated: ${new Date().toLocaleString()}`]).font = { italic: true, color: { argb: 'FF666666' } };
+  dash.addRow([]);
+
+  // KPI helpers — dark text on light fill so headers stay readable even if fill is dropped.
+  function section(title: string) {
+    const r = dash.addRow([title, '']);
+    for (let i = 1; i <= 2; i++) {
+      const c = r.getCell(i);
+      c.font = { bold: true, size: 11, color: { argb: TEAL } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL_LIGHT } };
+    }
+  }
+  function kpi(label: string, value: number | null, money = true) {
+    const r = dash.addRow([label, value === null ? 'n/a' : value]);
+    r.getCell(1).font = { color: { argb: 'FF334155' } };
+    const vc = r.getCell(2);
+    vc.font = { bold: true };
+    vc.alignment = { horizontal: 'right' };
+    if (money && typeof value === 'number') vc.numFmt = MONEY_FMT;
+  }
+
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const yearStart = `${now.getFullYear()}-01-01`;
+  const money = async (fn: () => Promise<unknown>): Promise<number | null> => {
+    try { return round2(await fn()); } catch { return null; }
+  };
+  const count = async (table: string): Promise<number | null> => {
+    try {
+      const r = await db(table).where({ dealer_id: dealerId }).count<{ c: string }>('* as c').first();
+      return Number((r as any)?.c ?? 0);
+    } catch { return null; }
+  };
+  const sumCol = (table: string, col: string, dateCol?: string, from?: string) => money(async () => {
+    let q = db(table).where({ dealer_id: dealerId });
+    if (dateCol && from) q = q.where(dateCol, '>=', from);
+    return (await q.sum({ s: col }).first() as any)?.s;
+  });
+  // Low-stock count — same reorder rule as the app dashboard.
+  const lowStock = async (): Promise<number | null> => {
+    try {
+      const r: any = await db.raw(
+        `SELECT COUNT(*)::int AS c
+         FROM products p
+         LEFT JOIN stock s ON s.product_id = p.id AND s.dealer_id = p.dealer_id
+         WHERE p.dealer_id = ?
+           AND COALESCE(p.reorder_level, 0) > 0
+           AND (CASE WHEN p.unit_type = 'box_sft' THEN COALESCE(s.box_qty, 0)
+                     ELSE COALESCE(s.piece_qty, 0) END) <= COALESCE(p.reorder_level, 0)`,
+        [dealerId],
+      );
+      return Number(r.rows?.[0]?.c ?? 0);
+    } catch { return null; }
+  };
+
+  const [
+    monthSales, monthProfit, monthColl, monthPurch, todaySales, yearSales,
+    custDue, supPay, cash, stockVal, nCust, nSup, nProd, nSales,
+    monthExpenses, lowStockCount,
+  ] = await Promise.all([
+    sumCol('sales', 'total_amount', 'sale_date', monthStart),
+    sumCol('sales', 'net_profit', 'sale_date', monthStart),
+    money(async () => (await db('customer_ledger').where({ dealer_id: dealerId, type: 'payment' }).where('entry_date', '>=', monthStart).sum({ s: 'amount' }).first() as any)?.s),
+    sumCol('purchases', 'total_amount', 'purchase_date', monthStart),
+    sumCol('sales', 'total_amount', 'sale_date', todayStr),
+    sumCol('sales', 'total_amount', 'sale_date', yearStart),
+    money(() => sumCustomerOutstandingFromSales(dealerId)),
+    money(() => sumSupplierPayable(dealerId)),
+    money(async () => (await db('cash_ledger').where({ dealer_id: dealerId }).sum({ s: 'amount' }).first() as any)?.s),
+    money(() => sumInventoryValuationWac(dealerId)),
+    count('customers'), count('suppliers'), count('products'), count('sales'),
+    sumCol('expenses', 'amount', 'expense_date', monthStart),
+    lowStock(),
+  ]);
+
+  // Top 5 customers by outstanding dues — same read model as the total above.
+  let topDues: Array<[string, number]> = [];
+  try {
+    const dueMap = await getCustomerOutstandingMapFromReadModel(dealerId);
+    const top = [...dueMap.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    if (top.length) {
+      const rows = await db('customers').whereIn('id', top.map(([id]) => id)).select('id', 'name');
+      const nameById = new Map((rows as any[]).map((c) => [c.id, c.name]));
+      topDues = top.map(([id, v]) => [nameById.get(id) || 'Unknown', round2(v)]);
+    }
+  } catch { topDues = []; }
+
+  section('THIS MONTH (Tk)');
+  kpi('Sales', monthSales);
+  kpi('Profit', monthProfit);
+  kpi('Collections received', monthColl);
+  kpi('Purchases', monthPurch);
+  kpi('Expenses', monthExpenses);
+  dash.addRow([]);
+  section('TODAY (Tk)');
+  kpi("Today's sales", todaySales);
+  dash.addRow([]);
+  section('MONEY POSITION — right now (Tk)');
+  kpi('Customer dues (they owe you)', custDue);
+  kpi('Supplier payable (you owe)', supPay);
+  kpi('Cash in hand', cash);
+  kpi('Stock value (at cost)', stockVal);
+  kpi('Sales this year', yearSales);
+  dash.addRow([]);
+  section('TOTALS (count)');
+  kpi('Customers', nCust, false);
+  kpi('Suppliers', nSup, false);
+  kpi('Products', nProd, false);
+  kpi('Sales invoices', nSales, false);
+  kpi('Low-stock items (re-order now)', lowStockCount, false);
+  dash.addRow([]);
+  section('TOP 5 CUSTOMERS BY DUES (Tk)');
+  if (topDues.length === 0) {
+    dash.addRow(['(no outstanding dues)', '']);
+  } else {
+    for (const [name, amt] of topDues) {
+      const r = dash.addRow([name, amt]);
+      r.getCell(2).numFmt = MONEY_FMT;
+      r.getCell(2).alignment = { horizontal: 'right' };
+    }
+  }
+  dash.addRow([]);
+
+  // ─── One sheet per data area, with friendly headers ───
+  const contents: Array<[string, number | string]> = [];
   for (const spec of EXPORTS) {
     try {
       const rows = await db(spec.table).where({ dealer_id: dealerId }).select('*');
-      counts.push({ label: spec.label, count: rows.length });
       const ws = wb.addWorksheet(sheetName(spec.label));
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
       if (rows.length > 0) {
         const headers = Object.keys(rows[0]);
-        ws.columns = headers.map((h) => ({ header: h, key: h, width: 20 }));
-        ws.getRow(1).font = { bold: true };
+        ws.columns = headers.map((h) => ({
+          header: prettyHeader(h),
+          key: h,
+          width: Math.min(42, Math.max(12, prettyHeader(h).length + 2)),
+        }));
+        const hr = ws.getRow(1);
+        hr.font = { bold: true, color: { argb: TEAL } };
+        hr.alignment = { vertical: 'middle' };
+        for (let i = 1; i <= headers.length; i++) {
+          hr.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL_LIGHT } };
+        }
         for (const row of rows) {
           const out: Record<string, unknown> = {};
           for (const h of headers) out[h] = cellSafe((row as any)[h]);
-          ws.addRow(out).commit();
+          ws.addRow(out);
         }
       } else {
-        ws.addRow(['(no records)']).commit();
+        ws.addRow(['(no records)']);
       }
-      ws.commit();
+      contents.push([spec.label, rows.length]);
     } catch (err) {
-      counts.push({ label: spec.label, count: -1 });
       const ws = wb.addWorksheet(sheetName(spec.label));
-      ws.addRow([`Error exporting ${spec.table}: ${(err as Error).message}`]).commit();
-      ws.commit();
+      ws.addRow([`Error exporting ${spec.table}: ${(err as Error).message}`]);
+      contents.push([spec.label, 'error']);
     }
   }
 
-  for (const c of counts) summary.addRow([c.label, c.count < 0 ? 'error' : c.count]).commit();
-  summary.commit();
+  // Contents / navigation table at the bottom of the Dashboard.
+  section('SHEETS IN THIS FILE');
+  const ch = dash.addRow(['Sheet', 'Records']);
+  ch.getCell(1).font = { bold: true };
+  ch.getCell(2).font = { bold: true };
+  ch.getCell(2).alignment = { horizontal: 'right' };
+  for (const [label, n] of contents) {
+    const r = dash.addRow([label, n]);
+    if (typeof n === 'number') r.getCell(2).alignment = { horizontal: 'right' };
+  }
 
-  await wb.commit();
+  await wb.xlsx.write(res);
+  res.end();
 });
 
 // ── GET /:key.csv — single table CSV ─────────────────────────────

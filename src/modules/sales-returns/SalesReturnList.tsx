@@ -11,7 +11,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Eye, FileText, Trash2, MoreHorizontal } from "lucide-react";
+import { Plus, Search, Eye, FileText, Trash2, MoreHorizontal, Repeat } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useState } from "react";
 import Pagination from "@/components/Pagination";
@@ -168,6 +168,31 @@ const SalesReturnList = ({ dealerId }: SalesReturnListProps) => {
                         <DropdownMenuItem>
                           <FileText className="mr-2 h-4 w-4" /> Download PDF
                         </DropdownMenuItem>
+                        {!r.exchange_sale_id && (
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate("/sales/new", {
+                                state: {
+                                  exchange_return_id: r.id,
+                                  customer_name: r.sales?.customers?.name ?? "",
+                                },
+                              });
+                            }}
+                          >
+                            <Repeat className="mr-2 h-4 w-4" /> Exchange for New Sale
+                          </DropdownMenuItem>
+                        )}
+                        {r.exchange_sale_id && (
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/sales/${r.exchange_sale_id}/invoice`);
+                            }}
+                          >
+                            <Repeat className="mr-2 h-4 w-4" /> View Exchange Sale
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem className="text-destructive">
                           <Trash2 className="mr-2 h-4 w-4" /> Delete
                         </DropdownMenuItem>

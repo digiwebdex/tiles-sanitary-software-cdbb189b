@@ -254,7 +254,7 @@ function classify(
   };
 }
 
-async function getDemandRows(dealerId: string) {
+export async function getDemandRows(dealerId: string) {
   const settings = await loadSettings(dealerId);
   const products = await loadProducts(dealerId);
   if (!products.length) return { rows: [], settings, products };

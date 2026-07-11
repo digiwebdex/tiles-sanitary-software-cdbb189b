@@ -35,6 +35,17 @@ const CreateProductPage = ({ dealerId }: CreateProductPageProps) => {
         weight: (values as any).weight || null,
         warranty: (values as any).warranty || null,
         ...((values as any).image_url ? { image_url: (values as any).image_url } : {}),
+        // V2 Sprint 2 — Product Master taxonomy (all optional)
+        series: (values as any).series || null,
+        collection_name: (values as any).collection_name || null,
+        tile_type: (values as any).tile_type || null,
+        finish: (values as any).finish || null,
+        surface: (values as any).surface || null,
+        shade_family: (values as any).shade_family || null,
+        caliber_spec: (values as any).caliber_spec || null,
+        thickness_mm: (values as any).thickness_mm ?? null,
+        country_of_origin: (values as any).country_of_origin || null,
+        default_rack: (values as any).default_rack || null,
       } as any);
     },
     onSuccess: () => {

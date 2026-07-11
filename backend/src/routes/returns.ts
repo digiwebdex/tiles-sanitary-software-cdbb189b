@@ -4,6 +4,9 @@
  *   POST /api/returns/sales       ← create a sales return (restore stock + customer/cash ledger + audit)
  *   POST /api/returns/purchases   ← create a purchase return (deduct stock + supplier/cash ledger + audit)
  *   GET  /api/returns/purchases/next-no?dealerId=
+ *   GET  /api/returns/credit-note-balance?customerId=   (V2 Sprint 4D)
+ *   POST /api/returns/credit-note/apply                 (V2 Sprint 4D)
+ *   POST /api/returns/sales/:id/link-exchange            (V2 Sprint 4D — "Exchange")
  *
  * Atomic semantics: each create wraps all side-effects in a single Knex
  * transaction so a failure rolls back partial state. Update / delete are
@@ -12,6 +15,17 @@
  * Salesman role is sales-insert-only and does NOT manage returns. Both
  * endpoints require dealer_admin or super_admin (matches purchases.create
  * role policy and the wider receivables surface).
+ *
+ * V2 Sprint 4D — "Credit Note" is modeled as a sales_return whose
+ * refund_mode='credit': no cash/bank posting happens (see the branch in
+ * POST /sales below); the customer_ledger 'refund' row, which already
+ * inserts unconditionally, IS the credit. creditNoteService.ts tracks how
+ * much of a customer's aggregate credit-note balance has since been
+ * applied to an invoice. "Exchange" is modeled as a Return whose
+ * exchange_sale_id links to a separately-created new Sale (via the
+ * existing, unmodified POST /api/sales) — link-exchange records that link
+ * and, in the same action, draws down available credit-note balance
+ * against the new sale.
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
@@ -20,6 +34,8 @@ import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
 import { restoreSaleReturnStock } from '../services/saleReturnStock';
 import { deductPurchaseReturnStock } from '../services/purchaseReturnStock';
+import { normalizePaymentMode, paymentModeRequiresBankAccount } from '../lib/paymentModes';
+import { getCreditNoteBalance, applyCreditNoteToSale } from '../services/creditNoteService';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -205,7 +221,8 @@ router.get('/sales/sale-items/:saleId', async (req: Request, res: Response) => {
           'unit_type', p.unit_type,
           'per_box_sft', p.per_box_sft,
           'pieces_per_box', p.pieces_per_box,
-          'category', p.category
+          'category', p.category,
+          'warranty', p.warranty
         ) as products`),
       );
     res.json(rows);
@@ -388,6 +405,8 @@ const salesReturnSchema = z.object({
   is_broken: z.boolean(),
   refund_amount: z.coerce.number().nonnegative(),
   refund_mode: z.string().nullable().optional(),
+  /** V2 Sprint 4D — required when refund_mode needs a bank account (bank/cheque/card). */
+  refund_paid_account_id: z.string().uuid().nullable().optional(),
   return_date: z.string().min(1),
 });
 
@@ -404,6 +423,21 @@ router.post('/sales', async (req: Request, res: Response) => {
   const input = parsed.data;
   const userId = req.user?.userId ?? null;
   const { ip, ua } = clientMeta(req);
+
+  // V2 Sprint 4D — refund_mode branching: 'credit' means no cash/bank moves
+  // (the customer_ledger 'refund' row already inserted below is the Credit
+  // Note itself); everything else needs a real cash_ledger/bank_ledger entry.
+  const refundMode = normalizePaymentMode(input.refund_mode) ?? (input.refund_mode?.trim().toLowerCase() === 'credit' ? 'credit' : null);
+  if (
+    Number(input.refund_amount) > 0 &&
+    refundMode &&
+    refundMode !== 'credit' &&
+    paymentModeRequiresBankAccount(refundMode) &&
+    !input.refund_paid_account_id
+  ) {
+    res.status(400).json({ error: 'Bank account is required for bank, cheque, or card refunds' });
+    return;
+  }
 
   try {
     // All validation runs INSIDE the transaction under a row lock on the sale,
@@ -486,6 +520,7 @@ router.post('/sales', async (req: Request, res: Response) => {
           is_broken: input.is_broken,
           refund_amount: input.refund_amount,
           refund_mode: input.refund_mode || null,
+          refund_paid_account_id: input.refund_paid_account_id || null,
           return_date: input.return_date,
           created_by: userId,
           cogs_reversal: 0,
@@ -566,17 +601,38 @@ router.post('/sales', async (req: Request, res: Response) => {
         });
       }
 
-      // Cash ledger — outflow if refund actually paid
-      if (Number(input.refund_amount) > 0) {
-        await trx('cash_ledger').insert({
-          dealer_id: dealerId,
-          type: 'refund',
-          amount: -Number(input.refund_amount),
-          description: `Refund for return: ${sale.invoice_number}`,
-          reference_type: 'sales_returns',
-          reference_id: rid,
-          entry_date: input.return_date,
-        });
+      // V2 Sprint 4D — refund_mode branching. 'credit' (Credit Note): no
+      // cash/bank movement — the customer_ledger 'refund' row above already
+      // is the credit; creditNoteService tracks how much of it gets applied
+      // to a future invoice. Bank/cheque/card: post to bank_ledger instead
+      // of cash_ledger. Everything else (cash, or a mobile-wallet mode):
+      // cash_ledger, same as before, now tagged with the actual mode.
+      if (Number(input.refund_amount) > 0 && refundMode !== 'credit') {
+        const description = `Refund for return: ${sale.invoice_number}`;
+        if (refundMode && paymentModeRequiresBankAccount(refundMode)) {
+          await trx('bank_ledger').insert({
+            dealer_id: dealerId,
+            bank_account_id: input.refund_paid_account_id,
+            type: 'refund',
+            amount: -Number(input.refund_amount),
+            description,
+            reference_type: 'sales_returns',
+            reference_id: rid,
+            entry_date: input.return_date,
+            payment_mode: refundMode,
+          });
+        } else {
+          await trx('cash_ledger').insert({
+            dealer_id: dealerId,
+            type: 'refund',
+            amount: -Number(input.refund_amount),
+            description,
+            reference_type: 'sales_returns',
+            reference_id: rid,
+            entry_date: input.return_date,
+            ...(refundMode ? { payment_mode: refundMode } : {}),
+          });
+        }
       }
 
       // Audit
@@ -593,6 +649,7 @@ router.post('/sales', async (req: Request, res: Response) => {
           is_broken: input.is_broken,
           refund_amount: input.refund_amount,
           refund_mode: input.refund_mode,
+          refund_paid_account_id: input.refund_paid_account_id ?? null,
           cogs_reversal: cogsReversal,
         },
         ip_address: ip,
@@ -611,6 +668,119 @@ router.post('/sales', async (req: Request, res: Response) => {
     }
     console.error('[returns.sales.create] error', err);
     res.status(500).json({ error: err?.message || 'Failed to create sales return' });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// CREDIT NOTE (V2 Sprint 4D) — reuses the 'credit' refund_mode above; these
+// endpoints only report/apply the resulting balance, never create it.
+// ────────────────────────────────────────────────────────────────────────────
+
+router.get('/credit-note-balance', async (req: Request, res: Response) => {
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const customerId = (req.query.customerId as string | undefined) || '';
+  if (!customerId) return res.status(400).json({ error: 'customerId is required' });
+  try {
+    const balance = await getCreditNoteBalance(dealerId, customerId);
+    res.json({ balance });
+  } catch (err: any) {
+    console.error('[returns.credit-note-balance]', err.message);
+    res.status(500).json({ error: 'Failed to load credit note balance' });
+  }
+});
+
+const applyCreditNoteSchema = z.object({
+  customer_id: z.string().uuid(),
+  sale_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+});
+
+router.post('/credit-note/apply', async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = applyCreditNoteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { customer_id, sale_id, amount } = parsed.data;
+  try {
+    const result = await db.transaction((trx) =>
+      applyCreditNoteToSale(trx, { dealerId, customerId: customer_id, saleId: sale_id, amount, appliedBy: req.user?.userId ?? null }),
+    );
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[returns.credit-note-apply]', err.message);
+    res.status(400).json({ error: err.message || 'Failed to apply credit note' });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// EXCHANGE (V2 Sprint 4D) — "model Exchange as linked Return + New Sale".
+// The new sale is created via the existing, unmodified POST /api/sales; this
+// endpoint only records the audit link and — in the same action, since that
+// is what "Exchange" means to a user — draws down the customer's available
+// credit-note balance against that new sale (same math/table as the
+// standalone Credit Note apply above, so the same return's value can never
+// be spent twice).
+// ────────────────────────────────────────────────────────────────────────────
+
+const linkExchangeSchema = z.object({
+  saleId: z.string().uuid(),
+});
+
+router.post('/sales/:id/link-exchange', async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+  const dealerId = resolveDealer(req, res);
+  if (!dealerId) return;
+  const parsed = linkExchangeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+    return;
+  }
+  const { saleId } = parsed.data;
+
+  try {
+    const result = await db.transaction(async (trx) => {
+      const ret = await trx('sales_returns as sr')
+        .join('sales as s', 's.id', 'sr.sale_id')
+        .where({ 'sr.id': req.params.id, 's.dealer_id': dealerId })
+        .first('sr.id', 'sr.refund_amount', 's.customer_id');
+      if (!ret) throw Object.assign(new Error('Sales return not found'), { statusCode: 404 });
+      if (!ret.customer_id) {
+        throw Object.assign(new Error('Return has no linked customer — cannot exchange'), { statusCode: 400 });
+      }
+
+      await trx('sales_returns').where({ id: req.params.id }).update({ exchange_sale_id: saleId });
+
+      const newSale = await trx('sales')
+        .where({ id: saleId, dealer_id: dealerId, customer_id: ret.customer_id })
+        .first('due_amount');
+      if (!newSale) throw Object.assign(new Error('New sale not found for this customer'), { statusCode: 404 });
+
+      const balance = await getCreditNoteBalance(dealerId, ret.customer_id);
+      const applyAmount = Math.min(balance, Number(newSale.due_amount) || 0);
+      if (applyAmount <= 0) return { applied: 0 };
+
+      const applied = await applyCreditNoteToSale(trx, {
+        dealerId,
+        customerId: ret.customer_id,
+        saleId,
+        amount: applyAmount,
+        appliedBy: req.user?.userId ?? null,
+      });
+      return { applied: applyAmount, newDue: applied.newDue };
+    });
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    if (err?.statusCode) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    console.error('[returns.link-exchange]', err.message);
+    res.status(500).json({ error: err.message || 'Failed to link exchange' });
   }
 });
 

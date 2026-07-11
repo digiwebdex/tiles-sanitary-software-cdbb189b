@@ -81,9 +81,13 @@ router.get('/:customerId', async (req, res) => {
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
     const dealer = await db('dealers').where({ id: dealerId }).first();
 
-    // Opening balance = customer.opening_balance + all ledger entries before `from`
+    // Opening balance = customer.opening_balance + all ledger entries before `from`.
+    // 'opening_balance'-typed rows (V2 Sprint 6B) are excluded here: they are a
+    // GL/AR-total-only mirror of the same `customer.opening_balance` figure
+    // already added below — including them too would double-count it.
     let openingQ = db('customer_ledger')
-      .where({ customer_id: customerId, dealer_id: dealerId });
+      .where({ customer_id: customerId, dealer_id: dealerId })
+      .whereNot('type', 'opening_balance');
     if (from) openingQ = openingQ.where('entry_date', '<', from);
     const openingRows = await openingQ.select('type', 'amount');
     let opening = Number(customer.opening_balance) || 0;
@@ -93,11 +97,12 @@ router.get('/:customerId', async (req, res) => {
       else if (r.type === 'payment' || r.type === 'refund') opening -= amt;
     }
 
-    // Entries in window
+    // Entries in window (same 'opening_balance' exclusion as above).
     let rangeQ = db('customer_ledger as cl')
       .leftJoin('sales as s', 's.id', 'cl.sale_id')
       .leftJoin('sales_returns as sr', 'sr.id', 'cl.sales_return_id')
-      .where('cl.customer_id', customerId).where('cl.dealer_id', dealerId);
+      .where('cl.customer_id', customerId).where('cl.dealer_id', dealerId)
+      .whereNot('cl.type', 'opening_balance');
     if (from) rangeQ = rangeQ.where('cl.entry_date', '>=', from);
     if (to) rangeQ = rangeQ.where('cl.entry_date', '<=', to);
     const ledgerRows = await rangeQ

@@ -37,6 +37,17 @@ const EditProductPage = () => {
         weight: (values as any).weight || null,
         warranty: (values as any).warranty || null,
         image_url: (values as any).image_url || null,
+        // V2 Sprint 2 — Product Master taxonomy (all optional)
+        series: (values as any).series || null,
+        collection_name: (values as any).collection_name || null,
+        tile_type: (values as any).tile_type || null,
+        finish: (values as any).finish || null,
+        surface: (values as any).surface || null,
+        shade_family: (values as any).shade_family || null,
+        caliber_spec: (values as any).caliber_spec || null,
+        thickness_mm: (values as any).thickness_mm ?? null,
+        country_of_origin: (values as any).country_of_origin || null,
+        default_rack: (values as any).default_rack || null,
       } as any;
       await productService.update(id!, updatePayload);
 
@@ -97,6 +108,17 @@ const EditProductPage = () => {
           weight: (product as any).weight ?? "",
           warranty: (product as any).warranty ?? "",
           image_url: (product as any).image_url ?? "",
+          // V2 Sprint 2 — Product Master taxonomy (all optional)
+          series: (product as any).series ?? "",
+          collection_name: (product as any).collection_name ?? "",
+          tile_type: (product as any).tile_type ?? "",
+          finish: (product as any).finish ?? "",
+          surface: (product as any).surface ?? "",
+          shade_family: (product as any).shade_family ?? "",
+          caliber_spec: (product as any).caliber_spec ?? "",
+          thickness_mm: (product as any).thickness_mm ?? null,
+          country_of_origin: (product as any).country_of_origin ?? "",
+          default_rack: (product as any).default_rack ?? "",
         }}
         onSubmit={async (v) => { await mutation.mutateAsync(v); }}
         isLoading={mutation.isPending}

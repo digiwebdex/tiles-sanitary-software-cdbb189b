@@ -27,7 +27,7 @@ const ChallanPage = () => {
   const [showPrices, setShowPrices] = useState(false);
   const [template, setTemplate] = useState<string>("classic");
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState({ challan_date: "", driver_name: "", transport_name: "", vehicle_no: "", notes: "" });
+  const [editData, setEditData] = useState({ challan_date: "", driver_name: "", driver_phone: "", transport_name: "", vehicle_no: "", scheduled_delivery_date: "", notes: "" });
   const [editItems, setEditItems] = useState<{ id: string; product_id: string; quantity: number; sale_rate: number; product_name: string; product_sku: string; unit_type: string; per_box_sft: number }[]>([]);
   const { data: dealerInfo } = useDealerInfo();
 
@@ -161,8 +161,10 @@ const ChallanPage = () => {
       setEditData({
         challan_date: (ac as any).challan_date ?? "",
         driver_name: (ac as any).driver_name ?? "",
+        driver_phone: (ac as any).driver_phone ?? "",
         transport_name: (ac as any).transport_name ?? "",
         vehicle_no: (ac as any).vehicle_no ?? "",
+        scheduled_delivery_date: (ac as any).scheduled_delivery_date ?? "",
         notes: (ac as any).notes ?? "",
       });
       // Initialize editable items from sale items
@@ -433,8 +435,10 @@ const ChallanPage = () => {
 interface EditDataType {
   challan_date: string;
   driver_name: string;
+  driver_phone: string;
   transport_name: string;
   vehicle_no: string;
+  scheduled_delivery_date: string;
   notes: string;
 }
 
@@ -575,6 +579,7 @@ const ChallanDocument = ({ sale, items, customer, challan, showPrices, dealerInf
               <div className="space-y-2 text-[12px]">
                 {[
                   { label: "Driver", field: "driver_name" as const },
+                  { label: "Driver Phone", field: "driver_phone" as const },
                   { label: "Transport", field: "transport_name" as const },
                   { label: "Vehicle", field: "vehicle_no" as const },
                 ].map((t) => (
@@ -588,6 +593,15 @@ const ChallanDocument = ({ sale, items, customer, challan, showPrices, dealerInf
                     />
                   </div>
                 ))}
+                <div className="grid grid-cols-[80px_1fr] gap-1 items-center">
+                  <span className="text-muted-foreground">Scheduled:</span>
+                  <input
+                    type="date"
+                    value={editData.scheduled_delivery_date}
+                    onChange={(e) => onEditChange({ ...editData, scheduled_delivery_date: e.target.value })}
+                    className="border border-border rounded px-2 py-1 text-[12px] bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
               </div>
             ) : (
               <div className="space-y-1.5 text-[12px]">
@@ -595,6 +609,12 @@ const ChallanDocument = ({ sale, items, customer, challan, showPrices, dealerInf
                   <span className="text-muted-foreground">Driver:</span>
                   <span className="font-medium text-foreground">{(challan as any).driver_name || "—"}</span>
                 </div>
+                {(challan as any).driver_phone && (
+                  <div className="grid grid-cols-[80px_1fr] gap-1">
+                    <span className="text-muted-foreground">Phone:</span>
+                    <span className="font-medium text-foreground">{(challan as any).driver_phone}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-[80px_1fr] gap-1">
                   <span className="text-muted-foreground">Transport:</span>
                   <span className="font-medium text-foreground">{(challan as any).transport_name || "—"}</span>
@@ -603,6 +623,12 @@ const ChallanDocument = ({ sale, items, customer, challan, showPrices, dealerInf
                   <span className="text-muted-foreground">Vehicle:</span>
                   <span className="font-medium text-foreground">{(challan as any).vehicle_no || "—"}</span>
                 </div>
+                {(challan as any).scheduled_delivery_date && (
+                  <div className="grid grid-cols-[80px_1fr] gap-1">
+                    <span className="text-muted-foreground">Scheduled:</span>
+                    <span className="font-medium text-foreground">{(challan as any).scheduled_delivery_date}</span>
+                  </div>
+                )}
               </div>
             )
           ) : (

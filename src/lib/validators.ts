@@ -14,6 +14,17 @@ const safeText = (maxLen: number) =>
 const optionalSafeText = (maxLen: number) =>
   safeText(maxLen).optional().or(z.literal("")).or(z.literal(null as any).transform(() => undefined));
 
+/**
+ * Optional positive number that tolerates "", null, undefined as "not set".
+ * Plain z.coerce.number() would coerce "" to 0 (Number("") === 0 in JS), which
+ * then fails a .positive() check even though the user just left it blank.
+ */
+const optionalPositiveNumber = () =>
+  z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.coerce.number().positive().optional(),
+  );
+
 // ── Product ──
 export const createProductServiceSchema = z.object({
   dealer_id: dealerIdSchema,
@@ -34,6 +45,19 @@ export const createProductServiceSchema = z.object({
   warranty: optionalSafeText(100),
   active: z.boolean().default(true),
   image_url: z.string().trim().max(500).nullable().optional(),
+
+  // V2 Sprint 2 — Product Master taxonomy (additive; must be listed here or
+  // Zod's default "strip unknown keys" behavior silently drops them).
+  series: optionalSafeText(100),
+  collection_name: optionalSafeText(100),
+  tile_type: optionalSafeText(100),
+  finish: optionalSafeText(50),
+  surface: optionalSafeText(50),
+  shade_family: optionalSafeText(50),
+  caliber_spec: optionalSafeText(30),
+  thickness_mm: optionalPositiveNumber(),
+  country_of_origin: optionalSafeText(100),
+  default_rack: optionalSafeText(50),
 });
 
 export const updateProductServiceSchema = createProductServiceSchema.partial().omit({ dealer_id: true });
@@ -98,6 +122,9 @@ export const createSalesReturnServiceSchema = z.object({
   reason: optionalSafeText(300),
   is_broken: z.boolean(),
   refund_amount: z.number().min(0, "Refund amount cannot be negative"),
+  /** V2 Sprint 4D — refund settlement channel; 'credit' = Credit Note (no cash/bank movement). */
+  refund_mode: z.string().nullable().optional(),
+  refund_paid_account_id: z.string().uuid().nullable().optional(),
   return_date: z.string().min(1),
   created_by: z.string().uuid().optional(),
 });

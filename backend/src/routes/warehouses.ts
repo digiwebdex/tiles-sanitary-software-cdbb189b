@@ -15,7 +15,12 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { authenticate } from '../middleware/auth';
 import { tenantGuard } from '../middleware/tenant';
-import { applyWarehouseTransferStock } from '../services/warehouseTransferStock';
+import {
+  applyWarehouseTransferStock,
+  applyGodownTransferStock,
+  applyRackTransferStock,
+  type TransferLevel,
+} from '../services/warehouseTransferStock';
 
 const router = Router();
 router.use(authenticate, tenantGuard);
@@ -53,8 +58,13 @@ const WarehouseSchema = z.object({
 
 const TransferSchema = z.object({
   transfer_no: z.string().max(30).optional().nullable(),
+  transfer_level: z.enum(['warehouse', 'godown', 'rack']).default('warehouse'),
   from_warehouse_id: z.string().uuid().optional().nullable(),
   to_warehouse_id: z.string().uuid().optional().nullable(),
+  from_godown_id: z.string().uuid().optional().nullable(),
+  to_godown_id: z.string().uuid().optional().nullable(),
+  from_rack_id: z.string().uuid().optional().nullable(),
+  to_rack_id: z.string().uuid().optional().nullable(),
   product_id: z.string().uuid().optional().nullable(),
   product_name_snapshot: z.string().max(200).optional().nullable(),
   quantity: z.coerce.number().positive(),
@@ -104,8 +114,34 @@ router.post('/', async (req, res) => {
   if (p.data.is_default) {
     await db('warehouses').where({ dealer_id: dealerId }).update({ is_default: false });
   }
-  const [row] = await db('warehouses').insert({ dealer_id: dealerId, ...p.data }).returning('*');
-  res.status(201).json(row);
+
+  // V2 Sprint 3B: every warehouse gets a default Godown + Rack, mirroring
+  // migration 061's "guarantee a default lower-tier location always exists"
+  // pattern so godown_stock/rack_stock are never orphaned for new warehouses.
+  const trx = await db.transaction();
+  try {
+    const [row] = await trx('warehouses').insert({ dealer_id: dealerId, ...p.data }).returning('*');
+    const [godown] = await trx('godowns').insert({
+      dealer_id: dealerId,
+      warehouse_id: row.id,
+      name: 'Main Godown',
+      code: 'MAIN',
+      is_default: true,
+      is_active: true,
+    }).returning('*');
+    await trx('racks').insert({
+      dealer_id: dealerId,
+      godown_id: godown.id,
+      name: 'Main Rack',
+      code: 'MAIN',
+      is_active: true,
+    });
+    await trx.commit();
+    res.status(201).json(row);
+  } catch (e: any) {
+    await trx.rollback();
+    res.status(500).json({ error: e.message || 'Failed to create warehouse' });
+  }
 });
 
 router.put('/:id', async (req, res) => {
@@ -138,11 +174,19 @@ router.get('/transfers', async (req, res) => {
   const q = db('warehouse_transfers as wt')
     .leftJoin('warehouses as wf', 'wf.id', 'wt.from_warehouse_id')
     .leftJoin('warehouses as wt2', 'wt2.id', 'wt.to_warehouse_id')
+    .leftJoin('godowns as gf', 'gf.id', 'wt.from_godown_id')
+    .leftJoin('godowns as gt', 'gt.id', 'wt.to_godown_id')
+    .leftJoin('racks as rf', 'rf.id', 'wt.from_rack_id')
+    .leftJoin('racks as rt', 'rt.id', 'wt.to_rack_id')
     .where('wt.dealer_id', dealerId)
     .select(
       'wt.*',
       'wf.name as from_warehouse_name',
       'wt2.name as to_warehouse_name',
+      'gf.name as from_godown_name',
+      'gt.name as to_godown_name',
+      'rf.name as from_rack_name',
+      'rt.name as to_rack_name',
     )
     .orderBy('wt.transfer_date', 'desc');
   if (from) q.where('wt.transfer_date', '>=', from);
@@ -152,20 +196,45 @@ router.get('/transfers', async (req, res) => {
   res.json(rows);
 });
 
-/** Post stock movement between warehouses when transfer completes. */
+/**
+ * Post stock movement when a transfer completes, at whichever tier the
+ * transfer was created at (V2 Sprint 3B — warehouse/godown/rack).
+ */
 async function postTransferStock(trx: any, dealerId: string, userId: string | null, row: any) {
-  if (!row.product_id || !row.from_warehouse_id || !row.to_warehouse_id) return;
-  await applyWarehouseTransferStock(trx, {
+  if (!row.product_id) return;
+  const level = (row.transfer_level ?? 'warehouse') as TransferLevel;
+  const common = {
     dealerId,
-    fromWarehouseId: row.from_warehouse_id,
-    toWarehouseId: row.to_warehouse_id,
     productId: row.product_id,
     quantity: Number(row.quantity),
     unit: row.unit ?? 'pc',
     transferId: row.id,
     transferNo: row.transfer_no ?? null,
     userId,
-  });
+  };
+
+  if (level === 'godown') {
+    if (!row.from_godown_id || !row.to_godown_id) return;
+    await applyGodownTransferStock(trx, {
+      ...common,
+      fromGodownId: row.from_godown_id,
+      toGodownId: row.to_godown_id,
+    });
+  } else if (level === 'rack') {
+    if (!row.from_rack_id || !row.to_rack_id) return;
+    await applyRackTransferStock(trx, {
+      ...common,
+      fromRackId: row.from_rack_id,
+      toRackId: row.to_rack_id,
+    });
+  } else {
+    if (!row.from_warehouse_id || !row.to_warehouse_id) return;
+    await applyWarehouseTransferStock(trx, {
+      ...common,
+      fromWarehouseId: row.from_warehouse_id,
+      toWarehouseId: row.to_warehouse_id,
+    });
+  }
 }
 
 /** Internal helper: post transport_cost as cash/bank outflow */
@@ -203,8 +272,13 @@ router.post('/transfers', async (req, res) => {
     const [row] = await trx('warehouse_transfers').insert({
       dealer_id: dealerId,
       transfer_no: p.data.transfer_no ?? null,
+      transfer_level: p.data.transfer_level,
       from_warehouse_id: p.data.from_warehouse_id ?? null,
       to_warehouse_id: p.data.to_warehouse_id ?? null,
+      from_godown_id: p.data.from_godown_id ?? null,
+      to_godown_id: p.data.to_godown_id ?? null,
+      from_rack_id: p.data.from_rack_id ?? null,
+      to_rack_id: p.data.to_rack_id ?? null,
       product_id: p.data.product_id ?? null,
       product_name_snapshot: p.data.product_name_snapshot ?? null,
       quantity: p.data.quantity,
@@ -243,8 +317,13 @@ router.post('/transfers/request', async (req, res) => {
   const [row] = await db('warehouse_transfers').insert({
     dealer_id: dealerId,
     transfer_no: p.data.transfer_no ?? null,
+    transfer_level: p.data.transfer_level,
     from_warehouse_id: p.data.from_warehouse_id ?? null,
     to_warehouse_id: p.data.to_warehouse_id ?? null,
+    from_godown_id: p.data.from_godown_id ?? null,
+    to_godown_id: p.data.to_godown_id ?? null,
+    from_rack_id: p.data.from_rack_id ?? null,
+    to_rack_id: p.data.to_rack_id ?? null,
     product_id: p.data.product_id ?? null,
     product_name_snapshot: p.data.product_name_snapshot ?? null,
     quantity: p.data.quantity,
@@ -310,6 +389,21 @@ router.post('/transfers/:id/receive', async (req, res) => {
     const code = msg.includes('Insufficient') ? 400 : 500;
     res.status(code).json({ error: msg, code: msg.includes('Insufficient') ? 'INSUFFICIENT_WH_STOCK' : undefined });
   }
+});
+
+/** V2 Sprint 3B — Multi-location Stock: stock cached at this warehouse. */
+router.get('/:id/stock', async (req, res) => {
+  const dealerId = resolveDealer(req, res); if (!dealerId) return;
+  const rows = await db('warehouse_stock as ws')
+    .innerJoin('products as p', 'p.id', 'ws.product_id')
+    .where({ 'ws.dealer_id': dealerId, 'ws.warehouse_id': req.params.id })
+    .select(
+      'ws.product_id', 'p.name as product_name', 'p.sku as product_sku',
+      'p.unit_type as product_unit_type', 'p.pieces_per_box as product_pieces_per_box',
+      'ws.box_qty', 'ws.piece_qty', 'ws.sft_qty', 'ws.total_pieces', 'ws.updated_at',
+    )
+    .orderBy('p.name');
+  res.json({ rows });
 });
 
 export default router;

@@ -165,6 +165,15 @@ export const salesService = {
     return await vpsRequest<any[]>(`/api/sales/${saleId}/returns`);
   },
 
+  /** V2 Sprint 4C — Invoice Timeline / Audit Trail (read-only). */
+  async getTimeline(saleId: string, dealerId?: string) {
+    const qs = dealerId ? `?dealerId=${encodeURIComponent(dealerId)}` : "";
+    const body = await vpsRequest<{ data: Array<{ at: string; type: string; label: string; detail?: Record<string, unknown> | null }> }>(
+      `/api/sales/${saleId}/timeline${qs}`,
+    );
+    return body.data ?? [];
+  },
+
   /**
    * Create a sale.
    * Phase 3L: VPS performs the atomic transaction (header + items + FIFO batch

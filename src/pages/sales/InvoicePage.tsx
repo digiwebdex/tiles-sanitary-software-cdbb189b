@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Printer, Download, Pencil, Truck, Mail, CreditCard, Trash2, X, FileText, Wallet } from "lucide-react";
 import { bankAccountService } from "@/services/bankAccountService";
+import { collectionsService } from "@/services/collectionsService";
+import { salesReturnService } from "@/services/salesReturnService";
 import {
   Select,
   SelectContent,
@@ -23,6 +25,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useDealerInfo } from "@/hooks/useDealerInfo";
 import { useDealerId } from "@/hooks/useDealerId";
 import SaleInvoiceDocument from "@/components/sale/SaleInvoiceDocument";
+import InvoiceTimeline from "@/components/sale/InvoiceTimeline";
 import { PaymentModeSelect } from "@/components/PaymentModeSelect";
 import { paymentModeRequiresBankAccount } from "@/lib/paymentModes";
 import SaleCommissionPanel from "@/components/sale/SaleCommissionPanel";
@@ -75,6 +78,46 @@ const InvoicePage = () => {
     queryKey: ["bank-accounts", dealerId],
     queryFn: () => bankAccountService.list(dealerId),
     enabled: !!dealerId,
+  });
+
+  // V2 Sprint 4C — Advance Payment: apply previously-received, unapplied
+  // advance credit to this invoice.
+  const customerId = (sale as any)?.customer_id ?? null;
+  const { data: advanceBalance = 0 } = useQuery({
+    queryKey: ["advance-balance", customerId],
+    queryFn: () => collectionsService.getAdvanceBalance(dealerId, customerId!),
+    enabled: !!dealerId && !!customerId,
+  });
+
+  const applyAdvanceMutation = useMutation({
+    mutationFn: (amount: number) =>
+      collectionsService.applyAdvance(dealerId, { customer_id: customerId!, sale_id: id!, amount }),
+    onSuccess: () => {
+      toast.success("Advance applied to this invoice");
+      queryClient.invalidateQueries({ queryKey: ["sale", id] });
+      queryClient.invalidateQueries({ queryKey: ["advance-balance", customerId] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // V2 Sprint 4D — Credit Note: apply a customer's unapplied return-credit
+  // balance to this invoice (same math/table as Sprint 4C's Advance, but a
+  // separate pool sourced from credit-mode sales_returns).
+  const { data: creditNoteBalance = 0 } = useQuery({
+    queryKey: ["credit-note-balance", customerId],
+    queryFn: () => salesReturnService.getCreditNoteBalance(dealerId, customerId!),
+    enabled: !!dealerId && !!customerId,
+  });
+
+  const applyCreditNoteMutation = useMutation({
+    mutationFn: (amount: number) =>
+      salesReturnService.applyCreditNote(dealerId, { customer_id: customerId!, sale_id: id!, amount }),
+    onSuccess: () => {
+      toast.success("Credit note applied to this invoice");
+      queryClient.invalidateQueries({ queryKey: ["sale", id] });
+      queryClient.invalidateQueries({ queryKey: ["credit-note-balance", customerId] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const paymentMutation = useMutation({
@@ -212,6 +255,7 @@ const InvoicePage = () => {
             />
           </div>
           {id && <SaleCommissionPanel saleId={id} />}
+          {id && <InvoiceTimeline saleId={id} dealerId={dealerId} />}
         </div>
       </div>
 
@@ -244,6 +288,28 @@ const InvoicePage = () => {
         >
           <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Payment
         </Button>
+        {dueAmount > 0 && advanceBalance > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => applyAdvanceMutation.mutate(Math.min(dueAmount, advanceBalance))}
+            disabled={applyAdvanceMutation.isPending}
+            title={`Unapplied advance balance: ৳${advanceBalance.toLocaleString()}`}
+          >
+            <Wallet className="mr-1.5 h-3.5 w-3.5" /> Apply Advance (৳{Math.min(dueAmount, advanceBalance).toLocaleString()})
+          </Button>
+        )}
+        {dueAmount > 0 && creditNoteBalance > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => applyCreditNoteMutation.mutate(Math.min(dueAmount, creditNoteBalance))}
+            disabled={applyCreditNoteMutation.isPending}
+            title={`Unapplied credit note balance: ৳${creditNoteBalance.toLocaleString()}`}
+          >
+            <Wallet className="mr-1.5 h-3.5 w-3.5" /> Apply Credit Note (৳{Math.min(dueAmount, creditNoteBalance).toLocaleString()})
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={() => navigate("/deliveries")}>
           <Truck className="mr-1.5 h-3.5 w-3.5" /> Delivery
         </Button>

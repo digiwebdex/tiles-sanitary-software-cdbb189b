@@ -38,6 +38,14 @@ const envSchema = z.object({
   USE_POSTING_ENGINE: z.string().optional(),
   /** Phase 6: mirror posting_batches into GL journal (requires USE_POSTING_ENGINE). */
   USE_GL_SPINE: z.string().optional(),
+  /**
+   * V2 Sprint 1: server-side plan/feature enforcement mode.
+   *   off     — middleware is a no-op.
+   *   log     — resolve + log would-be blocks, but never block (DRY-RUN, default).
+   *   enforce — block state-changing requests to features not in the dealer's plan.
+   * Default 'log' so shipping the framework changes NO production behaviour.
+   */
+  FEATURE_ENFORCEMENT: z.enum(['off', 'log', 'enforce']).default('log'),
 });
 
 export const env = envSchema.parse(process.env);
