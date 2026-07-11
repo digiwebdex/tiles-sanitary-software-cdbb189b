@@ -281,8 +281,8 @@ const CustomerList = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}/edit`)}>
-                              <Eye className="mr-2 h-4 w-4" /> View Profile
+                            <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}/profile`)}>
+                              <Eye className="mr-2 h-4 w-4" /> 360° Profile
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}/edit`)}>
                               <Pencil className="mr-2 h-4 w-4" /> Edit Customer

@@ -91,6 +91,7 @@ import SalaryVoucherPage from "./pages/vouchers/SalaryVoucherPage";
 import DirectorVoucherPage from "./pages/vouchers/DirectorVoucherPage";
 import AutoPoDraftPage from "./pages/purchases/AutoPoDraftPage";
 import CustomerStatementPage from "./pages/customers/CustomerStatementPage";
+import CustomerProfilePage from "./pages/customers/CustomerProfilePage";
 import CustomerStatementsBulkPage from "./pages/customers/CustomerStatementsBulkPage";
 import LeadsPage from "./pages/leads/LeadsPage";
 import LeadVisitRegisterPage from "./pages/leads/LeadVisitRegisterPage";
@@ -267,6 +268,7 @@ const App = () => (
             <Route path="/purchases/auto-draft" element={<ProtectedRoute><AppLayout><AutoPoDraftPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/statements" element={<ProtectedRoute><AppLayout><CustomerStatementsBulkPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/:customerId/statement" element={<ProtectedRoute><AppLayout><CustomerStatementPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/customers/:id/profile" element={<ProtectedRoute allowReadonly><AppLayout><CustomerProfilePage /></AppLayout></ProtectedRoute>} />
             <Route path="/financials" element={<ProtectedRoute><AppLayout><FinancialStatementsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/journal" element={<ProtectedRoute><AppLayout><JournalPage /></AppLayout></ProtectedRoute>} />
             <Route path="/emi" element={<ProtectedRoute><AppLayout><EmiPage /></AppLayout></ProtectedRoute>} />

@@ -65,7 +65,7 @@ const HOME_MODULES: HomeModule[] = [
         labelBn: "কাস্টমার ব্যবস্থাপনা",
         items: [
           { path: "/customers/new", label: "Create Customer", labelBn: "কাস্টমার তৈরী", roles: ["manager", "salesman", "accountant"] },
-          { path: "/customers", label: "Customer List", labelBn: "কাস্টমার তালিকা", roles: ["manager", "salesman", "accountant"] },
+          { path: "/customers", label: "Customer List", labelBn: "কাস্টমার তালিকা (৩৬০° প্রোফাইলসহ)", roles: ["manager", "salesman", "accountant"] },
           { path: "/customers/statements", label: "Customer Statements", labelBn: "গ্রাহক লেনদেন বিবরণী", dealerAdminOnly: true },
           { path: "/collections", label: "Collections", labelBn: "কালেকশন", roles: ["manager", "salesman", "accountant"] },
         ],
