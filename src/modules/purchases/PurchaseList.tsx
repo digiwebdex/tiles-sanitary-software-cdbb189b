@@ -19,6 +19,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { exportToExcel } from "@/lib/exportUtils";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 
 interface PurchaseListProps {
@@ -30,6 +31,7 @@ const PAGE_SIZE = 25;
 const PurchaseList = ({ dealerId }: PurchaseListProps) => {
   const navigate = useNavigate();
   const permissions = usePermissions();
+  const { t } = useLanguage();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -59,7 +61,7 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
 
   const handleExport = () => {
     if (!permissions.canExportReports) {
-      toast.error("You don't have permission to export.");
+      toast.error(t("You don't have permission to export."));
       return;
     }
     exportToExcel(
@@ -77,21 +79,21 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
       ],
       `purchases-${new Date().toISOString().split("T")[0]}`
     );
-    toast.success("Purchases exported");
+    toast.success(t("Purchases exported"));
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Purchases</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("Purchases")}</h1>
         <div className="flex gap-2">
           {permissions.canExportReports && (
             <Button variant="outline" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" /> Export
+              <Download className="mr-2 h-4 w-4" /> {t("Export")}
             </Button>
           )}
           <Button onClick={() => navigate("/purchases/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Purchase
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Purchase")}
           </Button>
         </div>
       </div>
@@ -99,7 +101,7 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by reference or supplier…"
+          placeholder={t("Search by reference or supplier…")}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="pl-9"
@@ -107,12 +109,12 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
       </div>
 
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">{t("Loading…")}</p>
       ) : purchases.length === 0 ? (
         <div className="text-center py-12 space-y-3">
-          <p className="text-muted-foreground">No purchases found.</p>
+          <p className="text-muted-foreground">{t("No purchases found.")}</p>
           <Button onClick={() => navigate("/purchases/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Record Your First Purchase
+            <Plus className="mr-2 h-4 w-4" /> {t("Record Your First Purchase")}
           </Button>
         </div>
       ) : (
@@ -127,15 +129,15 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
                       onCheckedChange={toggleAll}
                     />
                   </TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Reference No</TableHead>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Purchase Status</TableHead>
-                  <TableHead className="text-right">Grand Total</TableHead>
-                  <TableHead className="text-right">Paid</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                  <TableHead>Payment Status</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead>{t("Date")}</TableHead>
+                  <TableHead>{t("Reference No")}</TableHead>
+                  <TableHead>{t("Supplier")}</TableHead>
+                  <TableHead>{t("Purchase Status")}</TableHead>
+                  <TableHead className="text-right">{t("Grand Total")}</TableHead>
+                  <TableHead className="text-right">{t("Paid")}</TableHead>
+                  <TableHead className="text-right">{t("Balance")}</TableHead>
+                  <TableHead>{t("Payment Status")}</TableHead>
+                  <TableHead className="w-24">{t("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -159,11 +161,11 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
                       <TableCell>
                         {(p.document_status ?? "posted") === "reversed" ? (
                           <Badge variant="secondary" className="bg-red-100 text-red-700 text-xs">
-                            Reversed
+                            {t("Reversed")}
                           </Badge>
                         ) : (
                           <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
-                            Received
+                            {t("Received")}
                           </Badge>
                         )}
                       </TableCell>
@@ -181,34 +183,34 @@ const PurchaseList = ({ dealerId }: PurchaseListProps) => {
                                 : "bg-orange-100 text-orange-700 text-xs"
                           }
                         >
-                          {status === "paid" ? "Paid" : status === "partial" ? "Partial" : "Pending"}
+                          {status === "paid" ? t("Paid") : status === "partial" ? t("Partial") : t("Pending")}
                         </Badge>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="outline" className="h-8 px-3 text-xs">
-                              Actions
+                              {t("Actions")}
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}`)}>
-                              <Eye className="mr-2 h-4 w-4" /> Purchase Details
+                              <Eye className="mr-2 h-4 w-4" /> {t("Purchase Details")}
                             </DropdownMenuItem>
                             {balance > 0.01 && (
                               <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}?pay=1`)}>
-                                <CreditCard className="mr-2 h-4 w-4" /> Record Payment
+                                <CreditCard className="mr-2 h-4 w-4" /> {t("Record Payment")}
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}`)}>
-                              <Download className="mr-2 h-4 w-4" /> Download as PDF
+                              <Download className="mr-2 h-4 w-4" /> {t("Download as PDF")}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => navigate(`/purchases/${p.id}`)}>
-                              <Barcode className="mr-2 h-4 w-4" /> Print Barcodes
+                              <Barcode className="mr-2 h-4 w-4" /> {t("Print Barcodes")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => navigate(`/purchase-returns/new?purchase_id=${p.id}`)}>
-                              <RotateCcw className="mr-2 h-4 w-4" /> Return Purchase
+                              <RotateCcw className="mr-2 h-4 w-4" /> {t("Return Purchase")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

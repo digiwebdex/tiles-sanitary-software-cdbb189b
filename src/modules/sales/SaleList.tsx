@@ -23,6 +23,7 @@ import SaleActionDropdown from "./SaleActionDropdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { exportToExcel } from "@/lib/exportUtils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   getApprovalSettings, isApprovalRequired, createApprovalRequest,
   findValidApproval, consumeApprovalRequest, generateActionHash,
@@ -57,6 +58,7 @@ const statusColors: Record<string, string> = {
 
 const SaleList = ({ dealerId }: SaleListProps) => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { user, isDealerAdmin } = useAuth();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -132,7 +134,7 @@ const SaleList = ({ dealerId }: SaleListProps) => {
       queryClient.invalidateQueries({ queryKey: ["stock"] });
       queryClient.invalidateQueries({ queryKey: ["customer-ledger"] });
       queryClient.invalidateQueries({ queryKey: ["cash-ledger"] });
-      toast.success("Sale cancelled and reversed successfully");
+      toast.success(t("Sale cancelled and reversed successfully"));
       setDeleteSale(null);
     },
     onError: (e: any) => {
@@ -149,7 +151,7 @@ const SaleList = ({ dealerId }: SaleListProps) => {
         context: cancelApprovalContext, isAdmin: false,
         expiryHours: approvalSettings?.approval_expiry_hours,
       });
-      toast.success("Cancel request submitted. Wait for manager approval.");
+      toast.success(t("Cancel request submitted. Wait for manager approval."));
       setCancelApprovalOpen(false);
       setDeleteSale(null);
     } catch (e: any) {
@@ -195,7 +197,7 @@ const SaleList = ({ dealerId }: SaleListProps) => {
 
   const handleExport = () => {
     if (!permissions.canExportReports) {
-      toast.error("You don't have permission to export.");
+      toast.error(t("You don't have permission to export."));
       return;
     }
     const exportData = sales.map((s: any) => ({
@@ -209,31 +211,31 @@ const SaleList = ({ dealerId }: SaleListProps) => {
       ...(permissions.canViewProfit ? { profit: Number(s.profit) } : {}),
     }));
     const cols = [
-      { header: "Date", key: "date" },
-      { header: "Invoice", key: "invoice" },
-      { header: "Customer", key: "customer" },
-      { header: "Status", key: "status" },
-      { header: "Total", key: "total", format: "currency" as const },
-      { header: "Paid", key: "paid", format: "currency" as const },
-      { header: "Due", key: "due", format: "currency" as const },
-      ...(permissions.canViewProfit ? [{ header: "Profit", key: "profit", format: "currency" as const }] : []),
+      { header: t("Date"), key: "date" },
+      { header: t("Invoice"), key: "invoice" },
+      { header: t("Customer"), key: "customer" },
+      { header: t("Status"), key: "status" },
+      { header: t("Total"), key: "total", format: "currency" as const },
+      { header: t("Paid"), key: "paid", format: "currency" as const },
+      { header: t("Due"), key: "due", format: "currency" as const },
+      ...(permissions.canViewProfit ? [{ header: t("Profit"), key: "profit", format: "currency" as const }] : []),
     ];
     exportToExcel(exportData, cols, `sales-${new Date().toISOString().split("T")[0]}`);
-    toast.success("Sales exported");
+    toast.success(t("Sales exported"));
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Sales</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("Sales")}</h1>
         <div className="flex gap-2">
           {permissions.canExportReports && (
             <Button variant="outline" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" /> Export
+              <Download className="mr-2 h-4 w-4" /> {t("Export")}
             </Button>
           )}
           <Button onClick={() => navigate("/sales/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Sale
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Sale")}
           </Button>
         </div>
       </div>
@@ -242,7 +244,7 @@ const SaleList = ({ dealerId }: SaleListProps) => {
         <div className="relative max-w-sm flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by invoice or customer…"
+            placeholder={t("Search by invoice or customer…")}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="pl-9"
@@ -257,12 +259,12 @@ const SaleList = ({ dealerId }: SaleListProps) => {
       </div>
 
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">{t("Loading…")}</p>
       ) : sales.length === 0 ? (
         <div className="text-center py-12 space-y-3">
-          <p className="text-muted-foreground">No sales found.</p>
+          <p className="text-muted-foreground">{t("No sales found.")}</p>
           <Button onClick={() => navigate("/sales/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Create Your First Sale
+            <Plus className="mr-2 h-4 w-4" /> {t("Create Your First Sale")}
           </Button>
         </div>
       ) : (
@@ -277,19 +279,19 @@ const SaleList = ({ dealerId }: SaleListProps) => {
                       onCheckedChange={toggleAll}
                     />
                   </TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Reference No</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Sale Status</TableHead>
-                  <TableHead className="text-right">Grand Total</TableHead>
-                  <TableHead className="text-right">Paid</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                  <TableHead>Payment Status</TableHead>
-                  <TableHead>Delivery</TableHead>
+                  <TableHead>{t("Date")}</TableHead>
+                  <TableHead>{t("Reference No")}</TableHead>
+                  <TableHead>{t("Customer")}</TableHead>
+                  <TableHead>{t("Sale Status")}</TableHead>
+                  <TableHead className="text-right">{t("Grand Total")}</TableHead>
+                  <TableHead className="text-right">{t("Paid")}</TableHead>
+                  <TableHead className="text-right">{t("Balance")}</TableHead>
+                  <TableHead>{t("Payment Status")}</TableHead>
+                  <TableHead>{t("Delivery")}</TableHead>
                   {permissions.canViewProfit && (
-                    <TableHead className="text-right">Profit</TableHead>
+                    <TableHead className="text-right">{t("Profit")}</TableHead>
                   )}
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead className="w-24">{t("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -329,19 +331,19 @@ const SaleList = ({ dealerId }: SaleListProps) => {
                                     : ""
                             }`}
                           >
-                            {s.sale_status === "partially_delivered" 
-                              ? "Partial Delivery" 
+                            {s.sale_status === "partially_delivered"
+                              ? t("Partial Delivery")
                               : (s.sale_status ?? "invoiced").replace(/_/g, " ")}
                           </Badge>
                           {s.has_backorder && (
                             <Badge variant="outline" className="text-xs border-amber-500 text-amber-600 bg-amber-50">
-                              Backorder
+                              {t("Backorder")}
                             </Badge>
                           )}
                           {s.sale_status === "partially_delivered" && (
                             <span className="text-xs text-orange-600 font-medium">
                               <Truck className="inline h-3 w-3 mr-0.5" />
-                              In Progress
+                              {t("In Progress")}
                             </span>
                           )}
                         </div>
@@ -412,8 +414,8 @@ const SaleList = ({ dealerId }: SaleListProps) => {
         <DeleteConfirmDialog
           open={!!deleteSale}
           onOpenChange={(open) => { if (!open) setDeleteSale(null); }}
-          title="Cancel & Delete Sale"
-          description={`This will cancel sale "${deleteSale?.invoice_number ?? ""}", reverse all stock changes, and remove ledger entries. This action cannot be undone.`}
+          title={t("Cancel & Delete Sale")}
+          description={`${t("This will cancel sale")} "${deleteSale?.invoice_number ?? ""}", ${t("reverse all stock changes, and remove ledger entries. This action cannot be undone.")}`}
           onConfirm={() => { if (deleteSale) deleteMutation.mutate(deleteSale.id); }}
         />
       )}
@@ -443,7 +445,7 @@ const SaleList = ({ dealerId }: SaleListProps) => {
             total: Number(waSale.total_amount ?? 0),
             due: Number(waSale.due_amount ?? 0),
           }}
-          title="Share Invoice via WhatsApp"
+          title={t("Share Invoice via WhatsApp")}
         />
       )}
     </div>

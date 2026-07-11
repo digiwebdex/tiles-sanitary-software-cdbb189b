@@ -20,6 +20,7 @@ import {
 import { Plus, Trash2, Search, Barcode, AlertTriangle, PackageX, Layers, Lock, CheckCircle } from "lucide-react";
 import { formatCurrency, CURRENCY_CODE } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Separator } from "@/components/ui/separator";
 import { PaymentModeSelect } from "@/components/PaymentModeSelect";
 import { paymentModeRequiresBankAccount } from "@/lib/paymentModes";
@@ -75,6 +76,7 @@ interface SaleFormProps {
 
 const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabel, priceLocked, defaultCommission }: SaleFormProps) => {
   const { user, isDealerAdmin } = useAuth();
+  const { t } = useLanguage();
   const [commission, setCommission] = useState<SaleCommissionDraft | null>(defaultCommission ?? null);
   const [itemSearches, setItemSearches] = useState<Record<number, string>>({});
   const [backorderDialogOpen, setBackorderDialogOpen] = useState(false);
@@ -720,7 +722,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
         isAdmin: false,
         expiryHours: approvalSettings?.approval_expiry_hours,
       });
-      toast.success("Approval request submitted. Please wait for manager approval before proceeding.");
+      toast.success(t("Approval request submitted. Please wait for manager approval before proceeding."));
       setApprovalDialogOpen(false);
       setPendingValues(null);
     } catch (e: any) {
@@ -736,7 +738,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
           {backorderEnabled && (
             <div className="rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/20 px-4 py-2 text-xs text-blue-800 dark:text-blue-200 flex items-center gap-2">
               <PackageX className="h-4 w-4" />
-              <span><strong>Backorder Mode Active</strong> — Sales can be created even when stock is insufficient. Shortages will be tracked automatically.</span>
+              <span><strong>{t("Backorder Mode Active")}</strong> — {t("Sales can be created even when stock is insufficient. Shortages will be tracked automatically.")}</span>
             </div>
           )}
 
@@ -749,8 +751,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="client_reference"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Reference No</FormLabel>
-                      <FormControl><Input placeholder="Auto or manual" {...field} /></FormControl>
+                      <FormLabel>{t("Reference No")}</FormLabel>
+                      <FormControl><Input placeholder={t("Auto or manual")} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -760,7 +762,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="sale_date"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Sale Date *</FormLabel>
+                      <FormLabel>{t("Sale Date")} *</FormLabel>
                       <FormControl><Input type="date" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -771,16 +773,16 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="sale_type"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Sale Type</FormLabel>
+                      <FormLabel>{t("Sale Type")}</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
+                            <SelectValue placeholder={t("Select type")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="direct_invoice">Direct Invoice</SelectItem>
-                          <SelectItem value="challan_mode">Challan Mode</SelectItem>
+                          <SelectItem value="direct_invoice">{t("Direct Invoice")}</SelectItem>
+                          <SelectItem value="challan_mode">{t("Challan Mode")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -795,7 +797,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
           <Card>
             <CardContent className="pt-5 space-y-4">
               <div className="rounded-md border border-yellow-300 bg-yellow-50 px-4 py-2 text-xs text-yellow-800">
-                Please select customer before adding any product
+                {t("Please select customer before adding any product")}
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <FormField
@@ -803,8 +805,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="customer_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Customer *</FormLabel>
-                      <FormControl><Input placeholder="Type customer name" {...field} /></FormControl>
+                      <FormLabel>{t("Customer")} *</FormLabel>
+                      <FormControl><Input placeholder={t("Type customer name")} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -814,17 +816,17 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="customer_type"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Customer Type</FormLabel>
+                      <FormLabel>{t("Customer Type")}</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
+                            <SelectValue placeholder={t("Select type")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="retailer">Retailer</SelectItem>
-                          <SelectItem value="customer">Customer</SelectItem>
-                          <SelectItem value="project">Project</SelectItem>
+                          <SelectItem value="retailer">{t("Retailer")}</SelectItem>
+                          <SelectItem value="customer">{t("Customer")}</SelectItem>
+                          <SelectItem value="project">{t("Project")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -836,8 +838,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="fitter_reference"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Fitter Reference</FormLabel>
-                      <FormControl><Input placeholder="Fitter ID" {...field} /></FormControl>
+                      <FormLabel>{t("Fitter Reference")}</FormLabel>
+                      <FormControl><Input placeholder={t("Fitter ID")} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -847,7 +849,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
               {/* Project / Site (optional) */}
               <div className="rounded-md border bg-muted/30 px-4 py-3 space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Project / Site (optional)
+                  {t("Project / Site (optional)")}
                 </p>
                 <FormField
                   control={form.control}
@@ -873,7 +875,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                 />
                 {!matchedCustomer && (
                   <p className="text-[11px] text-muted-foreground">
-                    Pick or create a customer above first to attach a project / site.
+                    {t("Pick or create a customer above first to attach a project / site.")}
                   </p>
                 )}
               </div>
@@ -885,7 +887,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
             <div className="rounded-md border border-destructive/50 bg-destructive/5 px-4 py-3 space-y-1">
               <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
                 <AlertTriangle className="h-4 w-4" />
-                Credit / Overdue Warning
+                {t("Credit / Overdue Warning")}
               </div>
               {overdueInfo.isOverdueViolated && (
                 <p className="text-xs text-destructive">
@@ -898,7 +900,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                Owner approval may be required. Proceed with caution.
+                {t("Owner approval may be required. Proceed with caution.")}
               </p>
             </div>
           )}
@@ -914,7 +916,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
             <CardContent className="pt-5">
               <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3">
                 <Barcode className="h-5 w-5 text-muted-foreground shrink-0" />
-                <span className="text-sm text-muted-foreground">Please add products to order list</span>
+                <span className="text-sm text-muted-foreground">{t("Please add products to order list")}</span>
               </div>
             </CardContent>
           </Card>
@@ -922,14 +924,14 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
           {/* Payment Lock Warning */}
           {priceLocked && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive font-medium">
-              🔒 Price editing is locked because a payment has been recorded against this sale. Only notes and non-financial fields can be changed.
+              🔒 {t("Price editing is locked because a payment has been recorded against this sale. Only notes and non-financial fields can be changed.")}
             </div>
           )}
 
           {/* Order Items */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">Order Items *</h3>
+              <h3 className="text-sm font-semibold text-foreground">{t("Order Items")} *</h3>
               <Button
                 type="button"
                 variant="outline"
@@ -937,16 +939,16 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                 onClick={() => append({ product_id: "", quantity: 0, box_qty: 0, piece_qty: 0, sale_rate: 0 })}
                 disabled={priceLocked}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
+                <Plus className="mr-1 h-3.5 w-3.5" /> {t("Add Item")}
               </Button>
             </div>
 
             {/* Table header */}
             <div className="hidden md:grid md:grid-cols-12 gap-2 rounded-t-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
-              <div className="col-span-5">Product (Code - Name)</div>
-              <div className="col-span-2 text-center">Quantity</div>
-              <div className="col-span-2 text-right">Unit Price</div>
-              <div className="col-span-2 text-right">Subtotal ({CURRENCY_CODE})</div>
+              <div className="col-span-5">{t("Product (Code - Name)")}</div>
+              <div className="col-span-2 text-center">{t("Quantity")}</div>
+              <div className="col-span-2 text-right">{t("Unit Price")}</div>
+              <div className="col-span-2 text-right">{t("Subtotal")} ({CURRENCY_CODE})</div>
               <div className="col-span-1 text-center">⋯</div>
             </div>
 
@@ -996,7 +998,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                               <div className="relative">
                                 <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                                 <Input
-                                  placeholder="Search SKU or name…"
+                                  placeholder={t("Search SKU or name…")}
                                   value={searchVal}
                                   onChange={(e) =>
                                     setItemSearches((s) => ({ ...s, [idx]: e.target.value }))
@@ -1024,7 +1026,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                                 )}
                                 {searchVal.length > 0 && filtered.length === 0 && (
                                   <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover p-3 text-sm text-muted-foreground shadow-md">
-                                    No products found
+                                    {t("No products found")}
                                   </div>
                                 )}
                               </div>
@@ -1077,7 +1079,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                                   type="number"
                                   step="1"
                                   min="0"
-                                  placeholder="Box"
+                                  placeholder={t("Box")}
                                   className="h-8 text-sm text-center px-1"
                                   disabled={priceLocked}
                                   value={dispBox || ""}
@@ -1087,7 +1089,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                                   type="number"
                                   step="1"
                                   min="0"
-                                  placeholder="Pc"
+                                  placeholder={t("Pc")}
                                   className="h-8 text-sm text-center px-1"
                                   disabled={priceLocked}
                                   value={dispPc || ""}
@@ -1115,7 +1117,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                                   <Input
                                     type="number"
                                     step="0.01"
-                                    placeholder={isTile ? "Box qty" : "Qty"}
+                                    placeholder={isTile ? t("Box qty") : t("Qty")}
                                     className="h-8 text-sm text-center"
                                     disabled={priceLocked}
                                     {...f}
@@ -1171,7 +1173,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                                 <Input
                                   type="number"
                                   step="0.01"
-                                  placeholder="Rate"
+                                  placeholder={t("Rate")}
                                   className={`h-8 text-sm text-right ${isManual ? "border-warning/50 bg-warning/5" : ""}`}
                                   disabled={priceLocked}
                                   {...f}
@@ -1192,8 +1194,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                                 <div className="flex items-center justify-end gap-1 mt-0.5">
                                   <RateSourceBadge source={item?.rate_source} className="text-[9px] px-1 py-0 h-4" />
                                   {isManual && orig != null && Number(orig) !== Number(item?.sale_rate) && (
-                                    <span className="text-[9px] text-muted-foreground" title="Original resolved rate">
-                                      was {formatCurrency(Number(orig))}
+                                    <span className="text-[9px] text-muted-foreground" title={t("Original resolved rate")}>
+                                      {t("was")} {formatCurrency(Number(orig))}
                                     </span>
                                   )}
                                 </div>
@@ -1225,11 +1227,11 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                     <div className="mt-1 ml-2 flex items-center gap-2 text-[11px]">
                       <PackageX className="h-3.5 w-3.5 text-amber-600" />
                       <span className="text-amber-700 dark:text-amber-400">
-                        Stock: <strong>{availableStock} {selectedProduct.unit_type === "box_sft" ? "box" : "pc"}</strong>
-                        {" · "}Short: <strong className="text-destructive">{shortage} {selectedProduct.unit_type === "box_sft" ? "box" : "pc"}</strong>
+                        {t("Stock:")} <strong>{availableStock} {selectedProduct.unit_type === "box_sft" ? t("box") : t("pc")}</strong>
+                        {" · "}{t("Short:")} <strong className="text-destructive">{shortage} {selectedProduct.unit_type === "box_sft" ? t("box") : t("pc")}</strong>
                         {backorderEnabled && (
                           <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400">
-                            Backorder
+                            {t("Backorder")}
                           </Badge>
                         )}
                       </span>
@@ -1248,7 +1250,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <Lock className="h-3.5 w-3.5 text-primary" />
                           <span className="text-xs font-semibold text-foreground">
-                            Active Reservations for {matchedCustomer?.name}
+                            {t("Active Reservations for")} {matchedCustomer?.name}
                           </span>
                         </div>
                         <div className="space-y-1">
@@ -1280,7 +1282,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                                   }}
                                 />
                                 <div className="flex-1">
-                                  <span className="font-medium">{remaining} {selectedProduct.unit_type === "box_sft" ? "Box" : "Pcs"}</span>
+                                  <span className="font-medium">{remaining} {selectedProduct.unit_type === "box_sft" ? t("Box") : t("Pcs")}</span>
                                   {batchInfo && (
                                     <span className="text-muted-foreground ml-1">
                                       · Batch: {batchInfo.batch_no}
@@ -1296,7 +1298,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                           })}
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-1">
-                          Select reservations to consume with this sale. Unselected holds stay active.
+                          {t("Select reservations to consume with this sale. Unselected holds stay active.")}
                         </p>
                       </div>
                     );
@@ -1315,7 +1317,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="discount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Order Discount (৳)</FormLabel>
+                      <FormLabel>{t("Order Discount (৳)")}</FormLabel>
                       <FormControl><Input type="number" step="0.01" disabled={priceLocked} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1326,8 +1328,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="discount_reference"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Discount Reference</FormLabel>
-                      <FormControl><Input placeholder="Reason / approval" {...field} /></FormControl>
+                      <FormLabel>{t("Discount Reference")}</FormLabel>
+                      <FormControl><Input placeholder={t("Reason / approval")} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1337,7 +1339,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   name="paid_amount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Paid Amount (৳)</FormLabel>
+                      <FormLabel>{t("Paid Amount (৳)")}</FormLabel>
                       <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1351,7 +1353,7 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                     value={form.watch("paid_account_id") ?? null}
                     onChange={(v) => form.setValue("paid_account_id", v, { shouldDirty: true })}
                     bankAccounts={bankAccounts}
-                    label="Received Into"
+                    label={t("Received Into")}
                   />
                   <FormField
                     control={form.control}
@@ -1366,10 +1368,10 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                               form.setValue("paid_account_id", null, { shouldDirty: true });
                             }
                           }}
-                          label="Payment Mode"
+                          label={t("Payment Mode")}
                         />
                         {paymentModeRequiresBankAccount(field.value) && !form.watch("paid_account_id") && (
-                          <p className="text-xs text-destructive">Select a bank account for this payment mode.</p>
+                          <p className="text-xs text-destructive">{t("Select a bank account for this payment mode.")}</p>
                         )}
                         <FormMessage />
                       </FormItem>
@@ -1385,8 +1387,8 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                 name="notes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Sale Note</FormLabel>
-                    <FormControl><Textarea placeholder="Optional notes…" rows={3} {...field} /></FormControl>
+                    <FormLabel>{t("Sale Note")}</FormLabel>
+                    <FormControl><Textarea placeholder={t("Optional notes…")} rows={3} {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1398,17 +1400,17 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
           {isDealerAdmin && estimatedCogs > 0 && (
             <div className="grid grid-cols-3 gap-3 rounded-md border border-primary/20 bg-primary/5 p-4 text-sm">
               <div>
-                <span className="text-muted-foreground text-xs uppercase font-semibold">Est. COGS</span>
+                <span className="text-muted-foreground text-xs uppercase font-semibold">{t("Est. COGS")}</span>
                 <p className="font-semibold text-destructive">{formatCurrency(estimatedCogs)}</p>
               </div>
               <div>
-                <span className="text-muted-foreground text-xs uppercase font-semibold">Est. Gross Profit</span>
+                <span className="text-muted-foreground text-xs uppercase font-semibold">{t("Est. Gross Profit")}</span>
                 <p className={`font-semibold ${estimatedGrossProfit >= 0 ? "text-primary" : "text-destructive"}`}>
                   {formatCurrency(estimatedGrossProfit)}
                 </p>
               </div>
               <div>
-                <span className="text-muted-foreground text-xs uppercase font-semibold">Est. Margin</span>
+                <span className="text-muted-foreground text-xs uppercase font-semibold">{t("Est. Margin")}</span>
                 <p className={`font-semibold ${estimatedGrossProfit >= 0 ? "text-primary" : "text-destructive"}`}>
                   {totalAmount > 0 ? `${((estimatedGrossProfit / totalAmount) * 100).toFixed(1)}%` : "—"}
                 </p>
@@ -1428,25 +1430,25 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
           {/* Submit + Reset */}
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Processing…" : (submitLabel ?? (form.watch("sale_type") === "challan_mode" ? "Create Sale (Challan)" : "Submit"))}
+              {isLoading ? t("Processing…") : (submitLabel ?? (form.watch("sale_type") === "challan_mode" ? t("Create Sale (Challan)") : t("Submit")))}
             </Button>
             <Button type="button" variant="destructive" onClick={() => form.reset()}>
-              Reset
+              {t("Reset")}
             </Button>
           </div>
 
           {/* Sticky bottom summary bar */}
           <div className="fixed bottom-0 left-0 right-0 z-20 border-t bg-amber-50 dark:bg-amber-950/30 px-4 py-2">
             <div className="mx-auto max-w-4xl flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs font-medium">
-              <span>Items <strong>{watchItems.filter(i => i.product_id).length}</strong></span>
-              <span>Total <strong>{formatCurrency(subtotal)}</strong></span>
-              <span>Discount <strong>{formatCurrency(watchDiscount)}</strong></span>
-              <span>Paid <strong>{formatCurrency(watchPaid)}</strong></span>
+              <span>{t("Items")} <strong>{watchItems.filter(i => i.product_id).length}</strong></span>
+              <span>{t("Total")} <strong>{formatCurrency(subtotal)}</strong></span>
+              <span>{t("Discount")} <strong>{formatCurrency(watchDiscount)}</strong></span>
+              <span>{t("Paid")} <strong>{formatCurrency(watchPaid)}</strong></span>
               <span className={dueAmount > 0 ? "text-destructive font-bold" : ""}>
-                Due <strong>{formatCurrency(dueAmount)}</strong>
+                {t("Due")} <strong>{formatCurrency(dueAmount)}</strong>
               </span>
               <span className="font-bold text-sm">
-                Grand Total <strong>{formatCurrency(totalAmount)}</strong>
+                {t("Grand Total")} <strong>{formatCurrency(totalAmount)}</strong>
               </span>
             </div>
           </div>
@@ -1459,21 +1461,21 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-amber-700">
               <PackageX className="h-5 w-5" />
-              Stock Shortage Detected
+              {t("Stock Shortage Detected")}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  The following items have insufficient stock. They will be placed on <strong>backorder</strong> and fulfilled when new stock arrives.
+                  {t("The following items have insufficient stock. They will be placed on")} <strong>{t("backorder")}</strong> {t("and fulfilled when new stock arrives.")}
                 </p>
                 <div className="rounded-md border overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr>
-                        <th className="text-left px-3 py-2 font-medium">Product</th>
-                        <th className="text-center px-3 py-2 font-medium">Ordered</th>
-                        <th className="text-center px-3 py-2 font-medium">Available</th>
-                        <th className="text-center px-3 py-2 font-medium text-destructive">Short</th>
+                        <th className="text-left px-3 py-2 font-medium">{t("Product")}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t("Ordered")}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t("Available")}</th>
+                        <th className="text-center px-3 py-2 font-medium text-destructive">{t("Short")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1489,20 +1491,20 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   </table>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  💡 Short quantities will be auto-fulfilled when you receive stock through purchases.
+                  💡 {t("Short quantities will be auto-fulfilled when you receive stock through purchases.")}
                 </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => { setPendingValues(null); setShortageItems([]); }}>
-              Cancel
+              {t("Cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBackorderConfirm}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
-              Confirm Backorder Sale
+              {t("Confirm Backorder Sale")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1514,23 +1516,23 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
               <Layers className="h-5 w-5" />
-              Mixed Shade / Caliber Warning
+              {t("Mixed Shade / Caliber Warning")}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  The following items will be allocated from <strong>batches with different {mixedBatchInfo?.has_mixed_shade ? "shades" : ""}{mixedBatchInfo?.has_mixed_shade && mixedBatchInfo?.has_mixed_caliber ? " and " : ""}{mixedBatchInfo?.has_mixed_caliber ? "calibers" : ""}</strong>.
-                  This may cause visual inconsistency for the customer.
+                  {t("The following items will be allocated from")} <strong>{t("batches with different")} {mixedBatchInfo?.has_mixed_shade ? t("shades") : ""}{mixedBatchInfo?.has_mixed_shade && mixedBatchInfo?.has_mixed_caliber ? ` ${t("and")} ` : ""}{mixedBatchInfo?.has_mixed_caliber ? t("calibers") : ""}</strong>.
+                  {t("This may cause visual inconsistency for the customer.")}
                 </p>
                 <div className="rounded-md border overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr>
-                        <th className="text-left px-3 py-2 font-medium">Product</th>
-                        <th className="text-left px-3 py-2 font-medium">Batch</th>
-                        <th className="text-center px-3 py-2 font-medium">Shade</th>
-                        <th className="text-center px-3 py-2 font-medium">Caliber</th>
-                        <th className="text-center px-3 py-2 font-medium">Qty</th>
+                        <th className="text-left px-3 py-2 font-medium">{t("Product")}</th>
+                        <th className="text-left px-3 py-2 font-medium">{t("Batch")}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t("Shade")}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t("Caliber")}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t("Qty")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1561,20 +1563,20 @@ const SaleForm = ({ dealerId, onSubmit, isLoading, defaultValues: dv, submitLabe
                   </table>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  ⚠ Proceeding will allocate stock from mixed batches. Consider splitting the order or waiting for matching stock.
+                  ⚠ {t("Proceeding will allocate stock from mixed batches. Consider splitting the order or waiting for matching stock.")}
                 </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => { setPendingValues(null); setMixedBatchInfo(null); }}>
-              Cancel Sale
+              {t("Cancel Sale")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleMixedBatchConfirm}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
-              Proceed with Mixed Batches
+              {t("Proceed with Mixed Batches")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

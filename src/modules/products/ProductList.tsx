@@ -43,6 +43,7 @@ import { useDealerInfo } from "@/hooks/useDealerInfo";
 import { useAuth } from "@/contexts/AuthContext";
 import { exportToExcel } from "@/lib/exportUtils";
 import { formatStockUnit } from "@/lib/units";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface ProductListProps {
   dealerId: string;
@@ -51,6 +52,7 @@ interface ProductListProps {
 const PAGE_SIZE = 25;
 
 const ProductList = ({ dealerId }: ProductListProps) => {
+  const { t } = useLanguage();
   const permissions = usePermissions();
   const { planFeatures, isSuperAdmin } = useAuth();
   const barcodeEnabled = isSuperAdmin || !!(planFeatures?.barcodeEnabled);
@@ -96,7 +98,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
     queryFn: async () => {
       const res = await vpsAuthedFetch(`/api/products/summary-rows?dealerId=${dealerId}`);
       const body = await res.json().catch(() => ({} as any));
-      if (!res.ok) throw new Error((body as any)?.error || "Failed to load");
+      if (!res.ok) throw new Error((body as any)?.error || t("Failed to load"));
       return (body.rows ?? []) as any[];
     },
   });
@@ -106,7 +108,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
     queryFn: async () => {
       const res = await vpsAuthedFetch(`/api/products/stock-map?dealerId=${dealerId}`);
       const body = await res.json().catch(() => ({} as any));
-      if (!res.ok) throw new Error((body as any)?.error || "Failed to load");
+      if (!res.ok) throw new Error((body as any)?.error || t("Failed to load"));
       const map = new Map<string, { total: number; box: number; sft: number; piece: number; totalPieces: number; reservedBox: number; reservedPiece: number }>();
       for (const s of (body.rows ?? []) as any[]) {
         const box = Number(s.box_qty) || 0;
@@ -127,7 +129,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
     queryFn: async () => {
       const res = await vpsAuthedFetch(`/api/products/cost-map?dealerId=${dealerId}`);
       const body = await res.json().catch(() => ({} as any));
-      if (!res.ok) throw new Error((body as any)?.error || "Failed to load");
+      if (!res.ok) throw new Error((body as any)?.error || t("Failed to load"));
       const map = new Map<string, number>();
       for (const [k, v] of Object.entries(body.rows ?? {})) map.set(k, Number(v) || 0);
       return map;
@@ -140,7 +142,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
     queryFn: async () => {
       const res = await vpsAuthedFetch(`/api/products/last-cost-map?dealerId=${dealerId}`);
       const body = await res.json().catch(() => ({} as any));
-      if (!res.ok) throw new Error((body as any)?.error || "Failed to load");
+      if (!res.ok) throw new Error((body as any)?.error || t("Failed to load"));
       const map = new Map<string, number>();
       for (const [k, v] of Object.entries(body.rows ?? {})) map.set(k, Number(v) || 0);
       return map;
@@ -153,7 +155,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
     queryFn: async () => {
       const res = await vpsAuthedFetch(`/api/products/tx-check?dealerId=${dealerId}`);
       const body = await res.json().catch(() => ({} as any));
-      if (!res.ok) throw new Error((body as any)?.error || "Failed to load");
+      if (!res.ok) throw new Error((body as any)?.error || t("Failed to load"));
       return new Set<string>((body.ids ?? []) as string[]);
     },
     enabled: !!dealerId,
@@ -249,7 +251,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
       productService.toggleActive(id, active),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      toast.success("Product updated");
+      toast.success(t("Product updated"));
     },
     onError: (e) => toast.error(e.message),
   });
@@ -260,7 +262,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      toast.success("Product deleted");
+      toast.success(t("Product deleted"));
       setDeleteProduct(null);
     },
     onError: (e) => toast.error(e.message),
@@ -316,7 +318,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
         warranty: p.warranty,
       });
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      toast.success("Product duplicated successfully.");
+      toast.success(t("Product duplicated successfully."));
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -324,7 +326,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
 
   const handleExport = () => {
     if (!permissions.canExportReports) {
-      toast.error("You don't have permission to export.");
+      toast.error(t("You don't have permission to export."));
       return;
     }
     const exportData = products.map((p) => {
@@ -366,7 +368,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
       { header: "Reorder Level", key: "reorderLevel", format: "number" as const },
     ];
     exportToExcel(exportData, cols, `products-${new Date().toISOString().split("T")[0]}`);
-    toast.success("Products exported");
+    toast.success(t("Products exported"));
   };
 
   const barcodeProducts = barcodeSingle ? [barcodeSingle] : selectedProducts;
@@ -374,30 +376,30 @@ const ProductList = ({ dealerId }: ProductListProps) => {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Products</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("Products")}</h1>
         <div className="flex gap-2">
           {permissions.canExportReports && (
             <>
               <Button variant="outline" onClick={handleExport}>
-                <Download className="mr-2 h-4 w-4" /> Export
+                <Download className="mr-2 h-4 w-4" /> {t("Export")}
               </Button>
               <Button variant="outline" onClick={() => setShowImport(true)}>
-                <Upload className="mr-2 h-4 w-4" /> Import
+                <Upload className="mr-2 h-4 w-4" /> {t("Import")}
               </Button>
             </>
           )}
           {barcodeEnabled && selected.size > 0 && (
             <Button variant="outline" onClick={openBulkBarcode}>
-              <Printer className="mr-2 h-4 w-4" /> Print Barcodes ({selected.size})
+              <Printer className="mr-2 h-4 w-4" /> {t("Print Barcodes")} ({selected.size})
             </Button>
           )}
           {reservationsEnabled && (
             <Button variant="outline" onClick={() => setShowReservations(true)}>
-              <Lock className="mr-2 h-4 w-4" /> Reservations
+              <Lock className="mr-2 h-4 w-4" /> {t("Reservations")}
             </Button>
           )}
           <Button onClick={() => navigate("/products/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Product
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Product")}
           </Button>
         </div>
       </div>
@@ -405,21 +407,21 @@ const ProductList = ({ dealerId }: ProductListProps) => {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-lg border bg-card p-4">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Total Products</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("Total Products")}</div>
           <div className="mt-1 text-2xl font-bold text-foreground">{summary.totalProducts}</div>
         </div>
         {permissions.canViewCostPrice && (
           <div className="rounded-lg border bg-card p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">Total Stock Value</div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("Total Stock Value")}</div>
             <div className="mt-1 text-2xl font-bold text-primary">{formatCurrency(summary.stockValue)}</div>
           </div>
         )}
         <div className="rounded-lg border bg-card p-4">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Low Stock</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("Low Stock")}</div>
           <div className="mt-1 text-2xl font-bold text-amber-500">{summary.lowStock}</div>
         </div>
         <div className="rounded-lg border bg-card p-4">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Out of Stock</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("Out of Stock")}</div>
           <div className="mt-1 text-2xl font-bold text-destructive">{summary.outOfStock}</div>
         </div>
       </div>
@@ -430,7 +432,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
           <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by SKU, name, or barcode…"
+              placeholder={t("Search by SKU, name, or barcode…")}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9"
@@ -439,9 +441,9 @@ const ProductList = ({ dealerId }: ProductListProps) => {
 
           <div className="flex flex-wrap gap-2">
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Category" /></SelectTrigger>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder={t("Category")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="all">{t("All Categories")}</SelectItem>
                 {categoryOptions.map((c) => (
                   <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
                 ))}
@@ -449,9 +451,9 @@ const ProductList = ({ dealerId }: ProductListProps) => {
             </Select>
 
             <Select value={brandFilter} onValueChange={setBrandFilter}>
-              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Brand" /></SelectTrigger>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder={t("Brand")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Brands</SelectItem>
+                <SelectItem value="all">{t("All Brands")}</SelectItem>
                 {brandOptions.map((b) => (
                   <SelectItem key={b} value={b}>{b}</SelectItem>
                 ))}
@@ -459,41 +461,41 @@ const ProductList = ({ dealerId }: ProductListProps) => {
             </Select>
 
             <Select value={unitFilter} onValueChange={setUnitFilter}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Unit Type" /></SelectTrigger>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder={t("Unit Type")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Units</SelectItem>
-                <SelectItem value="box_sft">Box / Sft</SelectItem>
-                <SelectItem value="piece">Piece</SelectItem>
+                <SelectItem value="all">{t("All Units")}</SelectItem>
+                <SelectItem value="box_sft">{t("Box / Sft")}</SelectItem>
+                <SelectItem value="piece">{t("Piece")}</SelectItem>
               </SelectContent>
             </Select>
 
             <Select value={stockFilter} onValueChange={setStockFilter}>
-              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Stock" /></SelectTrigger>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder={t("Stock")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Stock</SelectItem>
-                <SelectItem value="in">In Stock</SelectItem>
-                <SelectItem value="low">Low Stock</SelectItem>
-                <SelectItem value="out">Out of Stock</SelectItem>
-                <SelectItem value="negative">Negative</SelectItem>
+                <SelectItem value="all">{t("All Stock")}</SelectItem>
+                <SelectItem value="in">{t("In Stock")}</SelectItem>
+                <SelectItem value="low">{t("Low Stock")}</SelectItem>
+                <SelectItem value="out">{t("Out of Stock")}</SelectItem>
+                <SelectItem value="negative">{t("Negative")}</SelectItem>
               </SelectContent>
             </Select>
 
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[170px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
+              <SelectTrigger className="w-[170px]"><SelectValue placeholder={t("Sort by")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="name-asc">Name (A → Z)</SelectItem>
-                <SelectItem value="name-desc">Name (Z → A)</SelectItem>
-                <SelectItem value="sku-asc">SKU (A → Z)</SelectItem>
-                <SelectItem value="price-asc">Price (Low → High)</SelectItem>
-                <SelectItem value="price-desc">Price (High → Low)</SelectItem>
-                <SelectItem value="qty-desc">Qty (High → Low)</SelectItem>
-                <SelectItem value="qty-asc">Qty (Low → High)</SelectItem>
+                <SelectItem value="name-asc">{t("Name (A → Z)")}</SelectItem>
+                <SelectItem value="name-desc">{t("Name (Z → A)")}</SelectItem>
+                <SelectItem value="sku-asc">{t("SKU (A → Z)")}</SelectItem>
+                <SelectItem value="price-asc">{t("Price (Low → High)")}</SelectItem>
+                <SelectItem value="price-desc">{t("Price (High → Low)")}</SelectItem>
+                <SelectItem value="qty-desc">{t("Qty (High → Low)")}</SelectItem>
+                <SelectItem value="qty-asc">{t("Qty (Low → High)")}</SelectItem>
               </SelectContent>
             </Select>
 
             {activeFilterCount > 0 && (
               <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1">
-                <X className="h-4 w-4" /> Clear
+                <X className="h-4 w-4" /> {t("Clear")}
               </Button>
             )}
           </div>
@@ -501,26 +503,26 @@ const ProductList = ({ dealerId }: ProductListProps) => {
 
         {activeFilterCount > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Active:</span>
-            {search.trim() && <UIBadge variant="secondary">Search: {search}</UIBadge>}
-            {categoryFilter !== "all" && <UIBadge variant="secondary" className="capitalize">Category: {categoryFilter}</UIBadge>}
-            {brandFilter !== "all" && <UIBadge variant="secondary">Brand: {brandFilter}</UIBadge>}
-            {unitFilter !== "all" && <UIBadge variant="secondary">Unit: {unitFilter === "box_sft" ? "Box/Sft" : "Piece"}</UIBadge>}
-            {stockFilter !== "all" && <UIBadge variant="secondary" className="capitalize">Stock: {stockFilter}</UIBadge>}
+            <span className="text-muted-foreground">{t("Active:")}</span>
+            {search.trim() && <UIBadge variant="secondary">{t("Search:")} {search}</UIBadge>}
+            {categoryFilter !== "all" && <UIBadge variant="secondary" className="capitalize">{t("Category:")} {categoryFilter}</UIBadge>}
+            {brandFilter !== "all" && <UIBadge variant="secondary">{t("Brand:")} {brandFilter}</UIBadge>}
+            {unitFilter !== "all" && <UIBadge variant="secondary">{t("Unit:")} {unitFilter === "box_sft" ? t("Box/Sft") : t("Piece")}</UIBadge>}
+            {stockFilter !== "all" && <UIBadge variant="secondary" className="capitalize">{t("Stock:")} {stockFilter}</UIBadge>}
             <span className="ml-auto text-muted-foreground">
-              Showing {filteredProducts.length} of {products.length} on this page
+              {t("Showing")} {filteredProducts.length} {t("of")} {products.length} {t("on this page")}
             </span>
           </div>
         )}
       </div>
 
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">{t("Loading…")}</p>
       ) : products.length === 0 ? (
         <div className="text-center py-12 space-y-3">
-          <p className="text-muted-foreground">No products found.</p>
+          <p className="text-muted-foreground">{t("No products found.")}</p>
           <Button onClick={() => navigate("/products/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Your First Product
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Your First Product")}
           </Button>
         </div>
       ) : (
@@ -535,16 +537,16 @@ const ProductList = ({ dealerId }: ProductListProps) => {
                       onCheckedChange={toggleAll}
                     />
                   </TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Brand</TableHead>
-                  <TableHead>Category</TableHead>
-                  {permissions.canViewCostPrice && <TableHead className="text-right">Avg Cost</TableHead>}
-                  {permissions.canViewCostPrice && <TableHead className="text-right">Last Cost</TableHead>}
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="min-w-[60px]">Unit</TableHead>
-                  <TableHead className="w-[100px] min-w-[100px] text-center sticky right-0 bg-background z-10 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]">Actions</TableHead>
+                  <TableHead>{t("Code")}</TableHead>
+                  <TableHead>{t("Name")}</TableHead>
+                  <TableHead>{t("Brand")}</TableHead>
+                  <TableHead>{t("Category")}</TableHead>
+                  {permissions.canViewCostPrice && <TableHead className="text-right">{t("Avg Cost")}</TableHead>}
+                  {permissions.canViewCostPrice && <TableHead className="text-right">{t("Last Cost")}</TableHead>}
+                  <TableHead className="text-right">{t("Price")}</TableHead>
+                  <TableHead className="text-right">{t("Quantity")}</TableHead>
+                  <TableHead className="min-w-[60px]">{t("Unit")}</TableHead>
+                  <TableHead className="w-[100px] min-w-[100px] text-center sticky right-0 bg-background z-10 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]">{t("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -573,8 +575,8 @@ const ProductList = ({ dealerId }: ProductListProps) => {
                       <TableCell>
                         <div>
                           <span>{p.name}</span>
-                          {p.size && <span className="text-xs text-muted-foreground ml-1">(Size: {p.size})</span>}
-                          {isBoxSft && perBoxSft > 0 && <span className="text-xs text-muted-foreground ml-1">(Box: {perBoxSft}sft)</span>}
+                          {p.size && <span className="text-xs text-muted-foreground ml-1">({t("Size:")} {p.size})</span>}
+                          {isBoxSft && perBoxSft > 0 && <span className="text-xs text-muted-foreground ml-1">({t("Box:")} {perBoxSft}sft)</span>}
                         </div>
                       </TableCell>
                       <TableCell>{p.brand || "—"}</TableCell>
@@ -633,7 +635,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
                 {filteredProducts.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={permissions.canViewCostPrice ? 11 : 9} className="text-center py-8 text-muted-foreground">
-                      No products match the current filters.
+                      {t("No products match the current filters.")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -651,7 +653,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
                   );
                   return (
                     <TableRow className="bg-muted/50 font-semibold">
-                      <TableCell colSpan={permissions.canViewCostPrice ? 8 : 6} className="text-right">Stock Totals:</TableCell>
+                      <TableCell colSpan={permissions.canViewCostPrice ? 8 : 6} className="text-right">{t("Stock Totals:")}</TableCell>
                       <TableCell className="text-right">
                         <div className="space-y-0.5">
                           {totals.box > 0 && <div>{totals.box} Box ({totals.sft.toFixed(2)} Sft)</div>}
@@ -739,8 +741,8 @@ const ProductList = ({ dealerId }: ProductListProps) => {
         <DeleteConfirmDialog
           open={!!deleteProduct}
           onOpenChange={(open) => { if (!open) setDeleteProduct(null); }}
-          title="Delete Product"
-          description={`Are you sure you want to permanently delete "${deleteProduct?.name}"? This action cannot be undone.`}
+          title={t("Delete Product")}
+          description={`${t("Are you sure you want to permanently delete")} "${deleteProduct?.name}"? ${t("This action cannot be undone.")}`}
           onConfirm={() => { if (deleteProduct) deleteMutation.mutate(deleteProduct.id); }}
         />
       )}
@@ -796,7 +798,7 @@ const ProductList = ({ dealerId }: ProductListProps) => {
       <BulkImportDialog
         open={showImport}
         onOpenChange={setShowImport}
-        title="Products"
+        title={t("Products")}
         columns={productColumns}
         sampleData={productSampleData}
         onImport={async (rows, mode) => {

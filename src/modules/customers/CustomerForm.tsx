@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const NO_TIER = "__none";
 
@@ -45,6 +46,7 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
   const dealerId = useDealerId();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useLanguage();
   const isEdit = !!customer;
 
   const { data: tiers = [] } = useQuery({
@@ -96,7 +98,7 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customers"] });
-      toast.success(isEdit ? "Customer updated" : "Customer created");
+      toast.success(isEdit ? t("Customer updated") : t("Customer created"));
       navigate("/customers");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -111,8 +113,8 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Customer Name <span className="text-destructive">*</span></FormLabel>
-                <FormControl><Input placeholder="Customer name" {...field} /></FormControl>
+                <FormLabel>{t("Customer Name")} <span className="text-destructive">*</span></FormLabel>
+                <FormControl><Input placeholder={t("Customer name")} {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -122,13 +124,13 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
             name="type"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Customer Type <span className="text-destructive">*</span></FormLabel>
+                <FormLabel>{t("Customer Type")} <span className="text-destructive">*</span></FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="retailer">Retailer</SelectItem>
-                    <SelectItem value="customer">Regular</SelectItem>
-                    <SelectItem value="project">Project</SelectItem>
+                    <SelectItem value="retailer">{t("Retailer")}</SelectItem>
+                    <SelectItem value="customer">{t("Regular")}</SelectItem>
+                    <SelectItem value="project">{t("Project")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -143,7 +145,7 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone</FormLabel>
+                <FormLabel>{t("Phone")}</FormLabel>
                 <FormControl><Input placeholder="+880 1700-000000" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
@@ -154,7 +156,7 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel>{t("Email")}</FormLabel>
                 <FormControl><Input type="email" placeholder="customer@example.com" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
@@ -167,8 +169,8 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
           name="reference_name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Reference Name</FormLabel>
-              <FormControl><Input placeholder="Who referred this customer?" {...field} /></FormControl>
+              <FormLabel>{t("Reference Name")}</FormLabel>
+              <FormControl><Input placeholder={t("Who referred this customer?")} {...field} /></FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -179,8 +181,8 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
           name="tax_id"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>BIN / TIN (VAT)</FormLabel>
-              <FormControl><Input placeholder="Customer tax ID for Mushak" {...field} /></FormControl>
+              <FormLabel>{t("BIN / TIN (VAT)")}</FormLabel>
+              <FormControl><Input placeholder={t("Customer tax ID for Mushak")} {...field} /></FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -191,8 +193,8 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
           name="address"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Address</FormLabel>
-              <FormControl><Textarea placeholder="Street, City, Country" rows={2} {...field} /></FormControl>
+              <FormLabel>{t("Address")}</FormLabel>
+              <FormControl><Textarea placeholder={t("Street, City, Country")} rows={2} {...field} /></FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -205,9 +207,9 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Opening Balance (৳)
+                  {t("Opening Balance (৳)")}
                   {isEdit && (
-                    <span className="ml-1 text-xs text-muted-foreground">(read-only after create)</span>
+                    <span className="ml-1 text-xs text-muted-foreground">{t("(read-only after create)")}</span>
                   )}
                 </FormLabel>
                 <FormControl>
@@ -230,12 +232,12 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
             name="status"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Status</FormLabel>
+                <FormLabel>{t("Status")}</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="active">{t("Active")}</SelectItem>
+                    <SelectItem value="inactive">{t("Inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -247,26 +249,26 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
         <Separator />
 
         <div>
-          <h3 className="text-sm font-semibold text-foreground mb-1">Pricing Tier</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-1">{t("Pricing Tier")}</h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Auto-fills product rates in quotations and sales for this customer. Leave empty to use default rates.
+            {t("Auto-fills product rates in quotations and sales for this customer. Leave empty to use default rates.")}
           </p>
           <FormField
             control={form.control}
             name="price_tier_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Assigned Tier</FormLabel>
+                <FormLabel>{t("Assigned Tier")}</FormLabel>
                 <Select
                   value={field.value ?? NO_TIER}
                   onValueChange={(v) => field.onChange(v === NO_TIER ? null : v)}
                 >
-                  <FormControl><SelectTrigger><SelectValue placeholder="No tier (use default rates)" /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger><SelectValue placeholder={t("No tier (use default rates)")} /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value={NO_TIER}>No tier (default rates)</SelectItem>
-                    {activeTiers.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}{t.status === "inactive" ? " (inactive)" : ""}
+                    <SelectItem value={NO_TIER}>{t("No tier (default rates)")}</SelectItem>
+                    {activeTiers.map((tier) => (
+                      <SelectItem key={tier.id} value={tier.id}>
+                        {tier.name}{tier.status === "inactive" ? ` ${t("(inactive)")}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -280,9 +282,9 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
         <Separator />
 
         <div>
-          <h3 className="text-sm font-semibold text-foreground mb-1">Credit Control</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-1">{t("Credit Control")}</h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Set 0 to disable credit limit or overdue enforcement.
+            {t("Set 0 to disable credit limit or overdue enforcement.")}
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
@@ -290,8 +292,8 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
               name="credit_limit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Credit Limit (৳)</FormLabel>
-                  <FormControl><Input type="number" min={0} step="0.01" placeholder="0 = no limit" {...field} /></FormControl>
+                  <FormLabel>{t("Credit Limit (৳)")}</FormLabel>
+                  <FormControl><Input type="number" min={0} step="0.01" placeholder={t("0 = no limit")} {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -301,8 +303,8 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
               name="max_overdue_days"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Max Overdue Days</FormLabel>
-                  <FormControl><Input type="number" min={0} step="1" placeholder="0 = no restriction" {...field} /></FormControl>
+                  <FormLabel>{t("Max Overdue Days")}</FormLabel>
+                  <FormControl><Input type="number" min={0} step="1" placeholder={t("0 = no restriction")} {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -312,10 +314,10 @@ const CustomerForm = ({ customer }: CustomerFormProps) => {
 
         <div className="flex gap-3 pt-2">
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving…" : isEdit ? "Update Customer" : "Create Customer"}
+            {mutation.isPending ? t("Saving…") : isEdit ? t("Update Customer") : t("Create Customer")}
           </Button>
           <Button type="button" variant="outline" onClick={() => navigate("/customers")}>
-            Cancel
+            {t("Cancel")}
           </Button>
         </div>
       </form>
