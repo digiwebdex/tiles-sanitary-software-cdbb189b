@@ -183,6 +183,8 @@ export const navSections: NavSection[] = [
       { path: "/referrals", label: "Referrals", icon: HandCoins, planFeature: "campaigns", roles: ["manager"] },
       { path: "/whatsapp-logs", label: "WhatsApp Log", icon: MessageCircle, planFeature: "campaigns", roles: ["manager"] },
       { path: "/sms/single", label: "Send SMS", icon: MessageCircle, planFeature: "campaigns", roles: ["manager"] },
+      { path: "/sms/templates", label: "SMS Templates", icon: MessageCircle, planFeature: "campaigns", roles: ["manager"] },
+      { path: "/sms/bulk", label: "Bulk SMS", icon: Megaphone, planFeature: "campaigns", roles: ["manager"] },
     ],
   },
   {

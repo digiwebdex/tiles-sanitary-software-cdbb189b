@@ -244,6 +244,8 @@ const HOME_MODULES: HomeModule[] = [
         labelBn: "বার্তা পরিচালনা",
         items: [
           { path: "/sms/single", label: "Send SMS", labelBn: "এসএমএস পাঠান", planFeature: "campaigns", roles: ["manager"] },
+          { path: "/sms/templates", label: "SMS Templates", labelBn: "এসএমএস টেমপ্লেট", planFeature: "campaigns", roles: ["manager"] },
+          { path: "/sms/bulk", label: "Bulk SMS", labelBn: "বাল্ক এসএমএস", planFeature: "campaigns", roles: ["manager"] },
           { path: "/whatsapp-logs", label: "WhatsApp Log", labelBn: "হোয়াটসঅ্যাপ লগ", planFeature: "campaigns", roles: ["manager"] },
         ],
       },
