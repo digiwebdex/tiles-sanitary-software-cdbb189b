@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { filterNavItem, type NavItem } from "@/config/navConfig";
 
@@ -300,9 +301,13 @@ const AppAuthHomePage = () => {
   const navigate = useNavigate();
   const { accessLevel, isSuperAdmin, isSaEmployee, isDealerAdmin, menuMode, planFeatures } = useAuth();
   const { isManager, isAccountant, isSalesman } = usePermissions();
+  const { lang } = useLanguage();
   const [query, setQuery] = useState("");
 
   const isReadonly = accessLevel === "readonly";
+  // Bengali-first when the app language is Bangla; English-first otherwise.
+  const primary = (en: string, bnText: string) => (lang === "bn" ? bnText : en);
+  const secondary = (en: string, bnText: string) => (lang === "bn" ? en : bnText);
 
   const visibleModules = useMemo(() => {
     const filterOpts = {
@@ -336,9 +341,14 @@ const AppAuthHomePage = () => {
     <div className="container mx-auto p-4 md:p-6 space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Module Home <span className="text-muted-foreground font-normal">(মডিউল হোম)</span></h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {primary("Module Home", "মডিউল হোম")}{" "}
+            <span className="text-muted-foreground font-normal">({secondary("Module Home", "মডিউল হোম")})</span>
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            All modules, sub-menus and screens in one place — সকল মডিউল ও স্ক্রিন একসাথে
+            {lang === "bn"
+              ? "সকল মডিউল, সাব-মেনু ও স্ক্রিন একসাথে — all modules in one place"
+              : "All modules, sub-menus and screens in one place — সকল মডিউল ও স্ক্রিন একসাথে"}
           </p>
         </div>
         <div className="relative w-full md:w-72">
@@ -368,8 +378,8 @@ const AppAuthHomePage = () => {
                     <module.icon className="h-5 w-5" />
                   </span>
                   <span>
-                    {module.label}
-                    <span className="block text-xs font-normal text-muted-foreground">{module.labelBn}</span>
+                    {primary(module.label, module.labelBn)}
+                    <span className="block text-xs font-normal text-muted-foreground">{secondary(module.label, module.labelBn)}</span>
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -377,7 +387,7 @@ const AppAuthHomePage = () => {
                 {module.groups.map((group) => (
                   <div key={group.label}>
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {group.label} <span className="normal-case">({group.labelBn})</span>
+                      {primary(group.label, group.labelBn)} <span className="normal-case">({secondary(group.label, group.labelBn)})</span>
                     </p>
                     <div className="flex flex-col">
                       {group.items.map((item) => {
@@ -395,8 +405,8 @@ const AppAuthHomePage = () => {
                             )}
                           >
                             <span>
-                              {item.label}{" "}
-                              <span className="text-xs text-muted-foreground">({item.labelBn})</span>
+                              {primary(item.label, item.labelBn)}{" "}
+                              <span className="text-xs text-muted-foreground">({secondary(item.label, item.labelBn)})</span>
                             </span>
                             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                           </button>
