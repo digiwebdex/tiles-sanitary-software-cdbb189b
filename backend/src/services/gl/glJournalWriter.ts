@@ -116,6 +116,7 @@ export async function mirrorPostingBatchToGl(trx: Knex.Transaction, input: Mirro
       const accountId = accountMap.get(d.accountCode);
       if (!accountId) return null;
       return {
+        dealer_id: input.dealerId,
         journal_entry_id: journalId,
         account_id: accountId,
         debit: d.debit,
