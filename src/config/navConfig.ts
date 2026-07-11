@@ -79,6 +79,7 @@ export const navSections: NavSection[] = [
     defaultOpen: true,
     items: [
       { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, readonlyAllowed: true },
+      { path: "/appauth-home", label: "Module Home", icon: LayoutDashboard, readonlyAllowed: true },
       { path: "/approvals", label: "Approvals", icon: ShieldCheck, roles: ["manager", "accountant"] },
       { path: "/notices", label: "Notice Board", icon: Megaphone, readonlyAllowed: true, tier: "advanced" },
       { path: "/user-guide", label: "User Guide", icon: HelpCircle, readonlyAllowed: true },
@@ -112,6 +113,7 @@ export const navSections: NavSection[] = [
     items: [
       { path: "/suppliers", label: "Suppliers", icon: Truck, roles: ["manager", "accountant"] },
       { path: "/purchases", label: "Purchases", icon: ShoppingCart, roles: ["manager"] },
+      { path: "/purchases/orders", label: "Purchase Orders", icon: ClipboardCheck, roles: ["manager"] },
       { path: "/purchases/auto-draft", label: "Auto-PO Drafts", icon: Sparkles, dealerAdminOnly: true, tier: "advanced" },
       { path: "/purchase-returns", label: "Purchase Returns", icon: Undo2, roles: ["manager"] },
       { path: "/payables", label: "Supplier Payables", icon: Truck, dealerAdminOnly: true },
@@ -182,6 +184,8 @@ export const navSections: NavSection[] = [
       { path: "/referrals", label: "Referrals", icon: HandCoins, planFeature: "campaigns", roles: ["manager"] },
       { path: "/whatsapp-logs", label: "WhatsApp Log", icon: MessageCircle, planFeature: "campaigns", roles: ["manager"] },
       { path: "/sms/single", label: "Send SMS", icon: MessageCircle, planFeature: "campaigns", roles: ["manager"] },
+      { path: "/sms/templates", label: "SMS Templates", icon: MessageCircle, planFeature: "campaigns", roles: ["manager"] },
+      { path: "/sms/bulk", label: "Bulk SMS", icon: Megaphone, planFeature: "campaigns", roles: ["manager"] },
     ],
   },
   {

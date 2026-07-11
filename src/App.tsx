@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { useEffect } from "react";
 import { getHostEntryRedirect } from "@/lib/hostRouting";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import ScrollToTop from "@/components/ScrollToTop";
@@ -20,6 +21,7 @@ import GetStartedPage from "./pages/public/GetStartedPage";
 import SubscriptionBlockedPage from "./pages/auth/SubscriptionBlockedPage";
 import SubscriptionPage from "./pages/subscription/SubscriptionPage";
 import Index from "./pages/Index";
+import AppAuthHomePage from "./pages/AppAuthHomePage";
 import NotFound from "./pages/NotFound";
 import ProductsPage from "./pages/products/ProductsPage";
 import CreateProductRoute from "./pages/products/CreateProductRoute";
@@ -88,12 +90,17 @@ import Phase3ReportsPage from "./pages/reports/Phase3ReportsPage";
 import SalaryVoucherPage from "./pages/vouchers/SalaryVoucherPage";
 import DirectorVoucherPage from "./pages/vouchers/DirectorVoucherPage";
 import AutoPoDraftPage from "./pages/purchases/AutoPoDraftPage";
+import PurchaseOrdersPage from "./pages/purchases/PurchaseOrdersPage";
+import CreatePurchaseOrderPage from "./pages/purchases/CreatePurchaseOrderPage";
 import CustomerStatementPage from "./pages/customers/CustomerStatementPage";
+import CustomerProfilePage from "./pages/customers/CustomerProfilePage";
 import CustomerStatementsBulkPage from "./pages/customers/CustomerStatementsBulkPage";
 import LeadsPage from "./pages/leads/LeadsPage";
 import LeadVisitRegisterPage from "./pages/leads/LeadVisitRegisterPage";
 import LeadOptionsPage from "./pages/leads/LeadOptionsPage";
 import SingleSmsPage from "./pages/sms/SingleSmsPage";
+import SmsTemplatesPage from "./pages/sms/SmsTemplatesPage";
+import BulkSmsPage from "./pages/sms/BulkSmsPage";
 import FileManagerPage from "./pages/files/FileManagerPage";
 import HolidaysPage from "./pages/holidays/HolidaysPage";
 
@@ -200,6 +207,7 @@ const HostEntryRedirect = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <LanguageProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -243,6 +251,7 @@ const App = () => (
 
             {/* Dashboard + Reports: allowed in readonly */}
             <Route path="/dashboard" element={<ProtectedRoute allowReadonly><AppLayout><Index /></AppLayout></ProtectedRoute>} />
+            <Route path="/appauth-home" element={<ProtectedRoute allowReadonly><AppLayout><AppAuthHomePage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute allowReadonly><AppLayout><ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/credit" element={<ProtectedRoute allowReadonly><AppLayout><CreditReportPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
@@ -259,8 +268,11 @@ const App = () => (
             <Route path="/cashbook" element={<ProtectedRoute><AppLayout><CashbookPage /></AppLayout></ProtectedRoute>} />
             <Route path="/cash-closing" element={<ProtectedRoute><AppLayout><CashClosingPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/auto-draft" element={<ProtectedRoute><AppLayout><AutoPoDraftPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchases/orders" element={<ProtectedRoute><AppLayout><PurchaseOrdersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchases/orders/new" element={<ProtectedRoute><AppLayout><CreatePurchaseOrderPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/statements" element={<ProtectedRoute><AppLayout><CustomerStatementsBulkPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/:customerId/statement" element={<ProtectedRoute><AppLayout><CustomerStatementPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/customers/:id/profile" element={<ProtectedRoute allowReadonly><AppLayout><CustomerProfilePage /></AppLayout></ProtectedRoute>} />
             <Route path="/financials" element={<ProtectedRoute><AppLayout><FinancialStatementsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/journal" element={<ProtectedRoute><AppLayout><JournalPage /></AppLayout></ProtectedRoute>} />
             <Route path="/emi" element={<ProtectedRoute><AppLayout><EmiPage /></AppLayout></ProtectedRoute>} />
@@ -299,6 +311,8 @@ const App = () => (
             <Route path="/leads/visits" element={<ProtectedRoute><AppLayout><LeadVisitRegisterPage /></AppLayout></ProtectedRoute>} />
             <Route path="/leads/options" element={<ProtectedRoute><AppLayout><LeadOptionsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/sms/single" element={<ProtectedRoute><AppLayout><SingleSmsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/sms/templates" element={<ProtectedRoute><AppLayout><SmsTemplatesPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/sms/bulk" element={<ProtectedRoute><AppLayout><BulkSmsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/files" element={<ProtectedRoute><AppLayout><FileManagerPage /></AppLayout></ProtectedRoute>} />
             <Route path="/holidays" element={<ProtectedRoute><AppLayout><HolidaysPage /></AppLayout></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><AppLayout><SalesPage /></AppLayout></ProtectedRoute>} />
@@ -354,6 +368,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
+    </LanguageProvider>
   </QueryClientProvider>
 );
 

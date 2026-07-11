@@ -101,6 +101,98 @@ router.post(
   },
 );
 
+/**
+ * POST /api/notifications/sms/bulk — send one rendered message per recipient.
+ *
+ * Placeholders ({name}, {due}, …) are rendered server-side from each
+ * recipient's vars. Idempotency: key = `${idempotency_prefix}-${phone}`,
+ * so retrying the same campaign never double-sends to a customer.
+ */
+const bulkSmsSchema = z.object({
+  idempotency_prefix: z.string().trim().min(8).max(40),
+  message_template: z.string().trim().min(1).max(1000),
+  recipients: z
+    .array(
+      z.object({
+        phone: z.string().trim().min(8).max(32),
+        vars: z.record(z.union([z.string(), z.number()])).default({}),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
+function renderTemplate(body: string, vars: Record<string, string | number>): string {
+  return body.replace(/\{(\w+)\}/g, (token, key: string) =>
+    vars[key] === undefined || vars[key] === null ? token : String(vars[key]),
+  );
+}
+
+router.post(
+  '/sms/bulk',
+  requireDealer,
+  requireRole('dealer_admin', 'manager'),
+  async (req: Request, res: Response) => {
+    const parsed = bulkSmsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid payload', issues: parsed.error.flatten() });
+      return;
+    }
+    const dealerId = req.dealerId!;
+    const { idempotency_prefix, message_template, recipients } = parsed.data;
+
+    let sent = 0;
+    let failed = 0;
+    let deduped = 0;
+
+    // Sequential on purpose: BulkSMSBD rate limits, and 500 max per call.
+    for (const r of recipients) {
+      const phone = r.phone.replace(/\s+/g, '');
+      const message = renderTemplate(message_template, r.vars);
+      const idempotencyKey = `${idempotency_prefix}-${phone}`.slice(0, 80);
+
+      let logRow: any;
+      try {
+        [logRow] = await db('sms_message_logs')
+          .insert({
+            dealer_id: dealerId,
+            idempotency_key: idempotencyKey,
+            to_phone: phone,
+            message,
+            status: 'queued',
+            source_type: 'bulk',
+          })
+          .returning('*');
+      } catch (err: any) {
+        if (err?.code === '23505') {
+          deduped++;
+          continue;
+        }
+        console.error('[notify/sms/bulk] insert failed:', err.message);
+        failed++;
+        continue;
+      }
+
+      try {
+        const ok = await sendSms({ to: phone, message });
+        await db('sms_message_logs')
+          .where({ id: logRow.id })
+          .update({ status: ok ? 'sent' : 'failed', sent_at: ok ? new Date() : null });
+        ok ? sent++ : failed++;
+      } catch (err: any) {
+        console.error('[notify/sms/bulk] send failed:', err.message);
+        await db('sms_message_logs')
+          .where({ id: logRow.id })
+          .update({ status: 'failed' })
+          .catch(() => {});
+        failed++;
+      }
+    }
+
+    res.json({ total: recipients.length, sent, failed, deduped });
+  },
+);
+
 const waSchema = z.object({
   to: z.string().trim().min(8).max(32),
   message: z.string().trim().min(1).max(4000),

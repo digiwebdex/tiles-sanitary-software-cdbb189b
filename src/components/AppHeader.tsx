@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CommandPalette } from "@/components/CommandPalette";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export function AppHeader() {
   const navigate = useNavigate();
   const perms = usePermissions();
+  const { t } = useLanguage();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
@@ -31,7 +34,7 @@ export function AppHeader() {
           className="flex flex-1 max-w-md items-center gap-2 rounded-md border bg-background/50 px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
         >
           <Search className="h-4 w-4" />
-          <span>Search anything…</span>
+          <span>{t("Search anything…")}</span>
           <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
             <span className="text-xs">⌘</span>K
           </kbd>
@@ -43,39 +46,40 @@ export function AppHeader() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="sm" variant="ghost" onClick={() => navigate("/sales/new")} className="gap-1">
-                    <Receipt className="h-4 w-4" /> <span className="hidden lg:inline">New Sale</span>
+                    <Receipt className="h-4 w-4" /> <span className="hidden lg:inline">{t("New Sale")}</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>New Sale</TooltipContent>
+                <TooltipContent>{t("New Sale")}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="sm" variant="ghost" onClick={() => navigate("/purchases/new")} className="gap-1">
-                    <ShoppingCart className="h-4 w-4" /> <span className="hidden lg:inline">Purchase</span>
+                    <ShoppingCart className="h-4 w-4" /> <span className="hidden lg:inline">{t("Purchase")}</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>New Purchase</TooltipContent>
+                <TooltipContent>{t("New Purchase")}</TooltipContent>
               </Tooltip>
               {perms.canRecordCollections && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button size="sm" variant="ghost" onClick={() => navigate("/collections")} className="gap-1">
-                      <Wallet className="h-4 w-4" /> <span className="hidden lg:inline">Payment</span>
+                      <Wallet className="h-4 w-4" /> <span className="hidden lg:inline">{t("Payment")}</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Record Payment</TooltipContent>
+                  <TooltipContent>{t("Record Payment")}</TooltipContent>
                 </Tooltip>
               )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="sm" variant="ghost" onClick={() => navigate("/customers/new")} className="gap-1">
-                    <UserPlus className="h-4 w-4" /> <span className="hidden lg:inline">Customer</span>
+                    <UserPlus className="h-4 w-4" /> <span className="hidden lg:inline">{t("Customer")}</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>New Customer</TooltipContent>
+                <TooltipContent>{t("New Customer")}</TooltipContent>
               </Tooltip>
             </>
           )}
+          <LanguageToggle />
           <NotificationsBell />
         </div>
       </header>
@@ -85,6 +89,7 @@ export function AppHeader() {
         <Button size="icon" variant="ghost" onClick={() => setPaletteOpen(true)} aria-label="Search">
           <Search className="h-4 w-4" />
         </Button>
+        <LanguageToggle compact />
         <NotificationsBell />
       </div>
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,6 +49,7 @@ export function SidebarNav({
 }: SidebarNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
 
   const visibleSections = useMemo(
     () => {
@@ -112,7 +114,7 @@ export function SidebarNav({
         )}
       >
         <item.icon className={cn("h-4 w-4 shrink-0", compact && "h-3 w-3")} />
-        {item.label}
+        {t(item.label)}
       </button>
     );
   };
@@ -150,7 +152,7 @@ export function SidebarNav({
                 sectionHasActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {section.label}
+              {t(section.label)}
               <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-180")} />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-0.5 pt-0.5 pb-1 pl-1">

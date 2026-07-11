@@ -13,10 +13,12 @@ import { SidebarNav } from "@/components/SidebarNav";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCurrentSubscription } from "@/services/dealerSubscriptionService";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const { profile, accessLevel, isSuperAdmin, isSaEmployee, isDealerAdmin, menuMode, planFeatures, signOut } = useAuth();
   const { isManager, isAccountant, isSalesman } = usePermissions();
+  const { t } = useLanguage();
   const { data: currentSub } = useQuery({
     queryKey: ["current-subscription-badge"],
     queryFn: fetchCurrentSubscription,
@@ -42,12 +44,12 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
         {isGrace && (
           <Badge variant="outline" className="mb-3 text-yellow-600 border-yellow-400 justify-center text-xs">
-            <Clock className="mr-1 h-3 w-3" /> Grace Period
+            <Clock className="mr-1 h-3 w-3" /> {t("Grace Period")}
           </Badge>
         )}
         {isReadonly && (
           <Badge variant="destructive" className="mb-3 justify-center text-xs">
-            Read-Only
+            {t("Read-Only")}
           </Badge>
         )}
 
@@ -73,12 +75,12 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
             )}
             {isDealerAdmin && (
               <Badge variant="outline" className="text-[10px] px-2 py-0 border-amber-500/40 text-amber-500">
-                Tenant Owner
+                {t("Tenant Owner")}
               </Badge>
             )}
           </div>
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={signOut}>
-            <LogOut className="mr-2 h-4 w-4" /> Sign Out
+            <LogOut className="mr-2 h-4 w-4" /> {t("Sign Out")}
           </Button>
         </div>
       </aside>
@@ -88,8 +90,8 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
         <header className="flex md:hidden items-center justify-between border-b bg-card px-4 py-3">
           <h2 className="text-lg font-bold text-foreground">ERP</h2>
           <div className="flex items-center gap-2">
-            {isGrace && <Badge variant="outline" className="text-yellow-600 border-yellow-400 text-xs"><Clock className="mr-1 h-3 w-3" />Grace</Badge>}
-            {isReadonly && <Badge variant="destructive" className="text-xs">Read-Only</Badge>}
+            {isGrace && <Badge variant="outline" className="text-yellow-600 border-yellow-400 text-xs"><Clock className="mr-1 h-3 w-3" />{t("Grace")}</Badge>}
+            {isReadonly && <Badge variant="destructive" className="text-xs">{t("Read-Only")}</Badge>}
             <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="h-4 w-4" /></Button>
           </div>
         </header>
