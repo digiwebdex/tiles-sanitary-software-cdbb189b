@@ -530,6 +530,68 @@ const FinancialStatementsPage = () => {
             </Card>
           )}
         </TabsContent>
+
+        <TabsContent value="cf" className="space-y-4">
+          <Card>
+            <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><Label>From</Label><Input type="date" value={cf.from} onChange={e => setCf({ ...cf, from: e.target.value })} /></div>
+              <div><Label>To</Label><Input type="date" value={cf.to} onChange={e => setCf({ ...cf, to: e.target.value })} /></div>
+            </CardContent>
+          </Card>
+          {cfLoading ? (
+            <p className="text-muted-foreground">Loading…</p>
+          ) : cashFlow ? (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Cash Flow (Cash in Hand)</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Opening cash</span>
+                  <span className="font-medium">{formatCurrency(cashFlow.opening_cash)}</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-600 mb-1">Cash In</p>
+                  <Table>
+                    <TableBody>
+                      {cashFlow.inflows.length === 0 ? (
+                        <TableRow><TableCell className="text-muted-foreground text-sm">No inflows</TableCell></TableRow>
+                      ) : cashFlow.inflows.map((r, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="capitalize">{r.label.replace(/_/g, " ")}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(r.amount)}</TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="font-semibold"><TableCell>Total In</TableCell><TableCell className="text-right text-emerald-600">{formatCurrency(cashFlow.total_in)}</TableCell></TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-rose-600 mb-1">Cash Out</p>
+                  <Table>
+                    <TableBody>
+                      {cashFlow.outflows.length === 0 ? (
+                        <TableRow><TableCell className="text-muted-foreground text-sm">No outflows</TableCell></TableRow>
+                      ) : cashFlow.outflows.map((r, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="capitalize">{r.label.replace(/_/g, " ")}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(r.amount)}</TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="font-semibold"><TableCell>Total Out</TableCell><TableCell className="text-right text-rose-600">{formatCurrency(cashFlow.total_out)}</TableCell></TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex justify-between border-t pt-3 text-base font-bold">
+                  <span>Net cash flow</span>
+                  <span className={cashFlow.net_cash_flow >= 0 ? "text-emerald-600" : "text-rose-600"}>{formatCurrency(cashFlow.net_cash_flow)}</span>
+                </div>
+                <div className="flex justify-between text-base font-bold">
+                  <span>Closing cash</span>
+                  <span>{formatCurrency(cashFlow.closing_cash)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+        </TabsContent>
       </Tabs>
     </div>
   );
