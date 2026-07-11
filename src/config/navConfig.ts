@@ -113,6 +113,7 @@ export const navSections: NavSection[] = [
     items: [
       { path: "/suppliers", label: "Suppliers", icon: Truck, roles: ["manager", "accountant"] },
       { path: "/purchases", label: "Purchases", icon: ShoppingCart, roles: ["manager"] },
+      { path: "/purchases/orders", label: "Purchase Orders", icon: ClipboardCheck, roles: ["manager"] },
       { path: "/purchases/auto-draft", label: "Auto-PO Drafts", icon: Sparkles, dealerAdminOnly: true, tier: "advanced" },
       { path: "/purchase-returns", label: "Purchase Returns", icon: Undo2, roles: ["manager"] },
       { path: "/payables", label: "Supplier Payables", icon: Truck, dealerAdminOnly: true },

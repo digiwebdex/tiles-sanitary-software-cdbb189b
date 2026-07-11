@@ -140,7 +140,8 @@ const HOME_MODULES: HomeModule[] = [
           { path: "/suppliers", label: "Suppliers", labelBn: "সরবরাহকারী তালিকা", roles: ["manager", "accountant"] },
           { path: "/purchases/new", label: "Purchase Entry", labelBn: "ক্রয় এন্ট্রি", roles: ["manager"] },
           { path: "/purchases", label: "Purchase List", labelBn: "ক্রয় তালিকা", roles: ["manager"] },
-          { path: "/purchases/auto-draft", label: "Auto-PO Drafts", labelBn: "স্বয়ংক্রিয় ক্রয় আদেশ", dealerAdminOnly: true, tier: "advanced" },
+          { path: "/purchases/orders", label: "Purchase Orders", labelBn: "ক্রয় আদেশ", roles: ["manager"] },
+          { path: "/purchases/auto-draft", label: "Auto-PO Drafts", labelBn: "স্বয়ংক্রিয় ক্রয় খসড়া", dealerAdminOnly: true, tier: "advanced" },
         ],
       },
       {

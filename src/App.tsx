@@ -90,6 +90,8 @@ import Phase3ReportsPage from "./pages/reports/Phase3ReportsPage";
 import SalaryVoucherPage from "./pages/vouchers/SalaryVoucherPage";
 import DirectorVoucherPage from "./pages/vouchers/DirectorVoucherPage";
 import AutoPoDraftPage from "./pages/purchases/AutoPoDraftPage";
+import PurchaseOrdersPage from "./pages/purchases/PurchaseOrdersPage";
+import CreatePurchaseOrderPage from "./pages/purchases/CreatePurchaseOrderPage";
 import CustomerStatementPage from "./pages/customers/CustomerStatementPage";
 import CustomerProfilePage from "./pages/customers/CustomerProfilePage";
 import CustomerStatementsBulkPage from "./pages/customers/CustomerStatementsBulkPage";
@@ -266,6 +268,8 @@ const App = () => (
             <Route path="/cashbook" element={<ProtectedRoute><AppLayout><CashbookPage /></AppLayout></ProtectedRoute>} />
             <Route path="/cash-closing" element={<ProtectedRoute><AppLayout><CashClosingPage /></AppLayout></ProtectedRoute>} />
             <Route path="/purchases/auto-draft" element={<ProtectedRoute><AppLayout><AutoPoDraftPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchases/orders" element={<ProtectedRoute><AppLayout><PurchaseOrdersPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/purchases/orders/new" element={<ProtectedRoute><AppLayout><CreatePurchaseOrderPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/statements" element={<ProtectedRoute><AppLayout><CustomerStatementsBulkPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/:customerId/statement" element={<ProtectedRoute><AppLayout><CustomerStatementPage /></AppLayout></ProtectedRoute>} />
             <Route path="/customers/:id/profile" element={<ProtectedRoute allowReadonly><AppLayout><CustomerProfilePage /></AppLayout></ProtectedRoute>} />
