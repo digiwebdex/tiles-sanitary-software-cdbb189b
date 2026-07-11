@@ -21,7 +21,7 @@ import {
 import {
   TrendingUp, Package, AlertTriangle, Receipt, Banknote,
   ShoppingCart, Wallet, Users, CreditCard, Clock, BarChart2, Layers, Truck,
-  Send, PackageCheck,
+  Send, PackageCheck, LayoutGrid,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { formatStockUnit } from "@/lib/units";
@@ -247,6 +247,24 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
           </Badge>
         )}
       </div>
+
+      {/* All-modules launcher — icon grid with submenus, like Bangla ERP home */}
+      <Card
+        className="cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/60 transition-colors"
+        onClick={() => navigate("/appauth-home")}
+      >
+        <CardContent className="flex items-center gap-3 py-4">
+          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <LayoutGrid className="h-6 w-6" />
+          </span>
+          <div>
+            <p className="font-semibold text-foreground">All Modules · সব মডিউল</p>
+            <p className="text-sm text-muted-foreground">
+              সব মডিউল ও সাব-মেনু আইকনসহ এক পেজে — every module &amp; sub-menu in one place
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Links */}
       <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
