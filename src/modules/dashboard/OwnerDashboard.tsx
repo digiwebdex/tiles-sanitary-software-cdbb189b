@@ -26,6 +26,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { formatStockUnit } from "@/lib/units";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useState } from "react";
 import { ReservationDashboardWidgets } from "./ReservationDashboardWidgets";
 import { ApprovalDashboardWidgets } from "@/components/approval/ApprovalDashboardWidgets";
@@ -108,6 +109,7 @@ const Section = ({ title, children, cols = "grid-cols-2 md:grid-cols-4" }: Secti
 const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
   const permissions = usePermissions();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [latestTab, setLatestTab] = useState("sales");
   const { data: dealerInfo } = useDealerInfo();
   
@@ -239,7 +241,7 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
       <OnboardingChecklist dealerId={dealerId} />
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("Dashboard")}</h1>
         {totalAlerts > 0 && (
           <Badge variant="destructive" className="gap-1.5">
             <AlertTriangle className="h-3 w-3" />
@@ -269,11 +271,11 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
       {/* Quick Links */}
       <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
         {[
-          { label: "Products", icon: Package, path: "/products" },
-          { label: "Sales", icon: Receipt, path: "/sales" },
-          { label: "Purchases", icon: ShoppingCart, path: "/purchases" },
-          { label: "Customers", icon: Users, path: "/customers" },
-          { label: "Suppliers", icon: Truck, path: "/suppliers" },
+          { label: t("Products"), icon: Package, path: "/products" },
+          { label: t("Sales"), icon: Receipt, path: "/sales" },
+          { label: t("Purchases"), icon: ShoppingCart, path: "/purchases" },
+          { label: t("Customers"), icon: Users, path: "/customers" },
+          { label: t("Suppliers"), icon: Truck, path: "/suppliers" },
         ].map((link) => (
           <Card
             key={link.path}
@@ -291,7 +293,7 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
       {/* Latest Five */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Latest Entries</CardTitle>
+          <CardTitle className="text-base">{t("Latest Entries")}</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs value={latestTab} onValueChange={setLatestTab}>
@@ -307,17 +309,17 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Customer</TableHead>
+                      <TableHead>{t("Date")}</TableHead>
+                      <TableHead>{t("Invoice")}</TableHead>
+                      <TableHead>{t("Customer")}</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead className="text-right">Due</TableHead>
+                      <TableHead className="text-right">{t("Amount")}</TableHead>
+                      <TableHead className="text-right">{t("Due")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(latestSales ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No sales yet</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">{t("No sales yet")}</TableCell></TableRow>
                     ) : (latestSales ?? []).map((s: any) => (
                       <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/sales/${s.id}/invoice`)}>
                         <TableCell>{s.sale_date}</TableCell>
@@ -340,15 +342,15 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Invoice</TableHead>
+                      <TableHead>{t("Date")}</TableHead>
+                      <TableHead>{t("Invoice")}</TableHead>
                       <TableHead>Supplier</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">{t("Amount")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(latestPurchases ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No purchases yet</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">{t("No purchases yet")}</TableCell></TableRow>
                     ) : (latestPurchases ?? []).map((p: any) => (
                       <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/purchases/${p.id}`)}>
                         <TableCell>{p.purchase_date}</TableCell>
@@ -367,14 +369,14 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Phone</TableHead>
+                      <TableHead>{t("Name")}</TableHead>
+                      <TableHead>{t("Phone")}</TableHead>
                       <TableHead>Type</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(latestCustomers ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No customers yet</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">{t("No customers yet")}</TableCell></TableRow>
                     ) : (latestCustomers ?? []).map((c: any) => (
                       <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/customers/${c.id}/edit`)}>
                         <TableCell className="font-medium">{c.name}</TableCell>
@@ -392,14 +394,14 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Phone</TableHead>
+                      <TableHead>{t("Name")}</TableHead>
+                      <TableHead>{t("Phone")}</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(latestSuppliers ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No suppliers yet</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">{t("No suppliers yet")}</TableCell></TableRow>
                     ) : (latestSuppliers ?? []).map((s: any) => (
                       <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/suppliers/${s.id}/edit`)}>
                         <TableCell className="font-medium">{s.name}</TableCell>
@@ -416,28 +418,28 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
       </Card>
 
       {/* Today */}
-      <Section title="Today">
-        <KpiCard title="Sales" value={formatCurrency(data.todaySales)} icon={Banknote} iconClass="text-primary" />
-        <KpiCard title="Collection" value={formatCurrency(data.todayCollection)} icon={Wallet} iconClass="text-primary" />
+      <Section title={t("Today")}>
+        <KpiCard title={t("Sales")} value={formatCurrency(data.todaySales)} icon={Banknote} iconClass="text-primary" />
+        <KpiCard title={t("Collection")} value={formatCurrency(data.todayCollection)} icon={Wallet} iconClass="text-primary" />
         {permissions.canViewProfit && (
           <KpiCard
-            title="Profit"
+            title={t("Profit")}
             value={formatCurrency(data.todayProfit)}
             icon={TrendingUp}
             iconClass={data.todayProfit >= 0 ? "text-primary" : "text-destructive"}
             valueClass={data.todayProfit >= 0 ? "text-foreground" : "text-destructive"}
           />
         )}
-        <KpiCard title="SFT Sold" value={`${data.todaySftSold.toLocaleString()} sft`} icon={BarChart2} iconClass="text-primary" />
+        <KpiCard title={t("SFT Sold")} value={`${data.todaySftSold.toLocaleString()} sft`} icon={BarChart2} iconClass="text-primary" />
       </Section>
 
       {/* This Month */}
-      <Section title="This Month">
-        <KpiCard title="Total Sales" value={formatCurrency(data.monthlySales)} icon={ShoppingCart} iconClass="text-primary" />
-        <KpiCard title="Total Collection" value={formatCurrency(data.monthlyCollection)} icon={Wallet} iconClass="text-primary" />
+      <Section title={t("This Month")}>
+        <KpiCard title={t("Total Sales")} value={formatCurrency(data.monthlySales)} icon={ShoppingCart} iconClass="text-primary" />
+        <KpiCard title={t("Total Collection")} value={formatCurrency(data.monthlyCollection)} icon={Wallet} iconClass="text-primary" />
         {permissions.canViewProfit && (
           <KpiCard
-            title="Total Profit"
+            title={t("Total Profit")}
             value={formatCurrency(data.monthlyProfit)}
             icon={TrendingUp}
             iconClass={data.monthlyProfit >= 0 ? "text-primary" : "text-destructive"}
@@ -445,15 +447,15 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
           />
         )}
         {permissions.canViewCostPrice && (
-          <KpiCard title="Total Purchase" value={formatCurrency(data.monthlyPurchase)} icon={Package} iconClass="text-muted-foreground" />
+          <KpiCard title={t("Total Purchase")} value={formatCurrency(data.monthlyPurchase)} icon={Package} iconClass="text-muted-foreground" />
         )}
       </Section>
 
       {/* Financial Summary — owner only */}
       {permissions.canViewFinancialDashboard && (
-        <Section title="Financial Summary">
+        <Section title={t("Financial Summary")}>
           <KpiCard
-            title="Total Receivable"
+            title={t("Total Receivable")}
             value={formatCurrency(data.totalCustomerDue)}
             icon={Receipt}
             iconClass={data.totalCustomerDue > 0 ? "text-destructive" : "text-primary"}
@@ -461,15 +463,15 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
             sub="Customer outstanding"
           />
           <KpiCard
-            title="Total Payable"
+            title={t("Total Payable")}
             value={formatCurrency(data.totalSupplierPayable)}
             icon={CreditCard}
             iconClass={data.totalSupplierPayable > 0 ? "text-destructive" : "text-primary"}
             valueClass={data.totalSupplierPayable > 0 ? "text-destructive" : "text-foreground"}
             sub="Supplier outstanding"
           />
-          <KpiCard title="Cash in Hand" value={formatCurrency(data.cashInHand)} icon={Banknote} iconClass="text-primary" sub="From cash ledger" />
-          <KpiCard title="Inventory Value" value={formatCurrency(data.totalStockValue)} icon={Layers} iconClass="text-primary" sub="At avg purchase rate" />
+          <KpiCard title={t("Cash in Hand")} value={formatCurrency(data.cashInHand)} icon={Banknote} iconClass="text-primary" sub={t("From cash ledger")} />
+          <KpiCard title={t("Inventory Value")} value={formatCurrency(data.totalStockValue)} icon={Layers} iconClass="text-primary" sub={t("At avg purchase rate")} />
         </Section>
       )}
 
@@ -477,20 +479,20 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
       <BackorderSummarySection dealerId={dealerId} navigate={navigate} />
 
       {/* Delivery Summary */}
-      <Section title="Delivery Summary">
+      <Section title={t("Delivery Summary")}>
         <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate("/challans")}>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Pending Deliveries</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">{t("Pending Deliveries")}</CardTitle>
             <Truck className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
             <p className="text-lg font-bold text-foreground">{deliverySummary?.pending ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Awaiting dispatch</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("Awaiting dispatch")}</p>
           </CardContent>
         </Card>
         <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate("/challans")}>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Dispatched Today</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">{t("Dispatched Today")}</CardTitle>
             <Send className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
@@ -500,17 +502,17 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
         </Card>
         <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate("/challans")}>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Delivered Today</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">{t("Delivered Today")}</CardTitle>
             <PackageCheck className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <p className="text-lg font-bold text-foreground">{deliverySummary?.deliveredToday ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Completed today</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("Completed today")}</p>
           </CardContent>
         </Card>
         <Card className={`cursor-pointer hover:border-primary/50 transition-colors ${(deliverySummary?.late ?? 0) > 0 ? "border-destructive/40 bg-destructive/5" : ""}`} onClick={() => navigate("/challans")}>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Late Deliveries</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">{t("Late Deliveries")}</CardTitle>
             <Clock className={`h-4 w-4 ${(deliverySummary?.late ?? 0) > 0 ? "text-destructive" : "text-muted-foreground"}`} />
           </CardHeader>
           <CardContent>
@@ -578,9 +580,9 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Customer</TableHead>
-                    <TableHead className="text-right">Outstanding</TableHead>
-                    <TableHead className="text-right">Days</TableHead>
+                    <TableHead>{t("Customer")}</TableHead>
+                    <TableHead className="text-right">{t("Outstanding")}</TableHead>
+                    <TableHead className="text-right">{t("Days")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -609,47 +611,47 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
 
       {/* Alerts */}
       {totalAlerts > 0 && (
-        <Section title="Alerts">
+        <Section title={t("Alerts")}>
           {data.overdueCustomerCount > 0 && (
             <Card className="border-destructive/40 bg-destructive/5">
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Overdue Customers</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">{t("Overdue Customers")}</CardTitle>
                 <Clock className="h-4 w-4 text-destructive" />
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-bold text-destructive">{data.overdueCustomerCount}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Exceeded payment deadline</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("Exceeded payment deadline")}</p>
               </CardContent>
             </Card>
           )}
           {data.creditExceededCount > 0 && (
             <Card className="border-destructive/40 bg-destructive/5">
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Credit Limit Exceeded</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">{t("Credit Limit Exceeded")}</CardTitle>
                 <CreditCard className="h-4 w-4 text-destructive" />
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-bold text-destructive">{data.creditExceededCount}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Over their credit limit</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("Over their credit limit")}</p>
               </CardContent>
             </Card>
           )}
           {data.lowStockItems.length > 0 && (
             <Card className="border-yellow-500/40 bg-yellow-50/50 dark:bg-yellow-900/10">
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Low Stock Warning</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">{t("Low Stock Warning")}</CardTitle>
                 <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-bold text-yellow-700 dark:text-yellow-400">{data.lowStockItems.length}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Below reorder level</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("Below reorder level")}</p>
               </CardContent>
             </Card>
           )}
           {data.deadStockCount > 0 && (
             <Card className="border-destructive/30 bg-destructive/5">
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Dead Stock Alert</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">{t("Dead Stock Alert")}</CardTitle>
                 <Package className="h-4 w-4 text-destructive" />
               </CardHeader>
               <CardContent>
@@ -682,11 +684,11 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Sales by Category</CardTitle>
+            <CardTitle className="text-base">{t("Sales by Category")}</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center justify-center">
             {data.categorySales.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No data</p>
+              <p className="text-muted-foreground text-sm">{t("No data")}</p>
             ) : (
               <div className="w-full">
                 <ChartContainer
@@ -731,7 +733,7 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
       {/* Sales Trend */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Monthly Sales Trend</CardTitle>
+          <CardTitle className="text-base">{t("Monthly Sales Trend")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ChartContainer config={trendChartConfig} className="h-[280px] w-full">
@@ -754,7 +756,7 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
           </CardHeader>
           <CardContent>
             {data.topCustomers.length === 0 ? (
-              <p className="text-muted-foreground text-sm text-center py-8">No data</p>
+              <p className="text-muted-foreground text-sm text-center py-8">{t("No data")}</p>
             ) : (
               <ChartContainer config={topCustomerChartConfig} className="h-[350px] w-full">
                 <BarChart data={data.topCustomers} layout="vertical" margin={{ left: 80 }}>
@@ -775,7 +777,7 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
           </CardHeader>
           <CardContent className="flex items-center justify-center">
             {data.productPerformance.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No data</p>
+              <p className="text-muted-foreground text-sm">{t("No data")}</p>
             ) : (
               <div className="w-full">
                 <ChartContainer
@@ -844,13 +846,13 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Current</TableHead>
-                    <TableHead className="text-right">Reorder Level</TableHead>
+                    <TableHead>{t("SKU")}</TableHead>
+                    <TableHead>{t("Category")}</TableHead>
+                    <TableHead className="text-right">{t("Current")}</TableHead>
+                    <TableHead className="text-right">{t("Reorder Level")}</TableHead>
                     <TableHead className="text-right">Suggested Qty</TableHead>
                     <TableHead className="text-center">Status</TableHead>
-                    <TableHead className="text-center">Action</TableHead>
+                    <TableHead className="text-center">{t("Action")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -877,7 +879,7 @@ const OwnerDashboard = ({ dealerId }: OwnerDashboardProps) => {
                         </TableCell>
                         <TableCell className="text-center">
                           {isOutOfStock ? (
-                            <Badge variant="destructive" className="text-xs">Out of Stock</Badge>
+                            <Badge variant="destructive" className="text-xs">{t("Out of Stock")}</Badge>
                           ) : (
                             <Badge variant="secondary" className="text-xs border-destructive/50 text-destructive">Low</Badge>
                           )}
@@ -928,30 +930,30 @@ function BackorderSummarySection({ dealerId, navigate }: { dealerId: string; nav
   }
 
   return (
-    <Section title="Backorder & Fulfillment">
+    <Section title={t("Backorder & Fulfillment")}>
       <Card className="cursor-pointer hover:border-primary/50 transition-colors border-amber-300/50" onClick={() => navigate("/reports")}>
         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Active Backorders</CardTitle>
+          <CardTitle className="text-xs font-medium text-muted-foreground">{t("Active Backorders")}</CardTitle>
           <AlertTriangle className="h-4 w-4 text-amber-600" />
         </CardHeader>
         <CardContent>
           <p className="text-lg font-bold text-amber-600">{backorderStats?.totalBackorders ?? 0}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Items awaiting stock</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("Items awaiting stock")}</p>
         </CardContent>
       </Card>
       <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate("/reports")}>
         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Pending Fulfillment</CardTitle>
+          <CardTitle className="text-xs font-medium text-muted-foreground">{t("Pending Fulfillment")}</CardTitle>
           <Package className="h-4 w-4 text-orange-600" />
         </CardHeader>
         <CardContent>
           <p className="text-lg font-bold text-orange-600">{backorderStats?.pendingFulfillment ?? 0}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Not yet fully delivered</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("Not yet fully delivered")}</p>
         </CardContent>
       </Card>
       <Card className="cursor-pointer hover:border-primary/50 transition-colors border-blue-300/50" onClick={() => navigate("/reports")}>
         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Ready for Delivery</CardTitle>
+          <CardTitle className="text-xs font-medium text-muted-foreground">{t("Ready for Delivery")}</CardTitle>
           <PackageCheck className="h-4 w-4 text-blue-600" />
         </CardHeader>
         <CardContent>
@@ -961,7 +963,7 @@ function BackorderSummarySection({ dealerId, navigate }: { dealerId: string; nav
       </Card>
       <Card className="cursor-pointer hover:border-primary/50 transition-colors border-orange-300/50" onClick={() => navigate("/reports")}>
         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Partially Delivered</CardTitle>
+          <CardTitle className="text-xs font-medium text-muted-foreground">{t("Partially Delivered")}</CardTitle>
           <Package className="h-4 w-4 text-orange-500" />
         </CardHeader>
         <CardContent>
@@ -971,7 +973,7 @@ function BackorderSummarySection({ dealerId, navigate }: { dealerId: string; nav
       </Card>
       <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate("/reports")}>
         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Oldest Pending</CardTitle>
+          <CardTitle className="text-xs font-medium text-muted-foreground">{t("Oldest Pending")}</CardTitle>
           <AlertTriangle className="h-4 w-4 text-destructive" />
         </CardHeader>
         <CardContent>
