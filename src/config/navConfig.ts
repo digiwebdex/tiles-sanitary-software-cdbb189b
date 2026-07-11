@@ -79,6 +79,7 @@ export const navSections: NavSection[] = [
     defaultOpen: true,
     items: [
       { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, readonlyAllowed: true },
+      { path: "/appauth-home", label: "Module Home", icon: LayoutDashboard, readonlyAllowed: true },
       { path: "/approvals", label: "Approvals", icon: ShieldCheck, roles: ["manager", "accountant"] },
       { path: "/notices", label: "Notice Board", icon: Megaphone, readonlyAllowed: true, tier: "advanced" },
       { path: "/user-guide", label: "User Guide", icon: HelpCircle, readonlyAllowed: true },

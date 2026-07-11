@@ -20,6 +20,7 @@ import GetStartedPage from "./pages/public/GetStartedPage";
 import SubscriptionBlockedPage from "./pages/auth/SubscriptionBlockedPage";
 import SubscriptionPage from "./pages/subscription/SubscriptionPage";
 import Index from "./pages/Index";
+import AppAuthHomePage from "./pages/AppAuthHomePage";
 import NotFound from "./pages/NotFound";
 import ProductsPage from "./pages/products/ProductsPage";
 import CreateProductRoute from "./pages/products/CreateProductRoute";
@@ -243,6 +244,7 @@ const App = () => (
 
             {/* Dashboard + Reports: allowed in readonly */}
             <Route path="/dashboard" element={<ProtectedRoute allowReadonly><AppLayout><Index /></AppLayout></ProtectedRoute>} />
+            <Route path="/appauth-home" element={<ProtectedRoute allowReadonly><AppLayout><AppAuthHomePage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute allowReadonly><AppLayout><ReportsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/reports/credit" element={<ProtectedRoute allowReadonly><AppLayout><CreditReportPage /></AppLayout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
