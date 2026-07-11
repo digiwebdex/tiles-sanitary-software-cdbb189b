@@ -25,6 +25,7 @@ import { vpsAuthedFetch } from "@/lib/vpsAuthClient";
 import { CreditStatusBadge } from "@/components/CreditStatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { exportToExcel } from "@/lib/exportUtils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const PAGE_SIZE = 25;
 
@@ -59,6 +60,7 @@ const CustomerList = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const permissions = usePermissions();
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -96,7 +98,7 @@ const CustomerList = () => {
       customerService.toggleStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customers"] });
-      toast.success("Customer status updated");
+      toast.success(t("Customer status updated"));
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -117,7 +119,7 @@ const CustomerList = () => {
         price_tier_id: c.price_tier_id ?? null,
       } as any);
       queryClient.invalidateQueries({ queryKey: ["customers"] });
-      toast.success("Customer duplicated");
+      toast.success(t("Customer duplicated"));
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -125,7 +127,7 @@ const CustomerList = () => {
 
   const handleExport = () => {
     if (!permissions.canExportReports) {
-      toast.error("You don't have permission to export.");
+      toast.error(t("You don't have permission to export."));
       return;
     }
     const exportData = customers.map((c) => ({
@@ -142,26 +144,26 @@ const CustomerList = () => {
       ...commonColumns.customers,
       { header: "Due Balance", key: "due", format: "currency" },
     ], `customers-${new Date().toISOString().split("T")[0]}`);
-    toast.success("Customers exported");
+    toast.success(t("Customers exported"));
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Customers</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("Customers")}</h1>
         <div className="flex gap-2">
           {permissions.canExportReports && (
             <>
               <Button variant="outline" onClick={handleExport}>
-                <Download className="mr-2 h-4 w-4" /> Export
+                <Download className="mr-2 h-4 w-4" /> {t("Export")}
               </Button>
               <Button variant="outline" onClick={() => setShowImport(true)}>
-                <Upload className="mr-2 h-4 w-4" /> Import
+                <Upload className="mr-2 h-4 w-4" /> {t("Import")}
               </Button>
             </>
           )}
           <Button onClick={() => navigate("/customers/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Customer
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Customer")}
           </Button>
         </div>
       </div>
@@ -170,7 +172,7 @@ const CustomerList = () => {
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name, phone or reference…"
+            placeholder={t("Search by name, phone or reference…")}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="pl-9"
@@ -181,24 +183,24 @@ const CustomerList = () => {
           onValueChange={(v) => { setTypeFilter(v === "all" ? "" : v); setPage(1); }}
         >
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="All Types" />
+            <SelectValue placeholder={t("All Types")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="retailer">Retailer</SelectItem>
-            <SelectItem value="customer">Regular</SelectItem>
-            <SelectItem value="project">Project</SelectItem>
+            <SelectItem value="all">{t("All Types")}</SelectItem>
+            <SelectItem value="retailer">{t("Retailer")}</SelectItem>
+            <SelectItem value="customer">{t("Regular")}</SelectItem>
+            <SelectItem value="project">{t("Project")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">{t("Loading…")}</p>
       ) : customers.length === 0 ? (
         <div className="text-center py-12 space-y-3">
-          <p className="text-muted-foreground">No customers found.</p>
+          <p className="text-muted-foreground">{t("No customers found.")}</p>
           <Button onClick={() => navigate("/customers/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Your First Customer
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Your First Customer")}
           </Button>
         </div>
       ) : (
@@ -207,16 +209,16 @@ const CustomerList = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Customer Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead className="text-right">Opening Bal.</TableHead>
-                  <TableHead className="text-right">Due Balance</TableHead>
-                      <TableHead>Aging</TableHead>
-                      <TableHead>Credit</TableHead>
-                      <TableHead>Status</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead>{t("Customer Name")}</TableHead>
+                  <TableHead>{t("Type")}</TableHead>
+                  <TableHead>{t("Phone")}</TableHead>
+                  <TableHead>{t("Reference")}</TableHead>
+                  <TableHead className="text-right">{t("Opening Bal.")}</TableHead>
+                  <TableHead className="text-right">{t("Due Balance")}</TableHead>
+                      <TableHead>{t("Aging")}</TableHead>
+                      <TableHead>{t("Credit")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
+                  <TableHead className="w-24">{t("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -270,37 +272,37 @@ const CustomerList = () => {
                       </TableCell>
                       <TableCell>
                         <Badge variant={c.status === "active" ? "default" : "secondary"}>
-                          {c.status === "active" ? "Active" : "Inactive"}
+                          {c.status === "active" ? t("Active") : t("Inactive")}
                         </Badge>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="outline" className="h-8 px-3 text-xs">
-                              Actions
+                              {t("Actions")}
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}/profile`)}>
-                              <Eye className="mr-2 h-4 w-4" /> 360° Profile
+                              <Eye className="mr-2 h-4 w-4" /> {t("360° Profile")}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => navigate(`/customers/${c.id}/edit`)}>
-                              <Pencil className="mr-2 h-4 w-4" /> Edit Customer
+                              <Pencil className="mr-2 h-4 w-4" /> {t("Edit Customer")}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleDuplicate(c)}>
-                              <Copy className="mr-2 h-4 w-4" /> Duplicate Customer
+                              <Copy className="mr-2 h-4 w-4" /> {t("Duplicate Customer")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => navigate(`/sales/new`)}>
-                              <ShoppingCart className="mr-2 h-4 w-4" /> Add Sale
+                              <ShoppingCart className="mr-2 h-4 w-4" /> {t("Add Sale")}
                             </DropdownMenuItem>
                             {permissions.canRecordCollections && (
                               <DropdownMenuItem onClick={() => navigate(`/collections`)}>
-                                <CreditCard className="mr-2 h-4 w-4" /> Add Payment
+                                <CreditCard className="mr-2 h-4 w-4" /> {t("Add Payment")}
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => navigate(`/ledger?customer=${c.id}`)}>
-                              <BookOpen className="mr-2 h-4 w-4" /> View Ledger
+                              <BookOpen className="mr-2 h-4 w-4" /> {t("View Ledger")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -313,11 +315,11 @@ const CustomerList = () => {
                             >
                               {c.status === "active" ? (
                                 <>
-                                  <ToggleLeft className="mr-2 h-4 w-4" /> Deactivate
+                                  <ToggleLeft className="mr-2 h-4 w-4" /> {t("Deactivate")}
                                 </>
                               ) : (
                                 <>
-                                  <ToggleRight className="mr-2 h-4 w-4" /> Activate
+                                  <ToggleRight className="mr-2 h-4 w-4" /> {t("Activate")}
                                 </>
                               )}
                             </DropdownMenuItem>
@@ -338,7 +340,7 @@ const CustomerList = () => {
       <BulkImportDialog
         open={showImport}
         onOpenChange={setShowImport}
-        title="Customers"
+        title={t("Customers")}
         columns={customerColumns}
         sampleData={customerSampleData}
         onImport={async (rows, mode) => {

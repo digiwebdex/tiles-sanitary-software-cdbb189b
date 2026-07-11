@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Landmark, MessageCircle, Receipt, Search, Settings, ShoppingCart,
   UserCog, Users, LayoutDashboard, ChevronRight, type LucideIcon,
+  UserPlus, PackagePlus, FilePlus2, ClipboardCheck, Dot,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,31 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePermissions } from "@/hooks/usePermissions";
-import { filterNavItem, type NavItem } from "@/config/navConfig";
+import { filterNavItem, navSections, type NavItem } from "@/config/navConfig";
+
+/**
+ * Per-item icon lookup. Reuses the sidebar's icons for every nav path, plus a
+ * supplement for the "create/new" shortcuts that aren't sidebar items — so the
+ * launcher is icon-driven like the legacy Bangla ERP home.
+ */
+const PATH_ICON: Record<string, LucideIcon> = {};
+for (const section of navSections) {
+  for (const item of section.items) PATH_ICON[item.path] = item.icon;
+}
+Object.assign(PATH_ICON, {
+  "/customers/new": UserPlus,
+  "/products/new": PackagePlus,
+  "/purchases/new": ShoppingCart,
+  "/purchases/orders": ClipboardCheck,
+  "/sales/new": Receipt,
+  "/settings/roles": UserCog,
+  "/settings/data-backup": FilePlus2,
+  "/settings/pricing-tiers": Landmark,
+} satisfies Record<string, LucideIcon>);
+
+function iconForPath(path: string): LucideIcon {
+  return PATH_ICON[path] ?? Dot;
+}
 
 /**
  * Module launcher home page (/appauth-home), mirroring the legacy Bangla ERP
@@ -395,19 +420,23 @@ const AppAuthHomePage = () => {
                     <div className="flex flex-col">
                       {group.items.map((item) => {
                         const disabled = isReadonly && !item.readonlyAllowed;
+                        const ItemIcon = iconForPath(item.path);
                         return (
                           <button
                             key={item.path}
                             onClick={() => !disabled && navigate(item.path)}
                             disabled={disabled}
                             className={cn(
-                              "group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                              "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                               disabled
                                 ? "opacity-40 cursor-not-allowed"
                                 : "hover:bg-accent hover:text-accent-foreground",
                             )}
                           >
-                            <span>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                              <ItemIcon className="h-4 w-4" />
+                            </span>
+                            <span className="min-w-0 flex-1">
                               {primary(item.label, item.labelBn)}{" "}
                               <span className="text-xs text-muted-foreground">({secondary(item.label, item.labelBn)})</span>
                             </span>

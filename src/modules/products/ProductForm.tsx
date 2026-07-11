@@ -32,6 +32,7 @@ import { productService } from "@/services/productService";
 import { uploadProductImage, resolveImageUrl } from "@/lib/uploads";
 import { toast } from "sonner";
 import MigrateToSqftButton from "@/modules/products/MigrateToSqftButton";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface ProductFormProps {
   defaultValues?: Partial<ProductFormValues>;
@@ -49,6 +50,7 @@ const generateSKU = () => {
 };
 
 const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }: ProductFormProps) => {
+  const { t } = useLanguage();
   const [skuError, setSkuError] = useState<string | null>(null);
 
   // Fetch last purchase cost for this product (only in edit mode)
@@ -122,9 +124,9 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
     try {
       const result = await uploadProductImage(file);
       form.setValue("image_url", result.url, { shouldDirty: true });
-      toast.success("Image uploaded");
+      toast.success(t("Image uploaded"));
     } catch (err: any) {
-      toast.error(err?.message || "Image upload failed");
+      toast.error(err?.message || t("Image upload failed"));
     } finally {
       setUploadingImage(false);
     }
@@ -152,8 +154,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
     setSkuError(null);
     const isUnique = await checkSkuUnique(values.sku);
     if (!isUnique) {
-      setSkuError("This product code already exists. Please use a unique code.");
-      form.setError("sku", { message: "This product code already exists" });
+      setSkuError(t("This product code already exists. Please use a unique code."));
+      form.setError("sku", { message: t("This product code already exists") });
       return;
     }
     await onSubmit(values);
@@ -163,7 +165,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitWithValidation)} className="space-y-6">
         <p className="text-sm text-muted-foreground">
-          Please fill in the information below. Fields marked with <span className="text-destructive">*</span> are required.
+          {t("Please fill in the information below. Fields marked with")} <span className="text-destructive">*</span> {t("are required.")}
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -172,7 +174,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">
-                  Basic Information
+                  {t("Basic Information")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -181,8 +183,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Name <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input placeholder="e.g. Floor Tiles 12x12" {...field} /></FormControl>
+                      <FormLabel>{t("Product Name")} <span className="text-destructive">*</span></FormLabel>
+                      <FormControl><Input placeholder={t("e.g. Floor Tiles 12x12")} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -193,11 +195,11 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="sku"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Code (SKU) <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>{t("Product Code (SKU)")} <span className="text-destructive">*</span></FormLabel>
                       <div className="flex gap-2">
                         <FormControl>
                           <Input
-                            placeholder="e.g. TIL-001"
+                            placeholder={t("e.g. TIL-001")}
                             {...field}
                             onBlur={async (e) => {
                               field.onBlur();
@@ -206,7 +208,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                               if (val && dealerId) {
                                 const isUnique = await checkSkuUnique(val);
                                 if (!isUnique) {
-                                  const msg = "This product code already exists";
+                                  const msg = t("This product code already exists");
                                   setSkuError(msg);
                                   form.setError("sku", { message: msg });
                                 }
@@ -218,14 +220,14 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                           type="button"
                           variant="outline"
                           size="icon"
-                          title="Generate random code"
+                          title={t("Generate random code")}
                           onClick={() => form.setValue("sku", generateSKU())}
                         >
                           <Shuffle className="h-4 w-4" />
                         </Button>
                       </div>
                       <FormDescription>
-                        Enter a unique product code (e.g. brand-size-grade)
+                        {t("Enter a unique product code (e.g. brand-size-grade)")}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -237,8 +239,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="brand"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Brand <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input placeholder="e.g. DBL Ceramics" {...field} /></FormControl>
+                      <FormLabel>{t("Brand")} <span className="text-destructive">*</span></FormLabel>
+                      <FormControl><Input placeholder={t("e.g. DBL Ceramics")} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -249,7 +251,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="category"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Category <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>{t("Category")} <span className="text-destructive">*</span></FormLabel>
                       <Select onValueChange={(val) => {
                         field.onChange(val);
                         if (val === "sanitary") {
@@ -259,10 +261,10 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                           form.setValue("unit_type", "box_sft");
                         }
                       }} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger></FormControl>
+                        <FormControl><SelectTrigger><SelectValue placeholder={t("Select Category")} /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="tiles">Tiles</SelectItem>
-                          <SelectItem value="sanitary">Sanitary</SelectItem>
+                          <SelectItem value="tiles">{t("Tiles")}</SelectItem>
+                          <SelectItem value="sanitary">{t("Sanitary")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -276,8 +278,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="product_group"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Product Group</FormLabel>
-                        <FormControl><Input placeholder="e.g. Floor, Wall, Vitrified" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormLabel>{t("Product Group")}</FormLabel>
+                        <FormControl><Input placeholder={t("e.g. Floor, Wall, Vitrified")} {...field} value={field.value ?? ""} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -287,8 +289,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="grade"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Grade</FormLabel>
-                        <FormControl><Input placeholder="e.g. A, AA, Premium" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormLabel>{t("Grade")}</FormLabel>
+                        <FormControl><Input placeholder={t("e.g. A, AA, Premium")} {...field} value={field.value ?? ""} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -300,11 +302,11 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Description</FormLabel>
+                      <FormLabel>{t("Product Description")}</FormLabel>
                       <FormControl>
                         <textarea
                           className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          placeholder="Optional notes shown on product detail / invoice"
+                          placeholder={t("Optional notes shown on product detail / invoice")}
                           maxLength={2000}
                           {...field}
                           value={field.value ?? ""}
@@ -320,7 +322,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">
-                  Unit & Dimensions
+                  {t("Unit & Dimensions")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -331,12 +333,12 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="unit_type"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Product Unit <span className="text-destructive">*</span></FormLabel>
+                        <FormLabel>{t("Product Unit")} <span className="text-destructive">*</span></FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select Unit" /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger><SelectValue placeholder={t("Select Unit")} /></SelectTrigger></FormControl>
                           <SelectContent>
-                            <SelectItem value="box_sft">Box / SFT</SelectItem>
-                            <SelectItem value="piece">Piece</SelectItem>
+                            <SelectItem value="box_sft">{t("Box / SFT")}</SelectItem>
+                            <SelectItem value="piece">{t("Piece")}</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -350,17 +352,17 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                       name="per_box_sft"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Per Box SFT <span className="text-destructive">*</span></FormLabel>
+                          <FormLabel>{t("Per Box SFT")} <span className="text-destructive">*</span></FormLabel>
                           <FormControl>
                             <Input
                               type="number"
                               step="0.01"
-                              placeholder="e.g. 12.5"
+                              placeholder={t("e.g. 12.5")}
                               {...field}
                               value={field.value ?? ""}
                             />
                           </FormControl>
-                          <FormDescription>Square feet per box for SFT calculation</FormDescription>
+                          <FormDescription>{t("Square feet per box for SFT calculation")}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -372,20 +374,20 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="pieces_per_box"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Pieces per Box <span className="text-destructive">*</span></FormLabel>
+                        <FormLabel>{t("Pieces per Box")} <span className="text-destructive">*</span></FormLabel>
                         <FormControl>
                           <Input
                             type="number"
                             min={1}
                             step={1}
-                            placeholder="e.g. 4"
+                            placeholder={t("e.g. 4")}
                             {...field}
                             value={field.value ?? 1}
                             onChange={(e) => field.onChange(e.target.value === "" ? "" : Number(e.target.value))}
                           />
                         </FormControl>
                         <FormDescription>
-                          How many individual pieces are inside one box. Used for Box + Pc dual-unit stock tracking. Default 1 if items are sold loose.
+                          {t("How many individual pieces are inside one box. Used for Box + Pc dual-unit stock tracking. Default 1 if items are sold loose.")}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -398,14 +400,14 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium">Tile Size (for SQFT calculation)</p>
+                        <p className="text-sm font-medium">{t("Tile Size (for SQFT calculation)")}</p>
                         <p className="text-xs text-muted-foreground">
-                          Enter physical tile dimensions. SQFT per piece and per box are auto-calculated.
+                          {t("Enter physical tile dimensions. SQFT per piece and per box are auto-calculated.")}
                         </p>
                       </div>
                       {stockBaseUnit === "sqft" && (
                         <span className="text-xs font-semibold uppercase tracking-wide rounded bg-primary/15 text-primary px-2 py-1">
-                          Base Unit = SQFT
+                          {t("Base Unit = SQFT")}
                         </span>
                       )}
                     </div>
@@ -416,7 +418,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         name="tile_width"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Width</FormLabel>
+                            <FormLabel>{t("Width")}</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
@@ -436,7 +438,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         name="tile_height"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Height</FormLabel>
+                            <FormLabel>{t("Height")}</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
@@ -456,13 +458,13 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         name="size_unit"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Unit</FormLabel>
+                            <FormLabel>{t("Unit")}</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value ?? "inch"}>
                               <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                               <SelectContent>
-                                <SelectItem value="inch">Inch</SelectItem>
-                                <SelectItem value="cm">CM</SelectItem>
-                                <SelectItem value="feet">Feet</SelectItem>
+                                <SelectItem value="inch">{t("Inch")}</SelectItem>
+                                <SelectItem value="cm">{t("CM")}</SelectItem>
+                                <SelectItem value="feet">{t("Feet")}</SelectItem>
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -473,13 +475,13 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-md border bg-muted/30 px-3 py-2">
-                        <p className="text-[11px] uppercase text-muted-foreground">SQFT per Piece</p>
+                        <p className="text-[11px] uppercase text-muted-foreground">{t("SQFT per Piece")}</p>
                         <p className="text-sm font-semibold">
                           {form.watch("sqft_per_piece")?.toString() || "—"}
                         </p>
                       </div>
                       <div className="rounded-md border bg-muted/30 px-3 py-2">
-                        <p className="text-[11px] uppercase text-muted-foreground">SQFT per Box</p>
+                        <p className="text-[11px] uppercase text-muted-foreground">{t("SQFT per Box")}</p>
                         <p className="text-sm font-semibold">
                           {form.watch("sqft_per_box")?.toString() || "—"}
                         </p>
@@ -492,9 +494,9 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                       render={({ field }) => (
                         <FormItem className="flex items-center justify-between rounded-md border p-3">
                           <div className="space-y-0.5">
-                            <FormLabel className="text-sm">Track stock in SQFT</FormLabel>
+                            <FormLabel className="text-sm">{t("Track stock in SQFT")}</FormLabel>
                             <FormDescription className="text-xs">
-                              When enabled, stock is stored as total SQFT and all entry forms ask for SQFT. Box + Pcs are shown as auto-conversion. Requires width &amp; height.
+                              {t("When enabled, stock is stored as total SQFT and all entry forms ask for SQFT. Box + Pcs are shown as auto-conversion. Requires width & height.")}
                             </FormDescription>
                           </div>
                           <FormControl>
@@ -511,8 +513,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     {productId && dealerId && stockBaseUnit !== "sqft" && (
                       <div className="rounded-md border border-dashed p-3">
                         <div className="mb-2 text-xs text-muted-foreground">
-                          One-time backfill: convert existing piece-based stock for this product
-                          to SQFT canonical. Requires width, height, and pieces/box saved first.
+                          {t("One-time backfill: convert existing piece-based stock for this product to SQFT canonical. Requires width, height, and pieces/box saved first.")}
                         </div>
                         <MigrateToSqftButton
                           productId={productId}
@@ -529,7 +530,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
               {category === "sanitary" && (
                 <>
                   <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                    Unit: <span className="font-medium text-foreground">Piece</span> (auto-set for sanitary items)
+                    {t("Unit:")} <span className="font-medium text-foreground">{t("Piece")}</span> {t("(auto-set for sanitary items)")}
                   </div>
 
                   <FormField
@@ -537,20 +538,20 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="pieces_per_box"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Pieces per Box <span className="text-destructive">*</span></FormLabel>
+                        <FormLabel>{t("Pieces per Box")} <span className="text-destructive">*</span></FormLabel>
                         <FormControl>
                           <Input
                             type="number"
                             min={1}
                             step={1}
-                            placeholder="e.g. 1"
+                            placeholder={t("e.g. 1")}
                             {...field}
                             value={field.value ?? 1}
                             onChange={(e) => field.onChange(e.target.value === "" ? "" : Number(e.target.value))}
                           />
                         </FormControl>
                         <FormDescription>
-                          Set to 1 for single-piece sanitary items, or higher if sold as carton packs.
+                          {t("Set to 1 for single-piece sanitary items, or higher if sold as carton packs.")}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -564,8 +565,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="material"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Material</FormLabel>
-                        <FormControl><Input placeholder="e.g. Ceramic, Porcelain, Stainless Steel" {...field} /></FormControl>
+                        <FormLabel>{t("Material")}</FormLabel>
+                        <FormControl><Input placeholder={t("e.g. Ceramic, Porcelain, Stainless Steel")} {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -577,8 +578,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                       name="weight"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Weight</FormLabel>
-                          <FormControl><Input placeholder="e.g. 5 kg" {...field} /></FormControl>
+                          <FormLabel>{t("Weight")}</FormLabel>
+                          <FormControl><Input placeholder={t("e.g. 5 kg")} {...field} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -588,8 +589,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                       name="warranty"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Warranty</FormLabel>
-                          <FormControl><Input placeholder="e.g. 1 Year, 5 Years" {...field} /></FormControl>
+                          <FormLabel>{t("Warranty")}</FormLabel>
+                          <FormControl><Input placeholder={t("e.g. 1 Year, 5 Years")} {...field} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -604,8 +605,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="size"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Size</FormLabel>
-                        <FormControl><Input placeholder={category === "sanitary" ? 'e.g. 20 inch' : 'e.g. 12x12'} {...field} /></FormControl>
+                        <FormLabel>{t("Size")}</FormLabel>
+                        <FormControl><Input placeholder={category === "sanitary" ? t('e.g. 20 inch') : t('e.g. 12x12')} {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -615,8 +616,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                     name="color"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Color</FormLabel>
-                        <FormControl><Input placeholder="e.g. White" {...field} /></FormControl>
+                        <FormLabel>{t("Color")}</FormLabel>
+                        <FormControl><Input placeholder={t("e.g. White")} {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -631,7 +632,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">
-                  Product Image
+                  {t("Product Image")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -663,7 +664,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                       onClick={() => imageInputRef.current?.click()}
                     >
                       <Upload className="mr-2 h-4 w-4" />
-                      {uploadingImage ? "Uploading…" : imageUrl ? "Replace Image" : "Upload Image"}
+                      {uploadingImage ? t("Uploading…") : imageUrl ? t("Replace Image") : t("Upload Image")}
                     </Button>
                     {imageUrl && (
                       <Button
@@ -674,11 +675,11 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                         onClick={() => form.setValue("image_url", "", { shouldDirty: true })}
                       >
                         <X className="mr-2 h-4 w-4" />
-                        Remove
+                        {t("Remove")}
                       </Button>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      JPG, PNG, WEBP or GIF. Max 5 MB.
+                      {t("JPG, PNG, WEBP or GIF. Max 5 MB.")}
                     </p>
                   </div>
                 </div>
@@ -688,7 +689,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">
-                  Pricing
+                  {t("Pricing")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -697,9 +698,9 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="cost_price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Cost Price</FormLabel>
+                      <FormLabel>{t("Product Cost Price")}</FormLabel>
                       <FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl>
-                      <FormDescription>Purchase/cost price per unit</FormDescription>
+                      <FormDescription>{t("Purchase/cost price per unit")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -710,9 +711,9 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="default_sale_rate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Price (Sale Rate) <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>{t("Product Price (Sale Rate)")} <span className="text-destructive">*</span></FormLabel>
                       <FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl>
-                      <FormDescription>Default selling price per unit</FormDescription>
+                      <FormDescription>{t("Default selling price per unit")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -725,19 +726,19 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
 
                   return (
                     <div className="rounded-md border bg-muted/50 p-3 space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Last Purchase Cost</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase">{t("Last Purchase Cost")}</p>
                       <div className="flex items-center gap-4 flex-wrap">
                         <div>
-                          <span className="text-xs text-muted-foreground">Rate: </span>
+                          <span className="text-xs text-muted-foreground">{t("Rate:")} </span>
                           <span className="text-sm font-semibold text-foreground">{formatCurrency(Math.max(0, lastPurchaseCost.purchase_rate))}</span>
                         </div>
                         <div>
-                          <span className="text-xs text-muted-foreground">Landed{isBoxSft ? "/Sft" : ""}: </span>
+                          <span className="text-xs text-muted-foreground">{t("Landed")}{isBoxSft ? "/Sft" : ""}: </span>
                           <span className="text-sm font-semibold text-primary">{formatCurrency(Math.max(0, lastPurchaseCost.landed_cost))}</span>
                         </div>
                         {isBoxSft && perBoxSft > 0 && (
                           <div>
-                            <span className="text-xs text-muted-foreground">Landed/Box: </span>
+                            <span className="text-xs text-muted-foreground">{t("Landed/Box:")} </span>
                             <span className="text-sm font-semibold text-primary">{formatCurrency(Math.max(0, landedPerBox))}</span>
                           </div>
                         )}
@@ -751,7 +752,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">
-                  Inventory Settings
+                  {t("Inventory Settings")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -760,9 +761,9 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   name="reorder_level"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Alert Quantity (Reorder Level)</FormLabel>
+                      <FormLabel>{t("Alert Quantity (Reorder Level)")}</FormLabel>
                       <FormControl><Input type="number" placeholder="0" {...field} /></FormControl>
-                      <FormDescription>You'll get a low-stock alert when quantity falls below this</FormDescription>
+                      <FormDescription>{t("You'll get a low-stock alert when quantity falls below this")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -776,8 +777,8 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
                   render={({ field }) => (
                     <FormItem className="flex items-center justify-between rounded-lg border p-3">
                       <div>
-                        <FormLabel className="!mt-0">Active</FormLabel>
-                        <FormDescription>Inactive products won't appear in sales</FormDescription>
+                        <FormLabel className="!mt-0">{t("Active")}</FormLabel>
+                        <FormDescription>{t("Inactive products won't appear in sales")}</FormDescription>
                       </div>
                       <FormControl>
                         <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -791,7 +792,7 @@ const ProductForm = ({ defaultValues, onSubmit, isLoading, productId, dealerId }
         </div>
 
         <Button type="submit" disabled={isLoading} className="w-full md:w-auto">
-          {isLoading ? "Saving…" : defaultValues ? "Update Product" : "Add Product"}
+          {isLoading ? t("Saving…") : defaultValues ? t("Update Product") : t("Add Product")}
         </Button>
       </form>
     </Form>

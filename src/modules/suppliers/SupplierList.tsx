@@ -21,6 +21,7 @@ import { formatCurrency } from "@/lib/utils";
 // supabase import removed — Phase 3U-2 (duplicate handler now uses supplierService.create)
 import { usePermissions } from "@/hooks/usePermissions";
 import { exportToExcel, commonColumns } from "@/lib/exportUtils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const PAGE_SIZE = 25;
 
@@ -29,6 +30,7 @@ const SupplierList = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const permissions = usePermissions();
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showImport, setShowImport] = useState(false);
@@ -48,7 +50,7 @@ const SupplierList = () => {
       supplierService.toggleStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      toast.success("Supplier status updated");
+      toast.success(t("Supplier status updated"));
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -66,7 +68,7 @@ const SupplierList = () => {
         status: s.status,
       } as any);
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      toast.success("Supplier duplicated");
+      toast.success(t("Supplier duplicated"));
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -74,7 +76,7 @@ const SupplierList = () => {
 
   const handleExport = () => {
     if (!permissions.canExportReports) {
-      toast.error("You don't have permission to export.");
+      toast.error(t("You don't have permission to export."));
       return;
     }
     exportToExcel(
@@ -90,26 +92,26 @@ const SupplierList = () => {
       commonColumns.suppliers,
       `suppliers-${new Date().toISOString().split("T")[0]}`
     );
-    toast.success("Suppliers exported");
+    toast.success(t("Suppliers exported"));
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Suppliers</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("Suppliers")}</h1>
         <div className="flex gap-2">
           {permissions.canExportReports && (
             <>
               <Button variant="outline" onClick={handleExport}>
-                <Download className="mr-2 h-4 w-4" /> Export
+                <Download className="mr-2 h-4 w-4" /> {t("Export")}
               </Button>
               <Button variant="outline" onClick={() => setShowImport(true)}>
-                <Upload className="mr-2 h-4 w-4" /> Import
+                <Upload className="mr-2 h-4 w-4" /> {t("Import")}
               </Button>
             </>
           )}
           <Button onClick={() => navigate("/suppliers/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Supplier
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Supplier")}
           </Button>
         </div>
       </div>
@@ -117,7 +119,7 @@ const SupplierList = () => {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by name, contact or phone…"
+          placeholder={t("Search by name, contact or phone…")}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="pl-9"
@@ -125,12 +127,12 @@ const SupplierList = () => {
       </div>
 
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">{t("Loading…")}</p>
       ) : suppliers.length === 0 ? (
         <div className="text-center py-12 space-y-3">
-          <p className="text-muted-foreground">No suppliers found.</p>
+          <p className="text-muted-foreground">{t("No suppliers found.")}</p>
           <Button onClick={() => navigate("/suppliers/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Add Your First Supplier
+            <Plus className="mr-2 h-4 w-4" /> {t("Add Your First Supplier")}
           </Button>
         </div>
       ) : (
@@ -139,13 +141,13 @@ const SupplierList = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Supplier Name</TableHead>
-                  <TableHead>Contact Person</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead className="text-right">Opening Bal.</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead>{t("Supplier Name")}</TableHead>
+                  <TableHead>{t("Contact Person")}</TableHead>
+                  <TableHead>{t("Phone")}</TableHead>
+                  <TableHead>{t("Email")}</TableHead>
+                  <TableHead className="text-right">{t("Opening Bal.")}</TableHead>
+                  <TableHead>{t("Status")}</TableHead>
+                  <TableHead className="w-24">{t("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -171,33 +173,33 @@ const SupplierList = () => {
                     </TableCell>
                     <TableCell>
                       <Badge variant={s.status === "active" ? "default" : "secondary"}>
-                        {s.status === "active" ? "Active" : "Inactive"}
+                        {s.status === "active" ? t("Active") : t("Inactive")}
                       </Badge>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button size="sm" variant="outline" className="h-8 px-3 text-xs">
-                            Actions
+                            {t("Actions")}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => navigate(`/suppliers/${s.id}/edit`)}>
-                            <Eye className="mr-2 h-4 w-4" /> View Details
+                            <Eye className="mr-2 h-4 w-4" /> {t("View Details")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => navigate(`/suppliers/${s.id}/edit`)}>
-                            <Pencil className="mr-2 h-4 w-4" /> Edit Supplier
+                            <Pencil className="mr-2 h-4 w-4" /> {t("Edit Supplier")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDuplicate(s)}>
-                            <Copy className="mr-2 h-4 w-4" /> Duplicate Supplier
+                            <Copy className="mr-2 h-4 w-4" /> {t("Duplicate Supplier")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => navigate(`/purchases/new`)}>
-                            <ShoppingCart className="mr-2 h-4 w-4" /> Add Purchase
+                            <ShoppingCart className="mr-2 h-4 w-4" /> {t("Add Purchase")}
                           </DropdownMenuItem>
                           {permissions.canViewSupplierLedger && (
                             <DropdownMenuItem onClick={() => navigate(`/ledger?tab=supplier&supplier=${s.id}`)}>
-                              <BookOpen className="mr-2 h-4 w-4" /> View Ledger
+                              <BookOpen className="mr-2 h-4 w-4" /> {t("View Ledger")}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
@@ -211,11 +213,11 @@ const SupplierList = () => {
                           >
                             {s.status === "active" ? (
                               <>
-                                <ToggleLeft className="mr-2 h-4 w-4" /> Deactivate
+                                <ToggleLeft className="mr-2 h-4 w-4" /> {t("Deactivate")}
                               </>
                             ) : (
                               <>
-                                <ToggleRight className="mr-2 h-4 w-4" /> Activate
+                                <ToggleRight className="mr-2 h-4 w-4" /> {t("Activate")}
                               </>
                             )}
                           </DropdownMenuItem>
@@ -235,7 +237,7 @@ const SupplierList = () => {
       <BulkImportDialog
         open={showImport}
         onOpenChange={setShowImport}
-        title="Suppliers"
+        title={t("Suppliers")}
         columns={supplierColumns}
         sampleData={supplierSampleData}
         onImport={async (rows, mode) => {

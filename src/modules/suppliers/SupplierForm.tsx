@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
   const dealerId = useDealerId();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useLanguage();
   const isEdit = !!supplier;
 
   const form = useForm<FormValues>({
@@ -87,7 +89,7 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      toast.success(isEdit ? "Supplier updated" : "Supplier created");
+      toast.success(isEdit ? t("Supplier updated") : t("Supplier created"));
       navigate("/suppliers");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -103,9 +105,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Supplier Name <span className="text-destructive">*</span></FormLabel>
+                <FormLabel>{t("Supplier Name")} <span className="text-destructive">*</span></FormLabel>
                 <FormControl>
-                  <Input placeholder="ABC Tiles Ltd." {...field} />
+                  <Input placeholder={t("ABC Tiles Ltd.")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -116,9 +118,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             name="contact_person"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Contact Person</FormLabel>
+                <FormLabel>{t("Contact Person")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="John Doe" {...field} />
+                  <Input placeholder={t("John Doe")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -133,7 +135,7 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone</FormLabel>
+                <FormLabel>{t("Phone")}</FormLabel>
                 <FormControl>
                   <Input placeholder="+880 1700-000000" {...field} />
                 </FormControl>
@@ -146,7 +148,7 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel>{t("Email")}</FormLabel>
                 <FormControl>
                   <Input type="email" placeholder="supplier@example.com" {...field} />
                 </FormControl>
@@ -162,9 +164,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
           name="address"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Address</FormLabel>
+              <FormLabel>{t("Address")}</FormLabel>
               <FormControl>
-                <Textarea placeholder="Street, City, Country" rows={2} {...field} />
+                <Textarea placeholder={t("Street, City, Country")} rows={2} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -178,9 +180,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             name="gstin"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>BIN / TIN (VAT)</FormLabel>
+                <FormLabel>{t("BIN / TIN (VAT)")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Supplier BIN or TIN" {...field} />
+                  <Input placeholder={t("Supplier BIN or TIN")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -192,9 +194,9 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Opening Balance (৳)
+                  {t("Opening Balance (৳)")}
                   {isEdit && (
-                    <span className="ml-1 text-xs text-muted-foreground">(read-only after create)</span>
+                    <span className="ml-1 text-xs text-muted-foreground">{t("(read-only after create)")}</span>
                   )}
                 </FormLabel>
                 <FormControl>
@@ -217,7 +219,7 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
             name="status"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Status</FormLabel>
+                <FormLabel>{t("Status")}</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <FormControl>
                     <SelectTrigger>
@@ -225,8 +227,8 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="active">{t("Active")}</SelectItem>
+                    <SelectItem value="inactive">{t("Inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -238,10 +240,10 @@ const SupplierForm = ({ supplier }: SupplierFormProps) => {
         {/* Actions */}
         <div className="flex gap-3 pt-2">
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving…" : isEdit ? "Update Supplier" : "Create Supplier"}
+            {mutation.isPending ? t("Saving…") : isEdit ? t("Update Supplier") : t("Create Supplier")}
           </Button>
           <Button type="button" variant="outline" onClick={() => navigate("/suppliers")}>
-            Cancel
+            {t("Cancel")}
           </Button>
         </div>
       </form>

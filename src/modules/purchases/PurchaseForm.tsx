@@ -49,6 +49,7 @@ import BarcodeScanInput from "@/modules/purchases/BarcodeScanInput";
 import PurchaseDraftMenu from "@/modules/purchases/PurchaseDraftMenu";
 import type { PurchaseDraft } from "@/services/purchaseService";
 import { purchaseService } from "@/services/purchaseService";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 
 interface LastPurchaseInfo {
@@ -70,6 +71,7 @@ interface PurchaseFormProps {
 
 const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDrafts }: PurchaseFormProps) => {
   const { planFeatures, isSuperAdmin } = useAuth();
+  const { t } = useLanguage();
   const barcodeEnabled = isSuperAdmin || !!(planFeatures?.barcodeEnabled);
   const [searchParams] = useSearchParams();
   const prefillProductId = searchParams.get("product");
@@ -274,7 +276,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
   // Phase 3U-31: barcode scan → resolve to product → addProduct.
   const handleBarcodeScan = (code: string) => {
     if (!watchSupplierId) {
-      toast.error("Select a supplier first");
+      toast.error(t("Select a supplier first"));
       return;
     }
     const lc = code.toLowerCase();
@@ -307,7 +309,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
       items: Array.isArray(p.items) ? (p.items as any) : [],
     });
     setDraftId(draft.id);
-    toast.success("Draft loaded");
+    toast.success(t("Draft loaded"));
   };
 
   const handleSaveDraft = async () => {
@@ -321,9 +323,9 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
         label,
       });
       setDraftId(saved.id);
-      toast.success("Draft saved");
+      toast.success(t("Draft saved"));
     } catch (e: any) {
-      toast.error(e?.message || "Failed to save draft");
+      toast.error(e?.message || t("Failed to save draft"));
     }
   };
 
@@ -358,7 +360,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
         <Card>
           <CardContent className="pt-5">
             <p className="mb-4 text-sm text-muted-foreground">
-              Please fill in the information below. The field labels marked with <span className="text-destructive">*</span> are required input fields.
+              {t("Please fill in the information below. The field labels marked with")} <span className="text-destructive">*</span> {t("are required input fields.")}
             </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
@@ -366,9 +368,9 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                 name="invoice_number"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reference No</FormLabel>
-                    <FormControl><Input placeholder="Auto-generated if left blank" {...field} /></FormControl>
-                    <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-generate a unique number (PUR-YYYYMMDD-NNNN).</p>
+                    <FormLabel>{t("Reference No")}</FormLabel>
+                    <FormControl><Input placeholder={t("Auto-generated if left blank")} {...field} /></FormControl>
+                    <p className="text-xs text-muted-foreground mt-1">{t("Leave blank to auto-generate a unique number (PUR-YYYYMMDD-NNNN).")}</p>
                     <FormMessage />
                   </FormItem>
 
@@ -379,7 +381,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                 name="purchase_date"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Purchase Date <span className="text-destructive">*</span></FormLabel>
+                    <FormLabel>{t("Purchase Date")} <span className="text-destructive">*</span></FormLabel>
                     <FormControl><Input type="date" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -392,7 +394,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
         {/* Supplier selection */}
         <Alert className="border-accent bg-accent/50">
           <AlertDescription className="text-accent-foreground">
-            Please select a supplier before adding any product
+            {t("Please select a supplier before adding any product")}
           </AlertDescription>
         </Alert>
 
@@ -403,11 +405,11 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
               name="supplier_id"
               render={({ field }) => (
                 <FormItem className="max-w-sm">
-                  <FormLabel>Supplier <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel>{t("Supplier")} <span className="text-destructive">*</span></FormLabel>
                   <Select onValueChange={field.onChange} value={field.value} disabled={suppliers.length === 0}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder={suppliers.length === 0 ? "No suppliers available" : "Select Supplier"} />
+                        <SelectValue placeholder={suppliers.length === 0 ? t("No suppliers available") : t("Select Supplier")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -418,11 +420,11 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                   </Select>
                   {suppliers.length === 0 && (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      No suppliers found.{" "}
+                      {t("No suppliers found.")}{" "}
                       <Link to="/suppliers" className="font-medium text-primary underline">
-                        Add a supplier
+                        {t("Add a supplier")}
                       </Link>{" "}
-                      first to create a purchase.
+                      {t("first to create a purchase.")}
                     </p>
                   )}
                   <FormMessage />
@@ -443,7 +445,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
               <div className="flex items-center gap-2 rounded-md border bg-background">
                 <Package className="ml-3 h-5 w-5 text-muted-foreground" />
                 <Input
-                  placeholder="Search products by name or SKU to add..."
+                  placeholder={t("Search products by name or SKU to add...")}
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
                   className="border-0 shadow-none focus-visible:ring-0"
@@ -454,7 +456,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
               {productSearch.trim() && watchSupplierId && (
                 <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover shadow-lg">
                   {filteredProducts.length === 0 ? (
-                    <div className="p-3 text-sm text-muted-foreground">No products found</div>
+                    <div className="p-3 text-sm text-muted-foreground">{t("No products found")}</div>
                   ) : (
                     filteredProducts.map((p) => {
                       const lastInfo = lastPurchaseMap.get(p.id);
@@ -470,11 +472,11 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           <span className="text-muted-foreground">— {p.name}</span>
                           {lastInfo && (
                             <span className="ml-auto text-xs text-primary font-medium">
-                              Last: {formatCurrency(lastInfo.purchase_rate)}
+                              {t("Last:")} {formatCurrency(lastInfo.purchase_rate)}
                             </span>
                           )}
                           {watchItems.some((item) => item.product_id === p.id) && (
-                            <span className={`${lastInfo ? '' : 'ml-auto'} text-xs text-muted-foreground`}>(added)</span>
+                            <span className={`${lastInfo ? '' : 'ml-auto'} text-xs text-muted-foreground`}>{t("(added)")}</span>
                           )}
                         </button>
                       );
@@ -484,7 +486,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
               )}
             </div>
             {!watchSupplierId && (
-              <p className="mt-2 text-xs text-muted-foreground">Select a supplier first to add products</p>
+              <p className="mt-2 text-xs text-muted-foreground">{t("Select a supplier first to add products")}</p>
             )}
           </CardContent>
         </Card>
@@ -514,12 +516,12 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           <div className="text-xs text-muted-foreground">{product?.sku}</div>
                           {lastInfo && (
                             <div className="text-xs text-primary font-medium mt-0.5">
-                              Last Rate: {formatCurrency(lastInfo.purchase_rate)} ({formatDate(lastInfo.purchase_date)}) - {lastInfo.supplier_name}
+                              {t("Last Rate:")} {formatCurrency(lastInfo.purchase_rate)} ({formatDate(lastInfo.purchase_date)}) - {lastInfo.supplier_name}
                             </div>
                           )}
                           {avgCost !== undefined && avgCost > 0 && (
                             <div className="text-xs text-muted-foreground mt-0.5">
-                              Avg Cost: {formatCurrency(avgCost)}
+                              {t("Avg Cost:")} {formatCurrency(avgCost)}
                             </div>
                           )}
                         </div>
@@ -555,9 +557,9 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                                   <FormLabel className="text-xs">
                                     {isTile
                                       ? mode === "sft"
-                                        ? "Qty (SFT)"
-                                        : "Qty (Box)"
-                                      : "Qty (Pc)"}
+                                        ? t("Qty (SFT)")
+                                        : t("Qty (Box)")
+                                      : t("Qty (Pc)")}
                                   </FormLabel>
                                   {isTile && (
                                     <ToggleGroup
@@ -576,10 +578,10 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                                       className="h-6"
                                     >
                                       <ToggleGroupItem value="box" className="h-6 px-2 text-[10px]">
-                                        Box
+                                        {t("Box")}
                                       </ToggleGroupItem>
                                       <ToggleGroupItem value="sft" className="h-6 px-2 text-[10px]">
-                                        SFT
+                                        {t("SFT")}
                                       </ToggleGroupItem>
                                     </ToggleGroup>
                                   )}
@@ -591,7 +593,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                                       step="0.01"
                                       className="h-10 text-base min-w-[160px]"
                                       style={{ flexShrink: 0 }}
-                                      placeholder="e.g. 200"
+                                      placeholder={t("e.g. 200")}
                                       value={sftInputs[rowKey] ?? ""}
                                       onChange={(e) => {
                                         const raw = e.target.value;
@@ -619,7 +621,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                                     {mode === "sft" ? (
                                       <>
                                         = <strong className="text-foreground">{wholeBox} Box {extraPc} Pc</strong> = {totalPcs} Pc total = {totalSftPreview.toFixed(2)} SFT
-                                        <div className="text-[9px]">Auto-rounded up to next piece</div>
+                                        <div className="text-[9px]">{t("Auto-rounded up to next piece")}</div>
                                       </>
                                     ) : (
                                       <>
@@ -628,7 +630,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                                     )}
                                   </div>
                                 ) : (
-                                  <div className="text-[10px] text-muted-foreground">Pieces</div>
+                                  <div className="text-[10px] text-muted-foreground">{t("Pieces")}</div>
                                 )}
                               </FormItem>
                             );
@@ -639,14 +641,14 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           name={`items.${idx}.purchase_rate`}
                           render={({ field: f }) => (
                             <FormItem className="space-y-1 min-w-[110px]">
-                              <FormLabel className="text-xs">Rate (/SFT or /Pc)</FormLabel>
+                              <FormLabel className="text-xs">{t("Rate (/SFT or /Pc)")}</FormLabel>
                               <FormControl>
                                 <Input type="number" step="0.01" className="h-10 text-base min-w-[90px]" style={{ flexShrink: 0 }} {...f} />
                               </FormControl>
                               {rateChanged && (
                                 <Badge variant="outline" className="mt-1 text-[10px] border-destructive/50 text-destructive gap-1">
                                   <AlertTriangle className="h-3 w-3" />
-                                  Rate changed
+                                  {t("Rate changed")}
                                 </Badge>
                               )}
                             </FormItem>
@@ -658,7 +660,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                             name={`items.${idx}.offer_price`}
                             render={({ field: f }) => (
                               <FormItem className="space-y-1 min-w-[110px]">
-                                <FormLabel className="text-xs">Offer Price</FormLabel>
+                                <FormLabel className="text-xs">{t("Offer Price")}</FormLabel>
                                 <FormControl>
                                   <Input type="number" step="0.01" className="h-10 text-base min-w-[90px]" style={{ flexShrink: 0 }} {...f} />
                                 </FormControl>
@@ -671,7 +673,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           name={`items.${idx}.transport_cost`}
                           render={({ field: f }) => (
                             <FormItem className="space-y-1 min-w-[110px]">
-                              <FormLabel className="text-xs">Transport</FormLabel>
+                              <FormLabel className="text-xs">{t("Transport")}</FormLabel>
                               <FormControl>
                                 <Input type="number" step="0.01" className="h-10 text-base min-w-[90px]" style={{ flexShrink: 0 }} {...f} />
                               </FormControl>
@@ -683,7 +685,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           name={`items.${idx}.labor_cost`}
                           render={({ field: f }) => (
                             <FormItem className="space-y-1 min-w-[110px]">
-                              <FormLabel className="text-xs">Labor</FormLabel>
+                              <FormLabel className="text-xs">{t("Labor")}</FormLabel>
                               <FormControl>
                                 <Input type="number" step="0.01" className="h-10 text-base min-w-[90px]" style={{ flexShrink: 0 }} {...f} />
                               </FormControl>
@@ -695,7 +697,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           name={`items.${idx}.other_cost`}
                           render={({ field: f }) => (
                             <FormItem className="space-y-1 min-w-[110px]">
-                              <FormLabel className="text-xs">Other</FormLabel>
+                              <FormLabel className="text-xs">{t("Other")}</FormLabel>
                               <FormControl>
                                 <Input type="number" step="0.01" className="h-10 text-base min-w-[90px]" style={{ flexShrink: 0 }} {...f} />
                               </FormControl>
@@ -703,7 +705,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           )}
                         />
                         <div className="space-y-1 min-w-[120px]">
-                          <div className="text-xs font-medium">SFT</div>
+                          <div className="text-xs font-medium">{t("SFT")}</div>
                           <div className="h-10 rounded-md border bg-muted/40 px-3 flex flex-col justify-center text-sm">
                             {totalSft !== null ? (
                               <>
@@ -718,12 +720,12 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           </div>
                           {lcPerSft !== null && lcPerSft > 0 && (
                             <div className="text-[10px] text-primary font-medium">
-                              Landed/SFT: {formatCurrency(lcPerSft)}
+                              {t("Landed/SFT:")} {formatCurrency(lcPerSft)}
                             </div>
                           )}
                         </div>
                         <div className="space-y-1 min-w-[120px]">
-                          <div className="text-xs font-medium">Landed Cost</div>
+                          <div className="text-xs font-medium">{t("Landed Cost")}</div>
                           <div className="h-10 rounded-md border bg-muted/40 px-3 flex items-center justify-end text-sm font-semibold">
                             {formatCurrency(landedCost)}
                           </div>
@@ -740,7 +742,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           render={({ field: f }) => (
                             <FormItem className="space-y-0">
                               <FormControl>
-                                <Input placeholder="Batch No" className="h-8 text-xs w-32" {...f} />
+                                <Input placeholder={t("Batch No")} className="h-8 text-xs w-32" {...f} />
                               </FormControl>
                             </FormItem>
                           )}
@@ -751,7 +753,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           render={({ field: f }) => (
                             <FormItem className="space-y-0">
                               <FormControl>
-                                <Input placeholder="Shade" className="h-8 text-xs w-24" {...f} />
+                                <Input placeholder={t("Shade")} className="h-8 text-xs w-24" {...f} />
                               </FormControl>
                             </FormItem>
                           )}
@@ -762,7 +764,7 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           render={({ field: f }) => (
                             <FormItem className="space-y-0">
                               <FormControl>
-                                <Input placeholder="Caliber" className="h-8 text-xs w-24" {...f} />
+                                <Input placeholder={t("Caliber")} className="h-8 text-xs w-24" {...f} />
                               </FormControl>
                             </FormItem>
                           )}
@@ -773,12 +775,12 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
                           render={({ field: f }) => (
                             <FormItem className="space-y-0">
                               <FormControl>
-                                <Input placeholder="Lot No" className="h-8 text-xs w-28" {...f} />
+                                <Input placeholder={t("Lot No")} className="h-8 text-xs w-28" {...f} />
                               </FormControl>
                             </FormItem>
                           )}
                         />
-                        <span className="text-[10px] text-muted-foreground">Batch/Shade tracking</span>
+                        <span className="text-[10px] text-muted-foreground">{t("Batch/Shade tracking")}</span>
                       </div>
                     )}
                   </CardContent>
@@ -791,8 +793,8 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
         {fields.length === 0 && watchSupplierId && (
           <div className="rounded-md border border-dashed p-8 text-center text-muted-foreground">
             <Package className="mx-auto mb-2 h-8 w-8" />
-            <p>Please add products to order list</p>
-            <p className="mt-1 text-xs">Use the search bar above to find and add products</p>
+            <p>{t("Please add products to order list")}</p>
+            <p className="mt-1 text-xs">{t("Use the search bar above to find and add products")}</p>
           </div>
         )}
 
@@ -804,9 +806,9 @@ const PurchaseForm = ({ dealerId, showOfferPrice, onSubmit, isLoading, enableDra
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Note</FormLabel>
+                  <FormLabel>{t("Note")}</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Add purchase notes..." rows={4} {...field} />
+                    <Textarea placeholder={t("Add purchase notes...")} rows={4} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
